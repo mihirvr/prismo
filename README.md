@@ -53,6 +53,7 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 The project is currently in the design and architecture phase. No runnable application exists yet.
 
 - [Project Outline](docs/PROJECT.md) — full design document
+- [Development Guide](docs/DEVELOPMENT.md) — development workflow, rules, and conventions
 
 ---
 
@@ -83,7 +84,10 @@ Filters · Sort · Metadata Panel · Selection Mode · Multiple Locations
 ```
 prismo/
 ├── docs/
-│   └── PROJECT.md          # Full project outline and design document
+│   ├── PROJECT.md          # Full project outline and design document
+│   └── DEVELOPMENT.md      # Development workflow, rules, and conventions
+├── .gitignore
+├── LICENSE
 └── README.md
 ```
 
