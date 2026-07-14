@@ -101,4 +101,4 @@ In the meantime, feel free to open an issue to discuss ideas, suggest features, 
 
 ## License
 
-*License to be determined.*
+This project is licensed under the [MIT License](LICENSE).
