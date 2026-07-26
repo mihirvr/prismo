@@ -57,6 +57,7 @@ Everything in v0.1, plus the low-cost, expected baseline features that make it a
 ```
 Favorites · Hidden (OS-level + Ignored Paths) · Trash
 Filters · Sort · Metadata Panel · Selection Mode · Multiple Locations
+Video Watch Progress (thumbnail bar + resume playback)
 ```
 
 ### Deferred to Post-MVP
@@ -136,7 +137,7 @@ Used identically across Timeline, Folders, Albums, and Search — no duplicated 
 
 ## Search
 
-Instant search across: filename, folder name, extension, camera, date, resolution. Backed by SQLite FTS5 — future searchable metadata fields (tags, descriptions, AI labels) can be added to the index without changing the overall search architecture.
+Instant search across: filename, folder name, extension, camera, date, resolution.
 
 - GPS/location search → post-MVP (needs map view UI)
 - GPS still *displays* in the metadata panel if present in EXIF
@@ -147,11 +148,24 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 
 - Zoom, pan, rotate, next/previous, fullscreen, slideshow, video playback
 - Keyboard shortcuts, mouse gestures
-- Open Containing Folder, Reveal in Timeline
-
-**Context-aware navigation**: Previous / Next follows the context the image was opened from. If opened from Search, navigation stays within Search results. If opened from an Album, navigation stays inside that Album. If opened from Timeline, navigation follows Timeline order. This matches how modern mobile galleries behave — the viewer never loses its place.
 
 **Metadata panel** (optional side panel): resolution, file size, camera, lens, ISO, aperture, GPS (if present), date taken, date modified, file path.
+
+---
+
+## Video Watch Progress
+
+Two linked features, both video-only:
+
+1. **Thumbnail progress bar** — thin colored strip along the bottom edge of a video's thumbnail, width proportional to `playback_position_seconds / duration_seconds`. Rendered as a live UI overlay at display time, sourced from DB values — **not** baked into the cached thumbnail bitmap, since progress changes constantly and the thumbnail cache is meant to be generate-once. Once position crosses a "fully watched" threshold (e.g. ≥90-95% of duration, to account for trailing credits/black frames), the bar renders full-width in a distinct color.
+2. **Resume playback** — on opening a video, seek automatically to the saved position (silent resume, VLC-style). No confirmation prompt by default; flag if a "Resume from 12:34?" prompt is preferred instead.
+
+**Data** (added to `Media`, video rows only): `duration_seconds`, `playback_position_seconds`.
+
+- `duration_seconds` captured once during metadata extraction (JavaFX `MediaPlayer` exposes `totalDuration` once ready)
+- `playback_position_seconds` written periodically during playback (~every 5-10s) plus on pause/stop/app-close
+
+**Optional extension (not in v1 by default)**: a Watched / Unwatched / In Progress filter and sort option, same category as existing Favorites/Hidden filters — cheap to add later since the underlying data already exists.
 
 ---
 
@@ -196,51 +210,9 @@ Reconnect later and the index resumes without a full rescan. (This is how Lightr
 
 ---
 
-## Duplicate Policy
+## Duplicate Indexing (not duplicate *finding*)
 
-### v1 Behaviour
-
-Every file is indexed independently. Filenames **never** determine duplicates. The following are all independent media items:
-
-```
-photo.jpg
-photo (1).jpg
-photo (2).jpg
-```
-
-even if they share similar names. The gallery always reflects the real filesystem.
-
-The application never automatically merges files, hides duplicates, or deletes duplicates.
-
-### Database
-
-The `Media` table includes a nullable `content_hash` field. This is **not** computed during normal indexing — it exists solely to avoid future database migrations when the Duplicate Finder is implemented.
-
-### Duplicate Finder (Post-MVP)
-
-Duplicate detection is a completely separate, user-invoked feature — not part of normal indexing.
-
-When Duplicate Finder is opened:
-- Compute SHA-256 hashes only for files without a stored hash
-- Store hashes permanently
-- Never recompute existing hashes unless the file changes (detected via `date_modified` or size)
-
-**Roadmap:**
-```
-Phase 1 — Exact duplicate detection (SHA-256)
-Phase 2 — Perceptual hashing (pHash)
-Phase 3 — AI similarity detection
-```
-
-Duplicate Finder appears as a smart collection:
-```
-Collections
-  → Duplicate Candidates
-```
-
-The application only suggests duplicate groups. The user decides whether to delete or keep them.
-
-**Duplicate detection must never rely on filenames.** Two files with identical names may be completely different. Two files with different names may be exact duplicates. Only content hashes (and later perceptual hashes) determine duplicates.
+Copies like `photo.jpg` and `photo (1).jpg` are indexed as separate, independent entries in v1 — no merge/skip logic. A dedicated duplicate finder (exact + visually similar) that *suggests* removal is a post-MVP feature layered on top of this, not a v1 requirement.
 
 ---
 
@@ -270,7 +242,6 @@ Batch Rename · Convert · Compress
 ## Thumbnail Cache
 
 - Generated once, stored locally, background-generated, lazy-loaded
-- Stores multiple resolutions per image (e.g. 128px, 256px, 512px) — changing thumbnail size in the UI never triggers regeneration
 - Regenerates only on file change or manual rebuild (Settings > Cache)
 - Cache-first display is the single biggest UX lever in the app (see Architecture)
 
@@ -284,16 +255,14 @@ Scan selected folders
         ↓
 Extract metadata
         ↓
-Generate thumbnails
+Generate tiny (placeholder) thumbnails
         ↓
 Store SQLite entry
         ↓
+Generate full-size thumbnails lazily, in background
+        ↓
 Done
 ```
-
-The application remains fully usable during first indexing — the UI never blocks waiting for the scan to finish. Media progressively appears as individual folders complete indexing. There is no "Please wait while indexing..." startup screen; the goal is progressive loading, not blocking startup.
-
-Hashes are intentionally **not** computed during normal indexing. Scanning, metadata extraction, thumbnail generation, and database insertion are the only steps. Content hashing is deferred until the user invokes the Duplicate Finder (see Duplicate Policy). This keeps first launch and rescans significantly faster.
 
 **Ongoing (post-launch) changes:**
 ```
@@ -308,20 +277,9 @@ Update SQLite
 Refresh UI incrementally
 ```
 
-### Filesystem Monitoring
-
-The application uses a **filesystem monitoring abstraction** — a pluggable interface that decouples the indexing pipeline from any specific file-watching implementation.
-
-- **Initial implementation**: Java `WatchService` (known reliability quirks on Windows under high-volume changes — accepted tradeoff for v1)
-- **Future implementations**: native Windows (`ReadDirectoryChangesW`) or Linux (`inotify`) watchers can replace the backend if reliability or performance becomes an issue
+- **Local / USB drives**: real-time filesystem monitoring — detects new files, deleted files, renamed files/folders, drive connect/disconnect
 - **Network / NAS drives**: manual or scheduled rescan only — real-time watch is not reliable over SMB/NFS
-- The monitoring backend is replaceable without affecting the indexing pipeline
-
-### Rename / Move Detection
-
-The rename/move detection strategy is intentionally undecided for v1. Possible approaches include file IDs, content hashes, and metadata heuristics (size + date + partial content). Benchmarking and implementation experience will determine the final approach.
-
-The indexing architecture is designed to remain independent of whichever strategy is eventually chosen — favorite/hide/tag state must survive a move regardless of the detection mechanism used.
+- **Rename/move detection**: requires a content-hash or file-ID matching strategy so favorite/hide/tag state survives a move — a plain OS rename event often looks identical to delete+create and cannot be assumed to "just work"
 
 ---
 
@@ -335,7 +293,6 @@ This is deliberately *not* separate Workspaces/library profiles — that's a big
 
 ## Settings
 
-- **Indexed Locations**: manage all indexed folders and drives — add, remove, enable/disable individual locations
 - **Appearance**: Light / Dark / AMOLED / Follow System
 - **Timeline**: grouping, sort, thumbnail size
 - **Folder Explorer**: recursive view, folder covers, preview size
@@ -354,10 +311,6 @@ This is deliberately *not* separate Workspaces/library profiles — that's a big
 - Right-click menu: open, open with, open folder, rename, move, copy, delete, favorite, hide, properties
 - Keyboard shortcuts: arrows, space, delete, Ctrl+A/C/V, F11, Esc
 
-### Viewport Virtualization
-
-Timeline and Folder views use viewport virtualization: only visible thumbnails (plus a small preload buffer) are decoded and rendered. Full-resolution images are only decoded when opened in the Viewer. This is one of the application's major performance optimizations — without it, scrolling through large folders would require decoding thousands of images upfront.
-
 ---
 
 ## Database
@@ -367,17 +320,13 @@ One `Media` table remains the core of the philosophy — every page is a filtere
 ```
 Media        → id, path, type, date_taken, date_modified, date_added,
                resolution, favorite (bool), hidden (bool), broken (bool),
-               last_seen (timestamp), content_hash (nullable), ...
+               duration_seconds (video only), playback_position_seconds (video only), ...
 Folders      → structural entries for the Folder Explorer / Albums
 Drives       → tracks connect/disconnect state for Multiple Locations
 Tags         → post-MVP, user-defined
 IgnoredPaths → user-configured exclusions
 Settings     → app config
 ```
-
-`last_seen` tracks the most recent time a file was confirmed present on disk. This enables proper handling of disconnected drives, missing files, external drives, and offline libraries — the app can distinguish between "deleted" and "temporarily unavailable" without wiping index entries.
-
-`content_hash` is nullable and not computed during normal indexing. It exists solely to avoid future database migrations when the Duplicate Finder is implemented (see Duplicate Policy).
 
 `Cache` is intentionally not a table — thumbnails live as files on disk, with at most a lightweight manifest for cache invalidation. `HiddenItems` and `Favorites` are not separate tables — see above.
 
@@ -396,23 +345,21 @@ Hidden     → hidden = true
 
 ```
 Filesystem
-     ├── Initial Indexer (runs once per scan)
-     └── Filesystem Watcher (runs continuously)
-             ↓
-     Metadata Extractor
-             ↓
-     Thumbnail Generator
-             ↓
-     SQLite Index (FTS5)
-             ↓
-     Thumbnail Cache
-             ↓
-     Search Engine
-             ↓
-     Gallery UI
+     ↓
+File Watcher
+     ↓
+Metadata Extractor
+     ↓
+Thumbnail Generator
+     ↓
+SQLite Index (FTS5)
+     ↓
+Thumbnail Cache
+     ↓
+Search Engine
+     ↓
+Gallery UI
 ```
-
-The Initial Indexer performs a full scan of configured locations on first launch or when a new location is added. The Filesystem Watcher runs continuously afterward, detecting changes incrementally. Both feed into the same downstream pipeline — Metadata Extractor → Thumbnail Generator → SQLite → Cache → Search → UI.
 
 Fully local. No servers, no uploads, no internet dependency.
 
@@ -470,7 +417,7 @@ Internal note: only state real numbers (search latency, cold start time, etc.) o
 | Image decode (JPEG/PNG) | `ImageIO` | Built-in, backed by compiled native decoders |
 | Image decode (WEBP/HEIC) | `TwelveMonkeys` plugin | Not supported by stock `ImageIO` |
 | Image decode (RAW) | `libraw` via JNI/JNA bridge | No good pure-Java RAW decoder exists |
-| File watching | `java.nio.file.WatchService` (initial impl behind a monitoring abstraction) | Not recursive by default (register per-directory manually); known reliability quirks on Windows under high-volume changes — accepted tradeoff for v1. Backend is replaceable with native watchers without affecting the indexing pipeline |
+| File watching | `java.nio.file.WatchService` | Not recursive by default (register per-directory manually); known reliability quirks on Windows under high-volume changes — accepted tradeoff vs. Rust's `notify` crate |
 | Packaging | `jlink` + `jpackage` | Custom minimal runtime (~40-70MB) bundled into a native installer (~80-120MB); user never installs Java, never sees `JAVA_HOME` |
 
 **Why Java over Rust or Python:**
@@ -495,7 +442,7 @@ jlink --module-path "javafx-jmods-21;%JAVA_HOME%/jmods" ^
 ## Open Questions Before Build
 
 - Confirm target library size to design/test against
-- Evaluate rename/move detection strategy during implementation (file IDs, content hashes, metadata heuristics — intentionally deferred until benchmarked)
+- Finalize rename/move detection strategy (content hash vs. file ID)
 - Confirm trash retention/auto-purge policy
 - Confirm the non-destructive-editing conflict resolution (before crop/rotate/flip get built, even as post-MVP)
 
@@ -503,6 +450,6 @@ jlink --module-path "javafx-jmods-21;%JAVA_HOME%/jmods" ^
 
 ## Resume Pitch (design-intent framing — keep in this tense until measured)
 
-> Designing a cross-platform offline desktop gallery application with local media indexing, real-time filesystem monitoring, SQLite/FTS5-backed search, multi-threaded thumbnail generation, and a UI architected to handle large local media libraries.
+> Designing a cross-platform offline desktop gallery application with recursive media indexing, real-time filesystem monitoring, SQLite/FTS5-backed search, multi-threaded thumbnail generation, and a UI architected to handle large local media libraries.
 
 Switch to past tense, and add real benchmark numbers, only once actually measured.
