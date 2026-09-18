@@ -6,6 +6,8 @@ A fast, offline-first desktop media browser that feels like a phone gallery, not
 
 **Not**: cloud service, file explorer replacement, editing suite, professional DAM tool.
 
+**Uncapped Library Vision**: The application will never enforce artificial freemium library caps (e.g., 5,000 or 20,000 image limits). It is designed to scale infinitely with the user's hardware.
+
 **One-line pitch**: *Browse your memories like a phone, manage your files like a desktop.*
 
 ---
@@ -409,7 +411,7 @@ Application data is decoupled from the installation directory and follows platfo
 - Workspaces (isolated library profiles)
 - Windows Hello / Linux auth for Gallery Lock
 - Live Photos support
-- Batch Rename / Convert / Compress (file operations)
+- Batch Rename / Convert (including HEIC to JPEG) / Compress (file operations)
 
 ---
 
@@ -421,17 +423,22 @@ Application data is decoupled from the installation directory and follows platfo
 |---|---|---|
 | UI | JavaFX | CSS-styleable, packages natively via `jpackage`; renders its own canvas (same category as Flutter — no native-widget advantage either way) |
 | Core | Java 21 LTS | Virtual threads are a strong fit for the mostly I/O-bound indexing workload (stat-ing thousands of files) without manual thread-pool tuning |
-| Database | SQLite + FTS5 | FTS5 specifically needed for fast search, not just "SQLite" |
+| Database | SQLite + FTS5 | FTS5 specifically needed for fast search. We will use Xerial SQLite-JDBC alongside HikariCP for connection pooling to handle concurrent Virtual Thread reads/writes without triggering "database is locked" errors. |
+| EXIF Metadata | `metadata-extractor` | By Drew Noakes; extracts camera, lens, ISO, aperture, and GPS data during background indexing. |
 | Image decode (JPEG/PNG) | `ImageIO` | Built-in, backed by compiled native decoders |
-| Image decode (WEBP/HEIC) | `TwelveMonkeys` plugin | Not supported by stock `ImageIO` |
+| Image decode (WEBP/TIFF) | `TwelveMonkeys` plugin | Not supported by stock `ImageIO` |
+| Image decode (HEIC) | `libheif` via JNI/JNA | `TwelveMonkeys` does not natively support HEIC; requires bridge to native OS library |
 | Image decode (RAW) | `libraw` via JNI/JNA bridge | No good pure-Java RAW decoder exists |
-| File watching | `java.nio.file.WatchService` | Not recursive by default (register per-directory manually); known reliability quirks on Windows under high-volume changes — accepted tradeoff vs. Rust's `notify` crate |
+| File watching | `java.nio.file.WatchService` | Not recursive by default; events must be queued and debounced using a `ScheduledExecutorService` to prevent duplicate or dropped events during heavy disk I/O bursts. |
+| Logging | SLF4J + Logback | Local, rotating offline logs stored in the OS app data folders (`%LOCALAPPDATA%` / `$XDG_DATA_HOME`). |
 | Packaging | `jlink` + `jpackage` | Custom minimal runtime (~40-70MB) bundled into a native installer (~80-120MB); user never installs Java, never sees `JAVA_HOME` |
 
 **Why Java over Rust or Python:**
 - Not Python: GIL and packaging (PyInstaller cold-start, bundle size) work against a UI-heavy, CPU-adjacent desktop app
 - Not Rust: most of the app's runtime is I/O-bound (disk, SQLite, decoder, GPU), not CPU-bound — an optimized Java implementation typically lands within 5-20% of Rust for these workloads. Rust's real advantage is one-time bulk CPU work (e.g. generating 100k thumbnails), which only happens once, then it's cache reads. Rust is also new territory learned largely via AI, which conflicts with defending the harder internals independently in an interview — Java allows those parts (concurrency, native bridges, memory pipeline) to be owned and defended directly.
 - Modern collectors (G1, ZGC) have low-millisecond pause times; GC is a non-issue at this scale unless allocation is sloppy (mitigate with buffer reuse, pooled thumbnail arrays, direct `ByteBuffer`s, avoiding unnecessary object churn in hot loops)
+
+**Directory Structure**: We enforce a strict Gradle layout with a `module-info.java` at the root of `src/main/java` to strictly satisfy `jlink` module constraints.
 
 **Packaging detail — JavaFX is not bundled in the JDK.** Since Java 11, JavaFX ships as a separate SDK (Gluon jmods, platform-specific: Windows/Linux/macOS):
 - `jlink` needs the JavaFX jmods added to the module path explicitly
@@ -442,6 +449,8 @@ jlink --module-path "javafx-jmods-21;%JAVA_HOME%/jmods" ^
       --output custom-runtime
 ```
 `jpackage` then wraps `custom-runtime` into the platform installer (`.msi` / `.deb` / `.rpm` / `AppImage`).
+
+**Missing OS Dependencies (Launcher Wrapper)**: The `jpackage` installer will bundle a lightweight launcher script (.bat/shell) to check for native graphics libraries (DirectX on Windows, GTK on Linux) before invoking the JVM. If missing, it must throw a loud native OS message box (via PowerShell/Zenity) rather than failing silently or attempting an auto-install.
 
 **Distribution**: `.msi` (Windows), `.deb`/`.rpm`/`AppImage` (Linux), each bundling its own runtime. Same model as IntelliJ IDEA, Android Studio, DBeaver, DataGrip.
 

@@ -147,6 +147,10 @@ Done
 
 Every completed task should move through these stages.
 
+## Cross-Platform CI/CD Awareness
+
+Because `jpackage` cannot cross-compile (e.g., Windows cannot build a `.deb`), final testing for Issue #10 (Packaging) will eventually require setting up GitHub Actions to spin up OS-specific runners.
+
 ---
 
 # Current GitHub Issues
@@ -211,6 +215,11 @@ First stable public release.
 ---
 
 # Implementation Rules
+
+## The JPMS Dependency Rule
+
+Because the project uses `jlink` for native packaging, dependency management is a strict two-step process:
+Every new library added to `build.gradle.kts` **MUST** also be explicitly declared in the `module-info.java` file. Failing to do this will break the native build.
 
 Every GitHub Issue should follow the same workflow.
 
@@ -384,6 +393,11 @@ The objective is to become capable of explaining every implementation decision c
 ---
 
 # Code Quality
+
+## Strict Rules
+
+- **Path Resolution & Hardcoding**: Explicitly forbidden to hardcode file paths (like `C:\` or `~`). All file system interactions and cache/database locations must route through a dedicated OS-aware path utility class to ensure cross-platform compatibility.
+- **Logging Over Stdout**: The use of `System.out.println()` is strictly forbidden. All debugging and application logging must use the SLF4J logger to ensure errors are captured in the local rotating log files on the user's disk.
 
 Prefer:
 
