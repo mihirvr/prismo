@@ -385,6 +385,14 @@ Internal note: only state real numbers (search latency, cold start time, etc.) o
 
 ---
 
+### Storage & OS Paths
+
+Application data is decoupled from the installation directory and follows platform conventions:
+- **Windows**: `%LOCALAPPDATA%\Prismo` (Database, Cache, Logs)
+- **Linux**: `$XDG_DATA_HOME/prismo` (or `~/.local/share/prismo` for DB, `~/.cache/prismo` for thumbnails)
+- **macOS**: `~/Library/Application Support/Prismo` (DB) and `~/Library/Caches/Prismo` (thumbnails)
+
+---
 ## Post-MVP Roadmap
 
 - AI/content search ("dog", "sunset", "receipt")
