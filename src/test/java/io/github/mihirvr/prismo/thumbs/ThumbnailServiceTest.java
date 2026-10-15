@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.thumbs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,6 +9,7 @@ import io.github.mihirvr.prismo.testing.TestMedia;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -16,8 +18,11 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 
+// A bug in the queue usually shows as a future that never completes: fail fast instead of hanging the build.
+@Timeout(10)
 class ThumbnailServiceTest {
 
     @TempDir
@@ -135,6 +140,137 @@ class ThumbnailServiceTest {
 
         assertEquals(new ThumbnailService.WarmUpProgress(5, 3, 1, 1, true), done);
         assertTrue(updates.get(updates.size() - 1).done());
+    }
+
+    // --- Priority and cancelling. One worker thread, held busy on a "blocker" job while the test queues
+    // more requests, so the order they then run in is exactly the queue's order.
+
+    private final List<String> order = Collections.synchronizedList(new ArrayList<>());
+    private final CountDownLatch blockerRunning = new CountDownLatch(1);
+    private final CountDownLatch releaseBlocker = new CountDownLatch(1);
+
+    /** A 1-thread service that records the order files are generated in and holds "blocker" until released. */
+    private ThumbnailService oneThreadService() {
+        return new ThumbnailService(cache, (source, target) -> {
+            String name = source.getFileName().toString();
+            order.add(name.substring(0, name.indexOf('.')));
+            if (name.startsWith("blocker")) {
+                blockerRunning.countDown();
+                try {
+                    releaseBlocker.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new java.io.InterruptedIOException("interrupted while held");
+                }
+            }
+            real.generate(source, target);
+        }, 1);
+    }
+
+    /** Starts the blocker job and waits until the only worker is busy with it. */
+    private CompletableFuture<ThumbnailService.Result> occupyWorker(ThumbnailService one) throws Exception {
+        var blocker = one.request(png(100, "blocker"));
+        blockerRunning.await();
+        return blocker;
+    }
+
+    @Test
+    void visibleRequestsRunBeforeWarmUpNewestFirst() throws Exception {
+        ThumbnailService one = oneThreadService();
+        try {
+            var blocker = occupyWorker(one);
+            var a = one.request(png(1, "a"), ThumbnailService.Priority.BACKGROUND);
+            var b = one.request(png(2, "b"), ThumbnailService.Priority.BACKGROUND);
+            var v1 = one.request(png(3, "v1"), ThumbnailService.Priority.VISIBLE);
+            var v2 = one.request(png(4, "v2"), ThumbnailService.Priority.VISIBLE);
+            releaseBlocker.countDown();
+            CompletableFuture.allOf(blocker, a, b, v1, v2).get();
+
+            // Visible beats background; among visible, the latest request (most likely still on screen) wins;
+            // background keeps the order it was asked in.
+            assertEquals(List.of("blocker", "v2", "v1", "a", "b"), order);
+        } finally {
+            one.close();
+        }
+    }
+
+    @Test
+    void cancelledRequestIsSkippedNotDecoded() throws Exception {
+        ThumbnailService one = oneThreadService();
+        try {
+            var blocker = occupyWorker(one);
+            var gone = one.request(png(1, "gone"), ThumbnailService.Priority.VISIBLE);
+            var kept = one.request(png(2, "kept"), ThumbnailService.Priority.VISIBLE);
+            // Runs after every visible task, so once it's done the cancelled one has had its turn too.
+            var last = one.request(png(3, "last"), ThumbnailService.Priority.BACKGROUND);
+            assertTrue(gone.cancel(false));
+            releaseBlocker.countDown();
+            CompletableFuture.allOf(blocker, kept, last).get();
+
+            assertEquals(List.of("blocker", "kept", "last"), order);
+            assertFalse(Files.exists(cache.fileFor(1)), "no thumbnail made for the cancelled request");
+        } finally {
+            one.close();
+        }
+    }
+
+    @Test
+    void cancellingOneCallerKeepsTheJobForTheOthers() throws Exception {
+        ThumbnailService one = oneThreadService();
+        try {
+            var blocker = occupyWorker(one);
+            MediaRef shared = png(1, "shared");
+            var onScreen = one.request(shared, ThumbnailService.Priority.VISIBLE);
+            var warmUp = one.request(shared, ThumbnailService.Priority.BACKGROUND);
+            onScreen.cancel(false);
+            releaseBlocker.countDown();
+            blocker.get();
+
+            assertInstanceOf(ThumbnailService.Ready.class, warmUp.get());
+            assertEquals(List.of("blocker", "shared"), order);
+        } finally {
+            one.close();
+        }
+    }
+
+    @Test
+    void warmUpJobJumpsTheQueueOnceItIsOnScreen() throws Exception {
+        ThumbnailService one = oneThreadService();
+        try {
+            var blocker = occupyWorker(one);
+            var a = one.request(png(1, "a"), ThumbnailService.Priority.BACKGROUND);
+            MediaRef x = png(2, "x");
+            var xWarmUp = one.request(x, ThumbnailService.Priority.BACKGROUND);
+            var xOnScreen = one.request(x, ThumbnailService.Priority.VISIBLE);
+            releaseBlocker.countDown();
+            CompletableFuture.allOf(blocker, a, xWarmUp, xOnScreen).get();
+
+            assertEquals(List.of("blocker", "x", "a"), order, "x moved ahead of a, and was made once");
+        } finally {
+            one.close();
+        }
+    }
+
+    @Test
+    void scrolledAwayRequestFallsBackToWarmUpOrder() throws Exception {
+        ThumbnailService one = oneThreadService();
+        try {
+            var blocker = occupyWorker(one);
+            var a = one.request(png(1, "a"), ThumbnailService.Priority.BACKGROUND);
+            MediaRef x = png(2, "x");
+            var xWarmUp = one.request(x, ThumbnailService.Priority.BACKGROUND);
+            one.request(x, ThumbnailService.Priority.VISIBLE).cancel(false); // seen, then scrolled away
+            releaseBlocker.countDown();
+            CompletableFuture.allOf(blocker, a, xWarmUp).get();
+
+            assertEquals(List.of("blocker", "a", "x"), order, "x waits its warm-up turn again");
+        } finally {
+            one.close();
+        }
+    }
+
+    private MediaRef png(long id, String name) throws Exception {
+        return ref(id, TestMedia.png(tmp.resolve(name + ".png"), 40, 40));
     }
 
     private static MediaRef ref(long id, Path file) throws Exception {

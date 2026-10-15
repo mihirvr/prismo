@@ -1,0 +1,63 @@
+/*
+ * Prismo's look. Author stylesheet: these rules beat JavaFX's built-in Modena theme for the same
+ * property, whatever Modena's selector is (origin wins before specificity in JavaFX CSS).
+ * Themes (Light / Dark / AMOLED) come later as separate stylesheets.
+ */
+
+.top-bar {
+    -fx-padding: 8 12 8 12;
+    -fx-spacing: 12;
+    -fx-alignment: center-left;
+}
+
+.app-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+}
+
+.status-bar {
+    -fx-padding: 4 12 4 12;
+    -fx-font-size: 11px;
+    -fx-text-fill: #666666;
+}
+
+/* The list: no border, no focus ring, no alternating or selected row colours. */
+.timeline-list {
+    -fx-background-color: -fx-background;
+    -fx-background-insets: 0;
+    -fx-padding: 0 8 0 8;
+}
+
+.timeline-list .timeline-cell {
+    -fx-background-color: transparent;
+    -fx-padding: 0 0 4 0; /* = TimelineView.GAP, the space between rows */
+}
+
+.timeline-header {
+    -fx-padding: 16 2 6 2;
+    -fx-alignment: baseline-left;
+}
+
+.timeline-header-label {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.timeline-header-count {
+    -fx-text-fill: #888888;
+}
+
+.thumb-tile {
+    -fx-background-color: #e2e2e2;
+}
+
+.thumb-placeholder {
+    -fx-text-fill: #707070;
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-alignment: center;
+}
+
+.thumb-tile.thumb-failed {
+    -fx-background-color: #ecdcdc;
+}

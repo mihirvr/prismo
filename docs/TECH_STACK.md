@@ -105,7 +105,7 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | Reading metadata (metadata-extractor) | I/O + parsing, pure Java | Virtual threads |
 | Writing to SQLite | Native (JNI) | **One dedicated platform thread** (the "writer") |
 | Reading from SQLite (UI queries, search) | Native (JNI) | Small fixed pool of platform threads |
-| Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1) |
+| Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1), at below-normal thread priority. Its queue puts thumbnails on screen first and skips requests for rows that scrolled away. |
 | HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
 | Updating the UI | — | `Platform.runLater`, batched (e.g. a few times per second, not once per file) |
 
@@ -206,7 +206,8 @@ This also answers the open question in `PROJECT.md` (content hash vs file ID): u
 
 ## UI structure
 
-- **The grid must be virtualized** (only visible thumbnails exist as nodes). JavaFX has no built-in virtualized grid with section headers, so the Timeline is built on a `ListView`: each list item is a **row**, either a date header or a row of N thumbnails. When the window width changes, N is recomputed and the rows are rebuilt. `ListView` already reuses cells as you scroll.
+- **The grid must be virtualized** (only visible thumbnails exist as nodes). JavaFX has no built-in virtualized grid with section headers, so the Timeline is built on a `ListView`: each list item is a **row**, either a date header or a row of N thumbnails. When the window width or the thumbnail size changes, N is recomputed and the rows are rebuilt, keeping the same photo at the top. `ListView` already reuses cells as you scroll.
+- **Thumbnails on screen:** the UI checks the cache off the UI thread (the freshness check is a file `stat`), keeps the last 300 decoded images in an in-memory LRU, and cancels a tile's request when its row scrolls away.
 - Styling with JavaFX CSS; themes (Light / Dark / AMOLED) are separate stylesheets.
 
 ---

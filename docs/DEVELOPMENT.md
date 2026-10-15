@@ -10,35 +10,11 @@
 
 # Current Repository State
 
-The repository is in its initial stage.
+Issues #1–#5 are done: a Gradle project (Java 25, JavaFX 25), the SQLite database layer with migrations, the media indexer, the thumbnail cache, and the Timeline UI. The app runs with `./gradlew run` and tests run with `./gradlew test`.
 
-Current structure:
+The current file layout is the "Project Structure" section of `README.md`.
 
-```
-Prismo/
-│
-├── docs/
-│   ├── PROJECT.md
-│   ├── TECH_STACK.md
-│   └── DEVELOPMENT.md
-│
-├── README.md
-├── LICENSE
-└── .gitignore
-```
-
-No application code exists yet.
-
-There is currently:
-
-- No Gradle project
-- No JavaFX setup
-- No package structure
-- No source code
-- No SQLite database
-- No configuration files
-
-Development begins from this point.
+Next on the roadmap: Media Viewer (#6).
 
 ---
 

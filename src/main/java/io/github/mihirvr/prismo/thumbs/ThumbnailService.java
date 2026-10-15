@@ -5,15 +5,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +30,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Concurrent requests for the same media id share one job (see {@link #request}); the UI asking for
  * the same thumbnail twice while scrolling never decodes it twice.
+ *
+ * <p>The queue is ordered by {@link Priority}: thumbnails on screen jump ahead of warm-up, and a request
+ * whose caller cancelled it (the row scrolled away) is skipped instead of decoded.
  */
 public final class ThumbnailService implements AutoCloseable {
 
@@ -53,6 +59,14 @@ public final class ThumbnailService implements AutoCloseable {
     public record WarmUpProgress(int total, int ready, int unsupported, int failed, boolean done) {
     }
 
+    /** How urgent a request is. Declared most urgent first; the queue orders by this. */
+    public enum Priority {
+        /** On screen right now. The newest of these runs first: it's the most likely to still be visible. */
+        VISIBLE,
+        /** Warm-up. Runs in the order it was asked for, after every visible request. */
+        BACKGROUND
+    }
+
     /** Writes a thumbnail of {@code source} to {@code target}. Swappable in tests. */
     @FunctionalInterface
     interface Generator {
@@ -61,9 +75,10 @@ public final class ThumbnailService implements AutoCloseable {
 
     private final ThumbnailCache cache;
     private final Generator generator;
-    private final ExecutorService pool;
+    private final ThreadPoolExecutor pool;
     private final int poolSize;
-    private final ConcurrentHashMap<Long, CompletableFuture<Result>> inFlight = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Job> inFlight = new ConcurrentHashMap<>();
+    private final AtomicLong sequence = new AtomicLong();
 
     public ThumbnailService(ThumbnailCache cache, ThumbnailGenerator generator) {
         this(cache, generator::generate, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
@@ -73,39 +88,91 @@ public final class ThumbnailService implements AutoCloseable {
         this.cache = cache;
         this.generator = generator;
         this.poolSize = poolSize;
-        this.pool = Executors.newFixedThreadPool(poolSize,
-                Thread.ofPlatform().name("prismo-thumbs-", 0).daemon(true).factory());
+        // Same as newFixedThreadPool, but the queue is sorted by Task.compareTo instead of first-in-first-out.
+        this.pool = new ThreadPoolExecutor(poolSize, poolSize, 0, TimeUnit.MILLISECONDS,
+                new PriorityBlockingQueue<>(), Thread.ofPlatform().name("prismo-thumbs-", 0).daemon(true)
+                        // Below normal: when the UI thread and a decode both want a core, the UI wins.
+                        .priority(Thread.NORM_PRIORITY - 1).factory());
+        // A task handed to a newly started thread skips the queue (and so the ordering). Starting every
+        // thread now means every task goes through the queue.
+        this.pool.prestartAllCoreThreads();
+    }
+
+    /** Same as {@code request(media, Priority.BACKGROUND)}. */
+    public CompletableFuture<Result> request(MediaRef media) {
+        return request(media, Priority.BACKGROUND);
     }
 
     /**
      * The thumbnail for {@code media}. Completes immediately when the cached file is fresh; otherwise
      * queues generation, or joins a generation already queued for the same id.
+     *
+     * <p>Every caller gets its own future. Cancelling it ({@code cancel(false)}) says "I don't need this
+     * any more": a job nobody is waiting for is skipped when it reaches the front of the queue. Other
+     * callers waiting for the same thumbnail are not affected.
      */
-    public CompletableFuture<Result> request(MediaRef media) {
+    public CompletableFuture<Result> request(MediaRef media, Priority priority) {
         Path file = cache.fileFor(media.id());
         if (ThumbnailCache.isFresh(file, media.dateModified())) {
             return CompletableFuture.completedFuture(new Ready(file)); // fast path, no thread hop
         }
-        CompletableFuture<Result> created = new CompletableFuture<>();
-        CompletableFuture<Result> existing = inFlight.putIfAbsent(media.id(), created);
-        if (existing != null) {
-            return existing; // someone already asked; share their job
-        }
-        try {
-            pool.execute(() -> {
-                try {
-                    created.complete(produce(media));
-                } catch (Throwable t) {
-                    created.completeExceptionally(t);
-                } finally {
-                    inFlight.remove(media.id(), created);
+        CompletableFuture<Result> waiter = new CompletableFuture<>();
+        while (true) {
+            Job job = inFlight.computeIfAbsent(media.id(), _ -> new Job(media));
+            Join join = job.join(waiter, priority);
+            switch (join) {
+                case JOINED -> {
+                    return waiter; // someone already asked at this priority; share their job
                 }
-            });
-        } catch (RejectedExecutionException e) {
-            inFlight.remove(media.id(), created);
-            created.completeExceptionally(e);
+                case JOINED_NEEDS_TASK -> {
+                    enqueue(new Task(job, priority, sequence.getAndIncrement()));
+                    return waiter;
+                }
+                // The job finished or was dropped a moment ago: forget it and start a new one.
+                case CLOSED -> inFlight.remove(media.id(), job);
+            }
         }
-        return created;
+    }
+
+    private void enqueue(Task task) {
+        try {
+            pool.execute(task);
+        } catch (RejectedExecutionException e) {
+            finish(task.job(), null, e); // shutting down
+        }
+    }
+
+    /** Runs on a worker when {@code task} reaches the front of the queue. */
+    private void run(Task task) {
+        Job job = task.job();
+        switch (job.claim(task.priority())) {
+            case RUN -> {
+                try {
+                    finish(job, produce(job.media), null);
+                } catch (Throwable t) {
+                    finish(job, null, t);
+                }
+            }
+            case ABANDONED -> {
+                inFlight.remove(job.media.id(), job);
+                log.trace("Skipped thumbnail {}: nobody is waiting for it", job.media.id());
+            }
+            case SKIP -> {
+                // Already running or done, or only lower-priority callers are left (their own task is queued).
+            }
+        }
+    }
+
+    private void finish(Job job, Result result, Throwable error) {
+        List<CompletableFuture<Result>> waiters = job.close();
+        inFlight.remove(job.media.id(), job);
+        for (CompletableFuture<Result> waiter : waiters) { // outside the job's lock: callbacks run here
+            if (error == null) {
+                waiter.complete(result);
+            } else {
+                waiter.completeExceptionally(error);
+            }
+        }
     }
 
     private Result produce(MediaRef media) {
@@ -174,6 +241,110 @@ public final class ThumbnailService implements AutoCloseable {
         WarmUpProgress done = new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(), true);
         progress.accept(done);
         return done;
+    }
+
+    /** Outcome of {@link Job#join}. */
+    private enum Join { JOINED, JOINED_NEEDS_TASK, CLOSED }
+
+    /** Outcome of {@link Job#claim}. */
+    private enum Claim { RUN, SKIP, ABANDONED }
+
+    private record Waiter(CompletableFuture<Result> future, Priority priority) {
+    }
+
+    /**
+     * One thumbnail to make, shared by everyone who asked for it. A job can sit in the queue as more
+     * than one {@link Task} (one per priority it was asked at); whichever task reaches a worker first
+     * and still has someone waiting at its priority runs it, and the rest do nothing.
+     */
+    private static final class Job {
+        final MediaRef media;
+        // All guarded by "this".
+        private final List<Waiter> waiters = new ArrayList<>();
+        private final EnumSet<Priority> queuedAt = EnumSet.noneOf(Priority.class);
+        private boolean started;
+        private boolean closed;
+
+        Job(MediaRef media) {
+            this.media = media;
+        }
+
+        synchronized Join join(CompletableFuture<Result> future, Priority priority) {
+            if (closed) {
+                return Join.CLOSED;
+            }
+            waiters.add(new Waiter(future, priority));
+            // Not started yet and no task at this priority in the queue: the caller must add one.
+            // (A background job someone now sees on screen gets a second, visible task this way.)
+            return !started && queuedAt.add(priority) ? Join.JOINED_NEEDS_TASK : Join.JOINED;
+        }
+
+        /** Called by a worker that took this job's task at {@code priority} off the queue. */
+        synchronized Claim claim(Priority priority) {
+            queuedAt.remove(priority);
+            if (started || closed) {
+                return Claim.SKIP;
+            }
+            waiters.removeIf(waiter -> waiter.future().isDone()); // cancelled by their caller
+            if (waiters.isEmpty()) {
+                closed = true;
+                return Claim.ABANDONED;
+            }
+            // Only run at this priority if someone is still waiting at it (or more urgently). A visible
+            // request that scrolled away must not keep its job at the front of the queue for warm-up.
+            if (waiters.stream().noneMatch(waiter -> waiter.priority().compareTo(priority) <= 0)) {
+                return Claim.SKIP;
+            }
+            started = true;
+            return Claim.RUN;
+        }
+
+        /** Marks the job finished; returns who to tell. */
+        synchronized List<CompletableFuture<Result>> close() {
+            closed = true;
+            List<CompletableFuture<Result>> futures = waiters.stream().map(Waiter::future).toList();
+            waiters.clear();
+            return futures;
+        }
+    }
+
+    /**
+     * A job's place in the queue. Comparable so the {@link PriorityBlockingQueue} can sort it. An inner
+     * (non-static) class so {@link #run} can reach the service.
+     */
+    private final class Task implements Runnable, Comparable<Task> {
+        private final Job job;
+        private final Priority priority;
+        private final long sequence;
+
+        Task(Job job, Priority priority, long sequence) {
+            this.job = job;
+            this.priority = priority;
+            this.sequence = sequence;
+        }
+
+        Job job() {
+            return job;
+        }
+
+        Priority priority() {
+            return priority;
+        }
+
+        @Override
+        public void run() {
+            ThumbnailService.this.run(this);
+        }
+
+        @Override
+        public int compareTo(Task other) {
+            if (priority != other.priority) {
+                return priority.compareTo(other.priority);
+            }
+            return priority == Priority.VISIBLE
+                    ? Long.compare(other.sequence, sequence) // newest first
+                    : Long.compare(sequence, other.sequence); // in the order asked
+        }
     }
 
     private static void writeFailMarker(Path marker, long sourceModified) {

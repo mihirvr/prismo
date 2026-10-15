@@ -2,36 +2,37 @@ package io.github.mihirvr.prismo;
 
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.db.LibraryRootStore;
+import io.github.mihirvr.prismo.db.SettingsStore;
 import io.github.mihirvr.prismo.index.IndexProgress;
 import io.github.mihirvr.prismo.index.Indexer;
 import io.github.mihirvr.prismo.index.MetadataReader;
 import io.github.mihirvr.prismo.platform.AppPaths;
-import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.thumbs.MediaRefs;
 import io.github.mihirvr.prismo.thumbs.ThumbnailCache;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
+import io.github.mihirvr.prismo.ui.TimelineItem;
+import io.github.mihirvr.prismo.ui.TimelineQuery;
+import io.github.mihirvr.prismo.ui.TimelineView;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import javafx.application.Application;
 import javafx.application.Platform;
-import javafx.geometry.Insets;
-import javafx.geometry.Pos;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
-import javafx.scene.image.Image;
-import javafx.scene.image.ImageView;
-import javafx.scene.layout.FlowPane;
+import javafx.scene.control.Slider;
+import javafx.scene.control.Tooltip;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.VBox;
+import javafx.scene.layout.Region;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
@@ -44,20 +45,23 @@ public final class PrismoApp extends Application {
 
     private static final double DEFAULT_WIDTH = 1200;
     private static final double DEFAULT_HEIGHT = 800;
+    private static final int GRID_THUMBNAIL_SIZE = 320;
+    private static final String THUMBNAIL_SIZE_SETTING = "timeline.thumbnail_size";
+    /** While indexing, show newly found files at most this often. */
+    private static final long TIMELINE_RELOAD_NANOS = 3_000_000_000L;
 
     private Database database;
+    private SettingsStore settings;
     private LibraryRootStore libraryRoots;
     private Indexer indexer;
     private ThumbnailService thumbnails;
+    private double savedThumbnailSize = TimelineView.DEFAULT_THUMBNAIL_SIZE;
     /** One indexing run at a time; extra requests queue up behind it. */
     private final ExecutorService indexingThread = Executors.newSingleThreadExecutor(
             Thread.ofPlatform().name("prismo-indexer").daemon(true).factory());
 
-    private static final int GRID_THUMBNAIL_SIZE = 320;
-    private static final int RECENT_STRIP_COUNT = 40;
-
     private final Label status = new Label("Starting…");
-    private final FlowPane recent = new FlowPane(6, 6);
+    private TimelineView timeline;
 
     /** Runs on the JavaFX-Launcher thread, before any window exists, so slow setup here never freezes the UI. */
     @Override
@@ -69,31 +73,49 @@ public final class PrismoApp extends Application {
 
         AppPaths paths = AppPaths.forCurrentOs();
         database = Database.open(paths.databaseFile());
+        settings = new SettingsStore(database);
         libraryRoots = new LibraryRootStore(database);
         indexer = new Indexer(database, new MetadataReader(ZoneId.systemDefault()));
         thumbnails = new ThumbnailService(new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE),
                 new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
+        try {
+            settings.get(THUMBNAIL_SIZE_SETTING).ifPresent(value -> savedThumbnailSize = Double.parseDouble(value));
+        } catch (NumberFormatException e) {
+            log.warn("Ignoring bad {} setting: {}", THUMBNAIL_SIZE_SETTING, e.getMessage());
+        }
     }
 
     /** Runs on the JavaFX Application Thread. */
     @Override
     public void start(Stage stage) {
-        // Temporary screen until the Timeline (#5): add a folder, watch it index, see the newest thumbnails.
+        timeline = new TimelineView(thumbnails);
+        timeline.setThumbnailSize(savedThumbnailSize);
+        timeline.setPlaceholder(new Label("No photos yet. Click \"Add folder…\" to choose a folder to show."));
+
+        Label title = new Label("Prismo");
+        title.getStyleClass().add("app-title");
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+        Slider size = new Slider(TimelineView.MIN_THUMBNAIL_SIZE, TimelineView.MAX_THUMBNAIL_SIZE,
+                timeline.thumbnailSizeProperty().get());
+        size.valueProperty().bindBidirectional(timeline.thumbnailSizeProperty());
+        size.setTooltip(new Tooltip("Thumbnail size (or Ctrl + mouse wheel)"));
         Button addFolder = new Button("Add folder…");
         addFolder.setOnAction(event -> chooseFolder(stage));
-        ScrollPane recentScroll = new ScrollPane(recent);
-        recentScroll.setFitToWidth(true);
-        VBox.setVgrow(recentScroll, Priority.ALWAYS);
-        VBox root = new VBox(12, new Label("Prismo"), addFolder, status, recentScroll);
-        root.setAlignment(Pos.TOP_CENTER);
-        root.setPadding(new Insets(24));
+        HBox topBar = new HBox(title, spacer, new Label("Size"), size, addFolder);
+        topBar.getStyleClass().add("top-bar");
+        status.getStyleClass().add("status-bar");
+        status.setMaxWidth(Double.MAX_VALUE);
 
+        BorderPane root = new BorderPane(timeline, topBar, null, status, null);
+        Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+        scene.getStylesheets().add(PrismoApp.class.getResource("/ui/prismo.css").toExternalForm());
         stage.setTitle("Prismo");
-        stage.setScene(new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT));
+        stage.setScene(scene);
         stage.show();
         log.info("Main window shown");
 
-        // Pick up anything that changed in the library since the last run.
+        // Show what's already indexed straight away, then pick up anything that changed since the last run.
         startIndexing();
     }
 
@@ -120,13 +142,28 @@ public final class PrismoApp extends Application {
     private void startIndexing() {
         indexingThread.execute(() -> {
             try {
+                loadTimeline();
                 var roots = libraryRoots.enabledRoots();
                 if (roots.isEmpty()) {
                     Platform.runLater(() -> status.setText("No library folders yet. Click \"Add folder…\"."));
                     return;
                 }
-                IndexProgress indexed = indexer.index(roots,
-                        progress -> Platform.runLater(() -> status.setText(describe(progress))));
+                // Only touched on this thread (the progress callback runs here too); arrays so the lambda can update them.
+                long[] lastLoad = {System.nanoTime()};
+                int[] shownIndexed = {0};
+                IndexProgress indexed = indexer.index(roots, progress -> {
+                    Platform.runLater(() -> status.setText(describe(progress)));
+                    // A first index of a big folder takes a while: show what's found so far every few seconds.
+                    if (progress.indexed() > shownIndexed[0]
+                            && System.nanoTime() - lastLoad[0] >= TIMELINE_RELOAD_NANOS) {
+                        reloadTimelineQuietly();
+                        lastLoad[0] = System.nanoTime();
+                        shownIndexed[0] = progress.indexed();
+                    }
+                });
+                if (indexed.indexed() > shownIndexed[0]) {
+                    loadTimeline();
+                }
                 warmThumbnails(describe(indexed));
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt(); // app is shutting down
@@ -137,24 +174,29 @@ public final class PrismoApp extends Application {
         });
     }
 
-    /** Runs on the indexing thread after an index run: makes thumbnails newest first, then shows a strip. */
+    /** Runs on the indexing thread: reads the Timeline from the database and hands it to the UI. */
+    private void loadTimeline() throws SQLException {
+        long start = System.nanoTime();
+        List<TimelineItem> items = database.read(TimelineQuery::load);
+        log.info("Timeline loaded: {} items in {} ms", items.size(), (System.nanoTime() - start) / 1_000_000);
+        Platform.runLater(() -> timeline.setItems(items));
+    }
+
+    /** {@link #loadTimeline} for the indexer's progress callback, which can't throw SQLException. */
+    private void reloadTimelineQuietly() {
+        try {
+            loadTimeline();
+        } catch (SQLException e) {
+            log.warn("Could not reload the timeline while indexing", e);
+        }
+    }
+
+    /** Runs on the indexing thread after an index run: makes every missing thumbnail, newest first. */
     private void warmThumbnails(String indexSummary) throws SQLException, InterruptedException {
         var images = database.read(c -> MediaRefs.newestImages(c, Integer.MAX_VALUE));
         thumbnails.warmUp(images, p -> Platform.runLater(() -> status.setText(indexSummary
-                + "\nThumbnails %s %,d / %,d (%,d unsupported, %,d failed)".formatted(
+                + "  ·  Thumbnails %s %,d / %,d (%,d unsupported, %,d failed)".formatted(
                         p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(), p.failed()))));
-
-        var newest = images.subList(0, Math.min(RECENT_STRIP_COUNT, images.size()));
-        Platform.runLater(() -> recent.getChildren().clear());
-        for (MediaRef ref : newest) {
-            thumbnails.request(ref).thenAccept(result -> {
-                if (result instanceof ThumbnailService.Ready(Path file)) {
-                    // Background loading + requested size: decoded off the UI thread, at display size.
-                    Image image = new Image(file.toUri().toString(), 160, 160, true, true, true);
-                    Platform.runLater(() -> recent.getChildren().add(new ImageView(image)));
-                }
-            });
-        }
     }
 
     private static String describe(IndexProgress p) {
@@ -172,6 +214,11 @@ public final class PrismoApp extends Application {
         indexingThread.shutdownNow();
         if (!indexingThread.awaitTermination(10, TimeUnit.SECONDS)) {
             log.warn("Indexer did not stop within 10 s");
+        }
+        if (timeline != null) {
+            timeline.close();
+            // Queued on the writer thread; database.close() below waits for it.
+            settings.put(THUMBNAIL_SIZE_SETTING, Long.toString(Math.round(timeline.thumbnailSizeProperty().get())));
         }
         if (thumbnails != null) {
             thumbnails.close();

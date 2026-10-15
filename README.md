@@ -53,9 +53,9 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Planning / Early Development**
+**Early development: v0.5 Core Loop in progress**
 
-The project is currently in the design and architecture phase. No runnable application exists yet.
+The app runs (`./gradlew run`). You can add a folder; Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline. Next: Viewer, Search, Filesystem Watcher. No installer yet.
 
 - [Project Outline](docs/PROJECT.md) — full design document
 - [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
@@ -111,10 +111,12 @@ prismo/
 │   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders
 │   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders
 │   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress
-│   │   │   └── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, JPEG files on disk
+│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, JPEG files on disk, on-screen-first queue
+│   │   │   └── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles, loader
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
-│   │       └── db/migration/       # Numbered schema scripts (V1__..., V2__...)
+│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__...)
+│   │       └── ui/prismo.css       # The app's stylesheet
 │   └── test/
 │       ├── java/...                # Unit tests, mirroring the main packages (+ testing/ shared helpers)
 │       └── resources/              # Test-only logging config and test migration scripts
@@ -129,7 +131,7 @@ prismo/
 
 Build and run: `./gradlew run` · tests: `./gradlew test`.
 
-New packages appear as features land (indexer, thumbnails, UI, …).
+New packages appear as features land (viewer, search, file watcher, …).
 
 ---
 
