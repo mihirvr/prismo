@@ -28,6 +28,7 @@ class MigrationsTest {
             assertEquals(version, Migrations.userVersion(connection));
             assertTrue(tableExists(connection, "media"));
             assertTrue(tableExists(connection, "settings"));
+            assertTrue(tableExists(connection, "library_roots"));
         }
     }
 

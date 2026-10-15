@@ -29,6 +29,7 @@ dependencies {
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
     implementation(libs.sqlite.jdbc)
+    implementation(libs.metadata.extractor)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

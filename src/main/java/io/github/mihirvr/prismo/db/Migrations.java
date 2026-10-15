@@ -29,7 +29,8 @@ final class Migrations {
 
     /** Never edit or reorder a released script; add a new one at the end. */
     static final List<String> SCRIPTS = List.of(
-            "V1__initial_schema.sql");
+            "V1__initial_schema.sql",
+            "V2__library_roots.sql");
 
     private final List<String> scripts;
 

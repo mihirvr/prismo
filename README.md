@@ -109,7 +109,8 @@ prismo/
 │   │   │   ├── Launcher.java       # Entry point (main)
 │   │   │   ├── PrismoApp.java      # JavaFX application: startup, main window, shutdown
 │   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders
-│   │   │   └── db/                 # SQLite: connections, single writer thread, migrations, settings
+│   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders
+│   │   │   └── index/              # Media indexer: folder walk, metadata reading, batched writes, progress
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
 │   │       └── db/migration/       # Numbered schema scripts (V1__..., V2__...)
