@@ -110,12 +110,13 @@ prismo/
 │   │   │   ├── PrismoApp.java      # JavaFX application: startup, main window, shutdown
 │   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders
 │   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders
-│   │   │   └── index/              # Media indexer: folder walk, metadata reading, batched writes, progress
+│   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress
+│   │   │   └── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, JPEG files on disk
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
 │   │       └── db/migration/       # Numbered schema scripts (V1__..., V2__...)
 │   └── test/
-│       ├── java/...                # Unit tests, mirroring the main packages
+│       ├── java/...                # Unit tests, mirroring the main packages (+ testing/ shared helpers)
 │       └── resources/              # Test-only logging config and test migration scripts
 ├── build.gradle.kts            # Build: Java 25 toolchain, JavaFX, dependencies, run/test settings
 ├── settings.gradle.kts         # Project name + JDK auto-download plugin

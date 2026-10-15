@@ -1,4 +1,4 @@
-package io.github.mihirvr.prismo.index;
+package io.github.mihirvr.prismo.testing;
 
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
@@ -10,8 +10,11 @@ import java.nio.file.Path;
 import java.time.Instant;
 import javax.imageio.ImageIO;
 
-/** Builds small but real media files byte by byte, so metadata reading is tested against actual formats. */
-final class TestMedia {
+/**
+ * Builds small but real media files byte by byte, so metadata and thumbnail code is tested against
+ * actual formats. Shared by the tests of several packages.
+ */
+public final class TestMedia {
 
     /** Seconds between the MP4 epoch (1904-01-01) and the Unix epoch (1970-01-01). */
     private static final long MP4_EPOCH_OFFSET = 2_082_844_800L;
@@ -20,7 +23,7 @@ final class TestMedia {
     }
 
     /** A plain PNG (no EXIF) of the given size. */
-    static Path png(Path file, int width, int height) throws IOException {
+    public static Path png(Path file, int width, int height) throws IOException {
         ImageIO.write(new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB), "png", file.toFile());
         return file;
     }
@@ -29,10 +32,17 @@ final class TestMedia {
      * A JPEG of {@code width}×{@code height} pixels with an EXIF block: Make, Model, Orientation and
      * DateTimeOriginal ("yyyy:MM:dd HH:mm:ss").
      */
-    static Path jpegWithExif(Path file, int width, int height, String make, String model, int orientation,
+    public static Path jpegWithExif(Path file, int width, int height, String make, String model, int orientation,
+            String dateTimeOriginal) throws IOException {
+        return jpegWithExif(file, new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB), make, model,
+                orientation, dateTimeOriginal);
+    }
+
+    /** Same, with given pixels (e.g. a coloured corner to check rotation). */
+    public static Path jpegWithExif(Path file, BufferedImage pixels, String make, String model, int orientation,
             String dateTimeOriginal) throws IOException {
         ByteArrayOutputStream plain = new ByteArrayOutputStream();
-        ImageIO.write(new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB), "jpg", plain);
+        ImageIO.write(pixels, "jpg", plain);
         byte[] jpeg = plain.toByteArray();
         byte[] exif = exifSegment(make, model, orientation, dateTimeOriginal);
 
@@ -46,7 +56,7 @@ final class TestMedia {
     }
 
     /** A minimal MP4 (ftyp + moov/mvhd) with a creation time and a duration; no actual video track. */
-    static Path mp4(Path file, Instant created, double durationSeconds) throws IOException {
+    public static Path mp4(Path file, Instant created, double durationSeconds) throws IOException {
         int timescale = 1000;
         ByteBuffer mvhd = ByteBuffer.allocate(108);
         mvhd.putInt(108).put(ascii("mvhd"));

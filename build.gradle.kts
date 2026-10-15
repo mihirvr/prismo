@@ -30,6 +30,8 @@ dependencies {
     runtimeOnly(libs.logback.classic)
     implementation(libs.sqlite.jdbc)
     implementation(libs.metadata.extractor)
+    runtimeOnly(libs.twelvemonkeys.jpeg)
+    runtimeOnly(libs.twelvemonkeys.webp)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)

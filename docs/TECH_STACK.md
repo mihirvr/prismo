@@ -21,6 +21,7 @@ Anything marked **(verify in #N)** is our current reading and has not been teste
 | Metadata | `com.drew:metadata-extractor` | 2.21.0 | **no** (automatic) | EXIF, HEIF, MP4/QuickTime (incl. duration), RAW tags |
 | Image decode (JPEG/PNG/BMP/GIF) | `javax.imageio` (JDK) | — | yes | Built into the JDK |
 | Image decode (WEBP) | TwelveMonkeys `imageio-webp` | 3.15.3 | **no** (automatic) | Read-only WEBP plugin for ImageIO |
+| Image decode (JPEG, robust) | TwelveMonkeys `imageio-jpeg` | 3.15.3 | **no** (automatic) | Replaces the JDK JPEG reader; also reads CMYK/YCCK and slightly broken JPEGs |
 | Image decode (HEIC) | `libheif` (C library) via Java FFM | — | — | Native library, comes later in v1.0 |
 | RAW | Embedded JPEG preview (v1) | — | — | Full RAW decoding (`libraw`) is post-MVP |
 | Video metadata | `metadata-extractor` | — | — | `TAG_DURATION_SECONDS` on MP4/QuickTime directories |
@@ -161,7 +162,7 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 3. Apply the EXIF orientation when making the thumbnail, so the cached file is already the right way up.
 4. **Save as JPEG files** on disk (ImageIO can write JPEG, but TwelveMonkeys WEBP is read-only).
 
-**Cache layout:** `<cache dir>/thumbs/<size>/<two hex chars from the id>/<media id>.jpg`. The two-character subfolders keep any one folder from holding hundreds of thousands of files. To know when a thumbnail is stale, store the source file's size + modified time on the `Media` row at the moment the thumbnail was made. No separate cache table.
+**Cache layout:** `<cache dir>/thumbs/<size>/<two hex chars from the id>/<media id>.jpg`. The two-character subfolders keep any one folder from holding hundreds of thousands of files. To know when a thumbnail is stale, the thumbnail file's own modified time is set to the source file's modified time when it is written; it is fresh while the two match. No database writes and no cache table. Files that fail to decode get an empty `<media id>.fail` marker stamped the same way, so they aren't retried until they change. Thumbnails are written to a temp file and atomically renamed into place.
 
 **Showing thumbnails in JavaFX:**
 - Load cached thumbnails with `new Image(url, width, height, true, true, true)`. The last `true` loads in the background, and the requested size shrinks the image as it loads.
@@ -176,7 +177,7 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 - **Playback:** `javafx.media`. Per the JavaFX 25 docs, it plays **MP4 (`.mp4`, `.m4v`) with H.264 or H.265 video and AAC audio**, HLS streams, and MP3/WAV/AIFF audio. **MOV, MKV, WebM and AVI are not on the supported list.** Many phone videos are MOV, so this is a real gap.
   - v1 plan: play what JavaFX can play. For anything else, the viewer shows the thumbnail and an "Open with default player" button. This is an open question in `PROJECT.md`.
 - **Watch progress:** the viewer saves `playback_position_seconds` from `MediaPlayer.currentTime` while playing (and on pause, stop and app close), through the DB writer queue.
-- **Thumbnails (proposal for #4):** JavaFX can't grab a frame from a video without playing it on the UI toolkit. The plan is to bundle an **LGPL-only build of `ffmpeg`** and run it as a separate process to grab one frame. As a separate program it doesn't affect Prismo's MIT license, but its license notice must ship with the app.
+- **Thumbnails (proposal; not in #4, which reports videos as "unsupported"; needs its own issue):** JavaFX can't grab a frame from a video without playing it on the UI toolkit. The plan is to bundle an **LGPL-only build of `ffmpeg`** and run it as a separate process to grab one frame. As a separate program it doesn't affect Prismo's MIT license, but its license notice must ship with the app.
 
 ---
 
