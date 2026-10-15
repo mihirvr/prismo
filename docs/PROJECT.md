@@ -1,8 +1,10 @@
-# Desktop Gallery App — Project Outline (Final)
+# Prismo — Project Outline
+
+> This document says **what Prismo is and does**. Libraries and implementation approach: `TECH_STACK.md`. Workflow and rules: `DEVELOPMENT.md`.
 
 ## Vision
 
-A fast, offline-first desktop media browser that feels like a phone gallery, not a file explorer or DAM tool. Indexes existing folders — never imports, never duplicates.
+A fast, offline-first desktop media browser for **Windows and Linux** that feels like a phone gallery, not a file explorer or DAM tool. Indexes existing folders — never imports, never duplicates.
 
 **Not**: cloud service, file explorer replacement, editing suite, professional DAM tool.
 
@@ -39,7 +41,7 @@ A fast, offline-first desktop media browser that feels like a phone gallery, not
 ## Core Principles
 
 - **Offline-first**: no account, no login, no telemetry, no cloud, no subscriptions
-- **Non-destructive**: files stay exactly where they are, nothing duplicated
+- **Non-destructive**: Prismo never changes, moves, renames, re-encodes or deletes a file **on its own**. Indexing, thumbnails, favorites, hiding and trash all live in Prismo's own database and cache. Files on disk change only when the user explicitly runs a file operation (see File Operations).
 - **Mobile-gallery browsing model**: Timeline first, folders second
 - **Architecture over language**: performance comes primarily from cache-first design and async indexing, not the implementation language
 
@@ -47,20 +49,30 @@ A fast, offline-first desktop media browser that feels like a phone gallery, not
 
 ## Scope Tiers
 
-### v0.1 — Engineering Skeleton
+These match the GitHub milestones and issues #1–#10 (see `DEVELOPMENT.md`).
+
+### v0.1 — Foundation
+A clean project, a database, and an indexer that fills it:
+```
+Project Setup (#1) · Database Layer (#2) · Media Indexer (#3)
+```
+
+### v0.5 — Core Loop
 Prove the core loop works and feels fast before anything else:
 ```
-Timeline · Folder Explorer · Collections (Folders/Albums)
-Viewer · Search · Background Indexing · Thumbnail Cache · Packaging
+Thumbnail Cache (#4) · Timeline (#5) · Viewer (#6) · Search (#7) · Filesystem Watcher (#8)
 ```
 
 ### v1.0 — MVP
-Everything in v0.1, plus the low-cost, expected baseline features that make it actually feel like a phone gallery:
+Everything above, plus the expected baseline features that make it actually feel like a phone gallery:
 ```
+Collections: Folder Explorer + Albums (#9) · Packaging (#10)
 Favorites · Hidden (OS-level + Ignored Paths) · Trash
-Filters · Sort · Metadata Panel · Selection Mode · Multiple Locations
+Filters · Sort · Metadata Panel · Selection Mode · File Operations · Multiple Locations
+Broken & Unavailable Media · HEIC support · RAW previews
 Video Watch Progress (thumbnail bar + resume playback)
 ```
+The v1.0 items without an issue number still need GitHub issues.
 
 ### Deferred to Post-MVP
 Gallery Lock (PIN), duplicate finder, AI/content search, face recognition, OCR, basic editing, plugins, Workspaces, cloud sync. (Full list at the bottom.)
@@ -148,8 +160,9 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 
 ## Viewer
 
-- Zoom, pan, rotate, next/previous, fullscreen, slideshow, video playback
+- Zoom, pan, rotate (view only — the file is not changed), next/previous, fullscreen, slideshow, video playback
 - Keyboard shortcuts, mouse gestures
+- **Video formats**: in-app playback covers what JavaFX Media supports (MP4 with H.264/H.265 + AAC). Other videos (MOV, MKV, WebM, AVI) show their thumbnail and an "Open with default player" button (see Open Questions).
 
 **Metadata panel** (optional side panel): resolution, file size, camera, lens, ISO, aperture, GPS (if present), date taken, date modified, file path.
 
@@ -164,7 +177,7 @@ Two linked features, both video-only:
 
 **Data** (added to `Media`, video rows only): `duration_seconds`, `playback_position_seconds`.
 
-- `duration_seconds` captured once during metadata extraction (JavaFX `MediaPlayer` exposes `totalDuration` once ready)
+- `duration_seconds` read once during indexing from the file's MP4/QuickTime metadata (`metadata-extractor`) — not from JavaFX `MediaPlayer`, which would mean creating a player per file and only works for formats JavaFX can play
 - `playback_position_seconds` written periodically during playback (~every 5-10s) plus on pause/stop/app-close
 
 **Optional extension (not in v1 by default)**: a Watched / Unwatched / In Progress filter and sort option, same category as existing Favorites/Hidden filters — cheap to add later since the underlying data already exists.
@@ -174,7 +187,7 @@ Two linked features, both video-only:
 ## Favorites / Recently Added
 
 - Favorites: one-click toggle, appears in Collections. Stored as a boolean column on `Media` — not a separate table (see Database section).
-- Recently Added: sorted by index/import date, not Date Taken
+- Recently Added: sorted by `date_added` (when Prismo first indexed the file), not Date Taken
 
 ---
 
@@ -190,9 +203,10 @@ Two linked features, both video-only:
 
 App-level soft delete (flag + hidden from all views) — consistent across Windows/Linux/network drives, unlike relying on the OS recycle bin (which behaves inconsistently across platforms and doesn't exist for network drives).
 
-- Restore supported
-- Permanent delete optional
-- Configurable auto-purge after N days
+- **Delete** = move to Prismo's Trash. The file stays on disk, untouched; only the database flag changes.
+- **Restore** = clear the flag.
+- **Delete permanently** (from Trash only, after a confirmation dialog) = the file is really deleted from disk. This is the only way Prismo removes a file.
+- Auto-purge after N days would delete real files without the user present, so it is **off by default** and its policy is an open question.
 
 ---
 
@@ -226,7 +240,7 @@ Desktop equivalent of long-press. Supports: delete, copy, move, favorite, hide, 
 
 ## File Operations
 
-Consolidated here rather than scattered across Selection Mode and the right-click menu:
+Consolidated here rather than scattered across Selection Mode and the right-click menu. These are the **only** actions that change files on disk, and each one runs only when the user asks for it:
 
 **Supported (v1)**:
 ```
@@ -281,7 +295,7 @@ Refresh UI incrementally
 
 - **Local / USB drives**: real-time filesystem monitoring — detects new files, deleted files, renamed files/folders, drive connect/disconnect
 - **Network / NAS drives**: manual or scheduled rescan only — real-time watch is not reliable over SMB/NFS
-- **Rename/move detection**: requires a content-hash or file-ID matching strategy so favorite/hide/tag state survives a move — a plain OS rename event often looks identical to delete+create and cannot be assumed to "just work"
+- **Rename/move detection**: a plain OS rename event often looks identical to delete+create and cannot be assumed to "just work". Proposed: match by file ID where the OS gives one (Linux inode), plus a cheap content fingerprint (size + hash of the first/last 64 KiB) as the fallback on every OS, so favorite/hide/progress state survives a move. Details in `TECH_STACK.md`.
 
 ---
 
@@ -322,6 +336,7 @@ One `Media` table remains the core of the philosophy — every page is a filtere
 ```
 Media        → id, path, type, date_taken, date_modified, date_added,
                resolution, favorite (bool), hidden (bool), broken (bool),
+               trashed_at (null = not in Trash; used for auto-purge),
                duration_seconds (video only), playback_position_seconds (video only), ...
 Folders      → structural entries for the Folder Explorer / Albums
 Drives       → tracks connect/disconnect state for Multiple Locations
@@ -339,7 +354,9 @@ Albums     → everything, grouped by folder
 Favorites  → favorite = true
 Videos     → type = video
 Hidden     → hidden = true
+Trash      → trashed_at is not null
 ```
+(Every view except Trash also filters out `trashed_at is not null`.)
 
 ---
 
@@ -348,20 +365,20 @@ Hidden     → hidden = true
 ```
 Filesystem
      ↓
-File Watcher
+Scanner (first run / rescan)  +  File Watcher (live changes)
+     ↓
+Queue
      ↓
 Metadata Extractor
      ↓
-Thumbnail Generator
-     ↓
-SQLite Index (FTS5)
-     ↓
-Thumbnail Cache
-     ↓
-Search Engine
-     ↓
-Gallery UI
+DB Writer (single thread) ──→ SQLite Index (Media table + FTS5)
+     ↓                                   ↑
+Thumbnail Generator (background)         │ queries / search
+     ↓                                   │
+Thumbnail Cache (files on disk) ──→ Gallery UI
 ```
+
+The UI never waits on the scanner or the thumbnail generator. It reads what is already in SQLite and the cache, and updates when new rows or thumbnails arrive. Thread layout and the database write model are in `TECH_STACK.md`.
 
 Fully local. No servers, no uploads, no internet dependency.
 
@@ -390,9 +407,10 @@ Internal note: only state real numbers (search latency, cold start time, etc.) o
 ### Storage & OS Paths
 
 Application data is decoupled from the installation directory and follows platform conventions:
-- **Windows**: `%LOCALAPPDATA%\Prismo` (Database, Cache, Logs)
-- **Linux**: `$XDG_DATA_HOME/prismo` (or `~/.local/share/prismo` for DB, `~/.cache/prismo` for thumbnails)
-- **macOS**: `~/Library/Application Support/Prismo` (DB) and `~/Library/Caches/Prismo` (thumbnails)
+- **Windows**: `%LOCALAPPDATA%\Prismo\` (database), `\cache\` (thumbnails), `\logs\`
+- **Linux**: `$XDG_DATA_HOME/prismo` (database), `$XDG_CACHE_HOME/prismo` (thumbnails), `$XDG_STATE_HOME/prismo/logs` (logs) — defaulting to `~/.local/share`, `~/.cache` and `~/.local/state` when the variables are unset
+
+Full table in `TECH_STACK.md`. macOS is not a target.
 
 ---
 ## Post-MVP Roadmap
@@ -415,52 +433,22 @@ Application data is decoupled from the installation directory and follows platfo
 
 ---
 
-## Internal Note: Tech Stack & Rationale
+## Tech Stack
 
-*(This section is implementation reasoning, not product spec — split into a separate `TECH_STACK.md` once this becomes an actual repo with `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/CONTRIBUTING.md`, etc. Kept inline for now since there's no repo structure yet.)*
+Moved to **`TECH_STACK.md`**: libraries, versions, Java/JavaFX version, threading model, database write model, packaging approach, and why Java.
 
-| Layer | Choice | Why |
-|---|---|---|
-| UI | JavaFX | CSS-styleable, packages natively via `jpackage`; renders its own canvas (same category as Flutter — no native-widget advantage either way) |
-| Core | Java 21 LTS | Virtual threads are a strong fit for the mostly I/O-bound indexing workload (stat-ing thousands of files) without manual thread-pool tuning |
-| Database | SQLite + FTS5 | FTS5 specifically needed for fast search. We will use Xerial SQLite-JDBC alongside HikariCP for connection pooling to handle concurrent Virtual Thread reads/writes without triggering "database is locked" errors. |
-| EXIF Metadata | `metadata-extractor` | By Drew Noakes; extracts camera, lens, ISO, aperture, and GPS data during background indexing. |
-| Image decode (JPEG/PNG) | `ImageIO` | Built-in, backed by compiled native decoders |
-| Image decode (WEBP/TIFF) | `TwelveMonkeys` plugin | Not supported by stock `ImageIO` |
-| Image decode (HEIC) | `libheif` via JNI/JNA | `TwelveMonkeys` does not natively support HEIC; requires bridge to native OS library |
-| Image decode (RAW) | `libraw` via JNI/JNA bridge | No good pure-Java RAW decoder exists |
-| File watching | `java.nio.file.WatchService` | Not recursive by default; events must be queued and debounced using a `ScheduledExecutorService` to prevent duplicate or dropped events during heavy disk I/O bursts. |
-| Logging | SLF4J + Logback | Local, rotating offline logs stored in the OS app data folders (`%LOCALAPPDATA%` / `$XDG_DATA_HOME`). |
-| Packaging | `jlink` + `jpackage` | Custom minimal runtime (~40-70MB) bundled into a native installer (~80-120MB); user never installs Java, never sees `JAVA_HOME` |
-
-**Why Java over Rust or Python:**
-- Not Python: GIL and packaging (PyInstaller cold-start, bundle size) work against a UI-heavy, CPU-adjacent desktop app
-- Not Rust: most of the app's runtime is I/O-bound (disk, SQLite, decoder, GPU), not CPU-bound — an optimized Java implementation typically lands within 5-20% of Rust for these workloads. Rust's real advantage is one-time bulk CPU work (e.g. generating 100k thumbnails), which only happens once, then it's cache reads. Rust is also new territory learned largely via AI, which conflicts with defending the harder internals independently in an interview — Java allows those parts (concurrency, native bridges, memory pipeline) to be owned and defended directly.
-- Modern collectors (G1, ZGC) have low-millisecond pause times; GC is a non-issue at this scale unless allocation is sloppy (mitigate with buffer reuse, pooled thumbnail arrays, direct `ByteBuffer`s, avoiding unnecessary object churn in hot loops)
-
-**Directory Structure**: We enforce a strict Gradle layout with a `module-info.java` at the root of `src/main/java` to strictly satisfy `jlink` module constraints.
-
-**Packaging detail — JavaFX is not bundled in the JDK.** Since Java 11, JavaFX ships as a separate SDK (Gluon jmods, platform-specific: Windows/Linux/macOS):
-- `jlink` needs the JavaFX jmods added to the module path explicitly
-- Each target platform needs its own `jlink` run with that platform's jmods — a Linux runtime image can't be cross-built from Windows
-```
-jlink --module-path "javafx-jmods-21;%JAVA_HOME%/jmods" ^
-      --add-modules javafx.controls,javafx.fxml,java.sql,... ^
-      --output custom-runtime
-```
-`jpackage` then wraps `custom-runtime` into the platform installer (`.msi` / `.deb` / `.rpm` / `AppImage`).
-
-**Missing OS Dependencies (Launcher Wrapper)**: The `jpackage` installer will bundle a lightweight launcher script (.bat/shell) to check for native graphics libraries (DirectX on Windows, GTK on Linux) before invoking the JVM. If missing, it must throw a loud native OS message box (via PowerShell/Zenity) rather than failing silently or attempting an auto-install.
-
-**Distribution**: `.msi` (Windows), `.deb`/`.rpm`/`AppImage` (Linux), each bundling its own runtime. Same model as IntelliJ IDEA, Android Studio, DBeaver, DataGrip.
+**Distribution**: `.msi`/`.exe` (Windows), `.deb`/`.rpm` (Linux), each bundling its own Java runtime, so the user never installs Java. AppImage is optional and needs an extra tool. Same model as IntelliJ IDEA, Android Studio, DBeaver, DataGrip.
 
 ---
 
 ## Open Questions Before Build
 
 - Confirm target library size to design/test against
-- Finalize rename/move detection strategy (content hash vs. file ID)
-- Confirm trash retention/auto-purge policy
+- Confirm the rename/move detection proposal (file ID + fingerprint, see `TECH_STACK.md`) once tested in #8
+- Confirm trash retention/auto-purge policy (auto-purge deletes real files)
+- Videos JavaFX can't play (MOV, MKV, WebM, AVI): is "Open with default player" enough for v1, or is in-app playback for them a requirement?
+- Video thumbnails: confirm bundling an LGPL `ffmpeg` build (decide in #4)
+- HEIC: bundle `libheif` native libraries per OS, or rely on the Linux distro package?
 - Confirm the non-destructive-editing conflict resolution (before crop/rotate/flip get built, even as post-MVP)
 
 ---

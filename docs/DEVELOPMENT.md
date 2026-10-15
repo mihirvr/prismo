@@ -19,6 +19,7 @@ Prismo/
 │
 ├── docs/
 │   ├── PROJECT.md
+│   ├── TECH_STACK.md
 │   └── DEVELOPMENT.md
 │
 ├── README.md
@@ -43,22 +44,29 @@ Development begins from this point.
 
 # Source of Truth
 
-The primary project specification is:
+The project is specified by two documents:
 
 ```
-docs/PROJECT.md
+docs/PROJECT.md      — what Prismo is
+docs/TECH_STACK.md   — how it is built
 ```
 
-This document defines:
+PROJECT.md defines:
 
 - Vision
 - Features
-- Architecture
+- Architecture overview
 - Database philosophy
 - Roadmap
-- Technical decisions
 
-Unless implementation proves something unrealistic, PROJECT.md should remain the authoritative source.
+TECH_STACK.md defines:
+
+- Libraries and versions
+- Java / JavaFX version
+- Threading and database write model
+- Packaging approach
+
+Unless implementation proves something unrealistic, these two documents remain the authoritative source. Items marked **(verify in #N)** in TECH_STACK.md must be checked in that issue before code depends on them.
 
 Any architectural changes should be discussed and documented rather than silently introduced.
 
@@ -149,7 +157,7 @@ Every completed task should move through these stages.
 
 ## Cross-Platform CI/CD Awareness
 
-Because `jpackage` cannot cross-compile (e.g., Windows cannot build a `.deb`), final testing for Issue #10 (Packaging) will eventually require setting up GitHub Actions to spin up OS-specific runners.
+Because `jpackage` cannot cross-compile (e.g., Windows cannot build a `.deb`), final testing for Issue #10 (Packaging) will eventually require setting up GitHub Actions to spin up OS-specific runners. The Windows runner also needs the WiX Toolset to build `.msi`/`.exe`.
 
 ---
 
@@ -172,15 +180,19 @@ Current roadmap:
 
 Unless implementation experience suggests otherwise, development should follow this order.
 
+Every issue should be assigned to its milestone on GitHub.
+
 ---
 
 # Milestones
 
+These match the scope tiers in PROJECT.md.
+
 ## v0.1 Foundation
 
-- Project setup
-- Database
-- Media Indexer
+- Project Setup (#1)
+- Database Layer (#2)
+- Media Indexer (#3)
 
 Goal:
 
@@ -188,24 +200,25 @@ Establish a stable engineering foundation.
 
 ---
 
-## v0.5 Beta
+## v0.5 Core Loop
 
-- Thumbnail Cache
-- Timeline
-- Search
-- Filesystem Monitoring
+- Thumbnail Cache (#4)
+- Timeline UI (#5)
+- Media Viewer (#6)
+- Search (#7)
+- Filesystem Watcher (#8)
 
 Goal:
 
-Feature-complete core application.
+The core loop (index → thumbnails → browse → view → search → live updates) works and feels fast.
 
 ---
 
-## v1.0 Stable
+## v1.0 MVP
 
-- Viewer
-- Collections
-- Packaging
+- Collections (#9)
+- Packaging (#10)
+- The baseline gallery features listed under v1.0 in PROJECT.md (Favorites, Hidden, Trash, Filters, Sort, Metadata Panel, Selection Mode, File Operations, Multiple Locations, Broken & Unavailable Media, HEIC, RAW previews, Video Watch Progress). These still need GitHub issues.
 - Polish
 
 Goal:
@@ -216,10 +229,24 @@ First stable public release.
 
 # Implementation Rules
 
-## The JPMS Dependency Rule
+## The Dependency Rule
 
-Because the project uses `jlink` for native packaging, dependency management is a strict two-step process:
-Every new library added to `build.gradle.kts` **MUST** also be explicitly declared in the `module-info.java` file. Failing to do this will break the native build.
+Prismo is a classpath application with **no `module-info.java`**. `jlink` builds only the Java runtime (JDK + JavaFX modules), and `jpackage` adds the app jars on top. The reason: several libraries we need (metadata-extractor, TwelveMonkeys) are not real Java modules, and `jlink` rejects those. Full explanation in TECH_STACK.md.
+
+When adding a library:
+
+1. Add its version to `gradle/libs.versions.toml` and reference it from `build.gradle.kts`. No versions written directly in the build file.
+2. Record it in TECH_STACK.md (what it's for, its license).
+3. Re-run `jdeps --print-module-deps --ignore-missing-deps` on the app jars. If it now needs a JDK module that the `jlink` module list doesn't include, add it there. Otherwise the packaged app fails at runtime even though `./gradlew run` works.
+
+## Threading Rule
+
+- No blocking work on the JavaFX Application Thread: no file I/O, no SQL, no image decoding.
+- All SQLite writes go through the single DB writer. Nothing else writes to the database.
+
+---
+
+# Issue Workflow
 
 Every GitHub Issue should follow the same workflow.
 
@@ -239,10 +266,11 @@ Before coding, study only what is necessary.
 
 Preference should always be given to:
 
-- Oracle documentation
+- Oracle documentation and OpenJDK JEPs
 - OpenJFX documentation
 - Gradle documentation
 - SQLite documentation
+- Each library's own README and Javadoc
 
 Avoid relying solely on tutorials.
 
@@ -367,6 +395,7 @@ AI should not:
 - skip roadmap stages
 - rewrite architecture without discussion
 - introduce features outside PROJECT.md
+- add libraries outside TECH_STACK.md without discussion
 
 The human developer owns all architectural decisions.
 
@@ -419,7 +448,9 @@ Avoid:
 
 Keep documentation updated as the project evolves.
 
-Major architectural changes should be reflected in PROJECT.md.
+Major architectural or feature changes should be reflected in PROJECT.md.
+
+Library, version and implementation-approach changes should be reflected in TECH_STACK.md.
 
 Development process changes should be reflected in DEVELOPMENT.md.
 

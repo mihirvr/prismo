@@ -20,7 +20,7 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 - **Multiple locations** — unified library across drives, USB, NAS
 - **Disconnected drive support** — external drives show as offline, not deleted
 - **Viewport virtualization** — only visible thumbnails are decoded
-- **No modifications** — your files are never touched, moved, renamed, or re-encoded
+- **Your files stay yours** — Prismo never changes, moves, renames, re-encodes or deletes a file on its own; files change only when you run a file operation yourself
 
 ---
 
@@ -37,12 +37,17 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 
 | Layer | Choice |
 |---|---|
-| UI | JavaFX |
-| Core | Java 21 LTS (virtual threads) |
-| Database | SQLite + FTS5 |
-| Image decoding | ImageIO, TwelveMonkeys (WEBP/HEIC), libraw (RAW) |
+| UI | JavaFX 25 |
+| Core | Java 25 LTS (virtual threads, FFM API) |
+| Build | Gradle (Kotlin DSL) |
+| Database | SQLite + FTS5 (xerial sqlite-jdbc) |
+| Metadata | metadata-extractor (EXIF, HEIF, MP4/QuickTime) |
+| Image decoding | ImageIO (JPEG/PNG/BMP/GIF), TwelveMonkeys (WEBP), libheif via FFM (HEIC), embedded previews (RAW) |
 | File monitoring | java.nio.file.WatchService (behind a pluggable abstraction) |
+| Logging | SLF4J + Logback |
 | Packaging | jlink + jpackage (bundled runtime, no Java installation required) |
+
+Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ---
 
@@ -53,28 +58,36 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 The project is currently in the design and architecture phase. No runnable application exists yet.
 
 - [Project Outline](docs/PROJECT.md) — full design document
+- [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
 - [Development Guide](docs/DEVELOPMENT.md) — development workflow, rules, and conventions
 
 ---
 
 ## Roadmap
 
-### v0.1 — Engineering Skeleton
+### v0.1 — Foundation
+
+```
+Project Setup · Database Layer · Media Indexer
+```
+
+### v0.5 — Core Loop
 
 Prove the core loop works and feels fast:
 
 ```
-Timeline · Folder Explorer · Collections (Folders/Albums)
-Viewer · Search · Background Indexing · Thumbnail Cache · Packaging
+Thumbnail Cache · Timeline · Viewer · Search · Filesystem Watcher
 ```
 
 ### v1.0 — MVP
 
-Everything in v0.1, plus the baseline features that make it feel like a real gallery:
+Everything above, plus the baseline features that make it feel like a real gallery:
 
 ```
+Collections (Folder Explorer + Albums) · Packaging
 Favorites · Hidden (OS-level + Ignored Paths) · Trash
-Filters · Sort · Metadata Panel · Selection Mode · Multiple Locations
+Filters · Sort · Metadata Panel · Selection Mode · File Operations · Multiple Locations
+HEIC support · RAW previews · Video Watch Progress
 ```
 
 ---
@@ -85,6 +98,7 @@ Filters · Sort · Metadata Panel · Selection Mode · Multiple Locations
 prismo/
 ├── docs/
 │   ├── PROJECT.md          # Full project outline and design document
+│   ├── TECH_STACK.md       # Libraries, versions, and implementation approach
 │   └── DEVELOPMENT.md      # Development workflow, rules, and conventions
 ├── .gitignore
 ├── LICENSE
