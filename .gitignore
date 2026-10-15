@@ -27,3 +27,6 @@ temp/
 # JavaFX runtime artifacts
 hs_err_pid*
 replay_pid*
+
+# Personal build journal (local only)
+/BUILD_JOURNAL.md
