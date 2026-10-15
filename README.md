@@ -97,15 +97,37 @@ HEIC support · RAW previews · Video Watch Progress
 ```
 prismo/
 ├── docs/
-│   ├── PROJECT.md          # Full project outline and design document
-│   ├── TECH_STACK.md       # Libraries, versions, and implementation approach
-│   └── DEVELOPMENT.md      # Development workflow, rules, and conventions
+│   ├── PROJECT.md              # What Prismo is: features, scope, roadmap
+│   ├── TECH_STACK.md           # Libraries, versions, and implementation approach
+│   └── DEVELOPMENT.md          # Development workflow, rules, and conventions
+├── gradle/
+│   ├── libs.versions.toml      # Every dependency version, in one place
+│   └── wrapper/                # Gradle wrapper (pinned Gradle version + checksum)
+├── src/
+│   ├── main/
+│   │   ├── java/io/github/mihirvr/prismo/
+│   │   │   ├── Launcher.java       # Entry point (main)
+│   │   │   ├── PrismoApp.java      # JavaFX application: startup, main window, shutdown
+│   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders
+│   │   │   └── db/                 # SQLite: connections, single writer thread, migrations, settings
+│   │   └── resources/
+│   │       ├── logback.xml         # Logging setup (rotating log file)
+│   │       └── db/migration/       # Numbered schema scripts (V1__..., V2__...)
+│   └── test/
+│       ├── java/...                # Unit tests, mirroring the main packages
+│       └── resources/              # Test-only logging config and test migration scripts
+├── build.gradle.kts            # Build: Java 25 toolchain, JavaFX, dependencies, run/test settings
+├── settings.gradle.kts         # Project name + JDK auto-download plugin
+├── gradlew / gradlew.bat       # Run Gradle without installing it (./gradlew build)
+├── .gitattributes              # Line endings (keeps gradlew working on Linux)
 ├── .gitignore
 ├── LICENSE
 └── README.md
 ```
 
-Additional directories (`src/`, `assets/`, `scripts/`, etc.) will appear as development begins.
+Build and run: `./gradlew run` · tests: `./gradlew test`.
+
+New packages appear as features land (indexer, thumbnails, UI, …).
 
 ---
 

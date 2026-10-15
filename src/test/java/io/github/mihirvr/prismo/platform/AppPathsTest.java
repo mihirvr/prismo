@@ -30,6 +30,13 @@ class AppPathsTest {
     }
 
     @Test
+    void databaseFileLivesInDataDir() {
+        AppPaths paths = AppPaths.resolve(OperatingSystem.LINUX, Map.of(), tmp.resolve("home"));
+
+        assertEquals(paths.dataDir().resolve("prismo.db"), paths.databaseFile());
+    }
+
+    @Test
     void windowsFallsBackToHomeWhenLocalAppDataMissing() {
         Path home = tmp.resolve("home");
 

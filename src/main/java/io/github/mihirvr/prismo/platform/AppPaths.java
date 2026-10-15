@@ -18,6 +18,11 @@ public record AppPaths(Path dataDir, Path cacheDir, Path logDir) {
     private static final String WINDOWS_APP_DIR = "Prismo";
     private static final String LINUX_APP_DIR = "prismo";
 
+    /** The SQLite database file. SQLite also creates {@code -wal} and {@code -shm} files next to it. */
+    public Path databaseFile() {
+        return dataDir.resolve("prismo.db");
+    }
+
     /** Paths for the OS, environment and user this JVM runs as. */
     public static AppPaths forCurrentOs() {
         return resolve(OperatingSystem.current(), System.getenv(), Path.of(System.getProperty("user.home")));

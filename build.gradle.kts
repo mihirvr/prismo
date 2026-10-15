@@ -28,17 +28,21 @@ javafx {
 dependencies {
     implementation(libs.slf4j.api)
     runtimeOnly(libs.logback.classic)
+    implementation(libs.sqlite.jdbc)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
+// javafx.graphics = JavaFX's native rendering; ALL-UNNAMED = classpath jars, i.e. sqlite-jdbc's native SQLite.
+val nativeAccess = "--enable-native-access=javafx.graphics,ALL-UNNAMED"
+
 application {
     mainClass = "io.github.mihirvr.prismo.Launcher"
     // Since JDK 24 the JVM warns when code loads native libraries unless it is allowed up front.
     // JavaFX loads its native graphics code; the installer launcher (#10) needs the same flag.
-    applicationDefaultJvmArgs = listOf("--enable-native-access=javafx.graphics")
+    applicationDefaultJvmArgs = listOf(nativeAccess)
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -48,4 +52,5 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    jvmArgs("--enable-native-access=ALL-UNNAMED")
 }

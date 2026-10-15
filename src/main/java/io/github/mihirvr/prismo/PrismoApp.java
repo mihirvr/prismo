@@ -1,5 +1,9 @@
 package io.github.mihirvr.prismo;
 
+import io.github.mihirvr.prismo.db.Database;
+import io.github.mihirvr.prismo.platform.AppPaths;
+import java.io.IOException;
+import java.sql.SQLException;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.control.Label;
@@ -16,14 +20,22 @@ public final class PrismoApp extends Application {
     private static final double DEFAULT_WIDTH = 1200;
     private static final double DEFAULT_HEIGHT = 800;
 
-    /** Runs on the JavaFX Application Thread. */
+    private Database database;
+
+    /** Runs on the JavaFX-Launcher thread, before any window exists, so slow setup here never freezes the UI. */
     @Override
-    public void start(Stage stage) {
+    public void init() throws SQLException, IOException {
         log.info("Starting Prismo on Java {} / JavaFX {} ({})",
                 System.getProperty("java.version"),
                 System.getProperty("javafx.runtime.version"),
                 System.getProperty("os.name"));
 
+        database = Database.open(AppPaths.forCurrentOs().databaseFile());
+    }
+
+    /** Runs on the JavaFX Application Thread. */
+    @Override
+    public void start(Stage stage) {
         StackPane root = new StackPane(new Label("Prismo"));
         stage.setTitle("Prismo");
         stage.setScene(new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT));
@@ -35,6 +47,9 @@ public final class PrismoApp extends Application {
     /** Runs on the JavaFX Application Thread after the last window closes. */
     @Override
     public void stop() {
+        if (database != null) {
+            database.close();
+        }
         log.info("Prismo stopped");
     }
 }
