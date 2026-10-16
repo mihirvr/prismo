@@ -12,7 +12,8 @@ import javafx.application.Platform;
 import javafx.scene.image.Image;
 
 /**
- * Gets thumbnails onto the screen. Called on the JavaFX Application Thread only.
+ * Gets thumbnails onto the screen. Called on the JavaFX Application Thread only. One instance is shared
+ * by the Timeline and the viewer, so the photo you click is already in memory when the viewer opens.
  *
  * <ul>
  *   <li>Keeps the most recently shown images in memory, so scrolling back up shows them instantly.</li>
@@ -21,7 +22,7 @@ import javafx.scene.image.Image;
  *   <li>Every load can be cancelled; the timeline cancels when a row scrolls away.</li>
  * </ul>
  */
-final class ThumbnailLoader implements AutoCloseable {
+public final class ThumbnailLoader implements AutoCloseable {
 
     /**
      * Images kept in memory. A 320 × 240 thumbnail is about 300 KB decoded, so 300 ≈ 90 MB at most.
@@ -40,12 +41,12 @@ final class ThumbnailLoader implements AutoCloseable {
         }
     };
 
-    ThumbnailLoader(ThumbnailService service) {
+    public ThumbnailLoader(ThumbnailService service) {
         this.service = service;
     }
 
     /** The image if it's in memory, else null. Keyed by the whole {@link MediaRef}, so an edited photo misses. */
-    Image cached(MediaRef ref) {
+    public Image cached(MediaRef ref) {
         return images.get(ref);
     }
 
@@ -54,7 +55,7 @@ final class ThumbnailLoader implements AutoCloseable {
      * returned load is cancelled first: {@code onImage} with an image that may still be decoding (JavaFX
      * background loading), or {@code onNoImage} with why there is none.
      */
-    Load load(MediaRef ref, Consumer<Image> onImage, Consumer<ThumbnailService.Result> onNoImage) {
+    public Load load(MediaRef ref, Consumer<Image> onImage, Consumer<ThumbnailService.Result> onNoImage) {
         Load load = new Load();
         lookups.execute(() -> {
             if (load.isCancelled()) {
@@ -92,7 +93,7 @@ final class ThumbnailLoader implements AutoCloseable {
     }
 
     /** A load in progress. {@link #cancel} is safe from any thread and more than once. */
-    static final class Load {
+    public static final class Load {
         private boolean cancelled; // guarded by this
         private CompletableFuture<ThumbnailService.Result> request; // guarded by this
 
@@ -101,7 +102,7 @@ final class ThumbnailLoader implements AutoCloseable {
         }
 
         /** Stops the load; the service skips the job if nobody else wants it. */
-        synchronized void cancel() {
+        public synchronized void cancel() {
             cancelled = true;
             if (request != null) {
                 request.cancel(false);

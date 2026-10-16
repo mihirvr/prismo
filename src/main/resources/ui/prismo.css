@@ -61,3 +61,45 @@
 .thumb-tile.thumb-failed {
     -fx-background-color: #ecdcdc;
 }
+
+/* Keyboard focus on the Timeline: a ring over the focused thumbnail. */
+.thumb-focus-ring {
+    -fx-border-color: #1a73e8;
+    -fx-border-width: 3;
+}
+
+/* The viewer: an overlay over the whole window. Dark, so the photo stands out. */
+.viewer {
+    -fx-background-color: #111111;
+}
+
+.viewer-top-bar,
+.viewer-video-controls {
+    -fx-padding: 8 12 8 12;
+    -fx-background-color: rgba(0, 0, 0, 0.55);
+}
+
+.viewer-top-bar .label,
+.viewer-video-controls .label {
+    -fx-text-fill: #eeeeee;
+}
+
+.viewer-file-name {
+    -fx-font-weight: bold;
+}
+
+.viewer .viewer-counter {
+    -fx-text-fill: #aaaaaa;
+}
+
+.viewer-message-box {
+    -fx-padding: 20 28 20 28;
+    -fx-background-color: rgba(0, 0, 0, 0.7);
+    -fx-background-radius: 6;
+}
+
+.viewer .viewer-message {
+    -fx-text-fill: #eeeeee;
+    -fx-font-size: 15px;
+    -fx-text-alignment: center;
+}

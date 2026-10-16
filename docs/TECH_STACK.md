@@ -52,7 +52,7 @@ Why not stay on Java 21:
 
 Setup: install a JDK 25 build (e.g. Temurin 25) and let a Gradle toolchain pin it. JDK 21 can stay installed alongside it.
 
-**Native-access warnings.** Since JDK 24, the JVM prints warnings when code uses JNI or FFM unless native access is allowed at launch. sqlite-jdbc uses JNI, and JavaFX uses native code too. Expect to add something like `--enable-native-access=ALL-UNNAMED,javafx.graphics,javafx.media` to the run and launcher JVM options. **(verify the exact flags in #1)**
+**Native-access warnings.** Since JDK 24, the JVM prints warnings when code uses JNI or FFM unless native access is allowed at launch. sqlite-jdbc uses JNI, and JavaFX uses native code too. The run options (`build.gradle.kts`) use `--enable-native-access=javafx.graphics,javafx.media,ALL-UNNAMED`: `javafx.graphics` checked in #1, `ALL-UNNAMED` (sqlite-jdbc) in #2, `javafx.media` in #6 (without it, JDK 25 warns when the media module's native methods are bound). The installer launcher (#10) needs the same flag.
 
 ---
 
@@ -107,6 +107,8 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | Reading from SQLite (UI queries, search) | Native (JNI) | Small fixed pool of platform threads |
 | Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1), at below-normal thread priority. Its queue puts thumbnails on screen first and skips requests for rows that scrolled away. |
 | HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
+| Viewer: decoding full-size stills | CPU-bound | 2 platform threads at normal priority (someone is waiting for the result) |
+| Viewer: opening a video | Native | A short-lived platform thread per video |
 | Updating the UI | — | `Platform.runLater`, batched (e.g. a few times per second, not once per file) |
 
 Why native work isn't on virtual threads: a native call pins the virtual thread to its carrier, so we gain nothing and can starve other virtual threads. Platform threads make the cost visible and bounded.
@@ -167,7 +169,7 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 **Showing thumbnails in JavaFX:**
 - Load cached thumbnails with `new Image(url, width, height, true, true, true)`. The last `true` loads in the background, and the requested size shrinks the image as it loads.
 - Keep an in-memory LRU (least-recently-used) cache of `Image` objects with a size cap.
-- Converting a decoded `BufferedImage` to JavaFX uses `SwingFXUtils.toFXImage` (module `javafx.swing`) or a `WritableImage` filled through a `PixelWriter`.
+- Converting a decoded `BufferedImage` to JavaFX: a `WritableImage` filled through a `PixelWriter` (chosen in #6, so `javafx.swing` and `SwingFXUtils` aren't needed).
 
 ---
 
@@ -175,7 +177,9 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 
 - **Duration:** from `metadata-extractor` during indexing (see "Metadata").
 - **Playback:** `javafx.media`. Per the JavaFX 25 docs, it plays **MP4 (`.mp4`, `.m4v`) with H.264 or H.265 video and AAC audio**, HLS streams, and MP3/WAV/AIFF audio. **MOV, MKV, WebM and AVI are not on the supported list.** Many phone videos are MOV, so this is a real gap.
-  - v1 plan: play what JavaFX can play. For anything else, the viewer shows the thumbnail and an "Open with default player" button. This is an open question in `PROJECT.md`.
+  - v1 (built in #6): the viewer plays MP4 / M4V. For anything else it shows the thumbnail (once video thumbnails exist) and an "Open with default app" button, which uses JavaFX's `HostServices.showDocument` (no `java.desktop` needed).
+  - **Measured in #6 on the development machine (Windows 11 build 26300, an Insider build):** H.265 (with the Microsoft HEVC extension installed) played every time. **AAC audio never played** (`ERROR_MEDIA_INVALID`), whichever encoder made it, in JavaFX 21, 24 and 25 alike, so most phone videos (H.264 + AAC) fail there. H.264 video without audio played about 6 times in 10; the other times it jumped to the end, never started, or failed. Not yet tried on another Windows build or on Linux. When playback fails, the viewer shows why and offers "Open with default app".
+  - The player is created off the UI thread, and must be kept referenced while it plays: an unreferenced `MediaPlayer` can be garbage-collected mid-play (seen in a test program).
 - **Watch progress:** the viewer saves `playback_position_seconds` from `MediaPlayer.currentTime` while playing (and on pause, stop and app close), through the DB writer queue.
 - **Thumbnails (proposal; not in #4, which reports videos as "unsupported"; needs its own issue):** JavaFX can't grab a frame from a video without playing it on the UI toolkit. The plan is to bundle an **LGPL-only build of `ffmpeg`** and run it as a separate process to grab one frame. As a separate program it doesn't affect Prismo's MIT license, but its license notice must ship with the app.
 
@@ -208,6 +212,7 @@ This also answers the open question in `PROJECT.md` (content hash vs file ID): u
 
 - **The grid must be virtualized** (only visible thumbnails exist as nodes). JavaFX has no built-in virtualized grid with section headers, so the Timeline is built on a `ListView`: each list item is a **row**, either a date header or a row of N thumbnails. When the window width or the thumbnail size changes, N is recomputed and the rows are rebuilt, keeping the same photo at the top. `ListView` already reuses cells as you scroll.
 - **Thumbnails on screen:** the UI checks the cache off the UI thread (the freshness check is a file `stat`), keeps the last 300 decoded images in an in-memory LRU, and cancels a tile's request when its row scrolls away.
+- **Viewer (#6):** an overlay inside the main window, not a second window. Cache-first: the 320 px thumbnail shows at once, in the place and size the full image will take (the indexed width/height), then the full image replaces it. The previous and next photos are decoded ahead; at most three full images are kept. Full images over 24 MP are decoded subsampled: JavaFX drew images up to 20,000 px wide in tests, so the limit is memory (4 bytes per pixel), not the GPU.
 - Styling with JavaFX CSS; themes (Light / Dark / AMOLED) are separate stylesheets.
 
 ---

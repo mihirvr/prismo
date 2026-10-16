@@ -7,6 +7,9 @@ import io.github.mihirvr.prismo.thumbs.MediaRef;
  *
  * @param sortDate the {@code media.sort_date} column: date taken as "floating" wall-clock time (stored as
  *                 if it were UTC), or the file's modified time when there is no date taken
+ * @param width    display width in pixels (EXIF rotation already applied by the indexer), or 0 if unknown;
+ *                 lets the viewer place the thumbnail where the full image will appear
+ * @param height   the same for height
  */
-public record TimelineItem(MediaRef ref, long sortDate) {
+public record TimelineItem(MediaRef ref, long sortDate, int width, int height) {
 }

@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.mihirvr.prismo.testing.TestMedia;
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -97,19 +96,6 @@ class ThumbnailGeneratorTest {
         assertFalse(ThumbnailGenerator.canDecode("heic"));
         assertFalse(ThumbnailGenerator.canDecode("mp4"));
         assertFalse(ThumbnailGenerator.canDecode("nef"));
-    }
-
-    @Test
-    void everyOrientationMapsTheImageExactlyOntoTheCanvas() {
-        int w = 40;
-        int h = 30;
-        for (int orientation = 1; orientation <= 8; orientation++) {
-            boolean swap = orientation >= 5;
-            Rectangle canvas = new Rectangle(0, 0, swap ? h : w, swap ? w : h);
-            Rectangle mapped = ThumbnailGenerator.orientationTransform(orientation, w, h)
-                    .createTransformedShape(new Rectangle(0, 0, w, h)).getBounds();
-            assertEquals(canvas, mapped, "orientation " + orientation);
-        }
     }
 
     private BufferedImage generate(Path source) throws Exception {

@@ -162,7 +162,7 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 
 - Zoom, pan, rotate (view only — the file is not changed), next/previous, fullscreen, slideshow, video playback
 - Keyboard shortcuts, mouse gestures
-- **Video formats**: in-app playback covers what JavaFX Media supports (MP4 with H.264/H.265 + AAC). Other videos (MOV, MKV, WebM, AVI) show their thumbnail and an "Open with default player" button (see Open Questions).
+- **Video formats**: in-app playback covers what JavaFX Media supports (MP4 with H.264/H.265 + AAC). Other videos (MOV, MKV, WebM, AVI) show their thumbnail and an "Open with default player" button. Decided for v1 in #6; in-app playback for them can come later.
 
 **Metadata panel** (optional side panel): resolution, file size, camera, lens, ISO, aperture, GPS (if present), date taken, date modified, file path.
 
@@ -446,7 +446,6 @@ Moved to **`TECH_STACK.md`**: libraries, versions, Java/JavaFX version, threadin
 - Confirm target library size to design/test against
 - Confirm the rename/move detection proposal (file ID + fingerprint, see `TECH_STACK.md`) once tested in #8
 - Confirm trash retention/auto-purge policy (auto-purge deletes real files)
-- Videos JavaFX can't play (MOV, MKV, WebM, AVI): is "Open with default player" enough for v1, or is in-app playback for them a requirement?
 - Video thumbnails: confirm bundling an LGPL `ffmpeg` build (decide in #4)
 - HEIC: bundle `libheif` native libraries per OS, or rely on the Linux distro package?
 - Confirm the non-destructive-editing conflict resolution (before crop/rotate/flip get built, even as post-MVP)

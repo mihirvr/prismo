@@ -10,11 +10,11 @@
 
 # Current Repository State
 
-Issues #1–#5 are done: a Gradle project (Java 25, JavaFX 25), the SQLite database layer with migrations, the media indexer, the thumbnail cache, and the Timeline UI. The app runs with `./gradlew run` and tests run with `./gradlew test`.
+Issues #1–#6 are done: a Gradle project (Java 25, JavaFX 25), the SQLite database layer with migrations, the media indexer, the thumbnail cache, the Timeline UI, and the media viewer. The app runs with `./gradlew run` and tests run with `./gradlew test`.
 
 The current file layout is the "Project Structure" section of `README.md`.
 
-Next on the roadmap: Media Viewer (#6).
+Next on the roadmap: Search (#7).
 
 ---
 

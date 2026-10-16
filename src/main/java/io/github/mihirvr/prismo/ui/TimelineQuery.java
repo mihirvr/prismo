@@ -13,7 +13,7 @@ import java.util.List;
 public final class TimelineQuery {
 
     static final String SQL = """
-            SELECT id, path, extension, date_modified, sort_date FROM media
+            SELECT id, path, extension, date_modified, sort_date, width, height FROM media
             WHERE trashed_at IS NULL AND hidden = 0
             ORDER BY sort_date DESC, id DESC""";
 
@@ -35,7 +35,8 @@ public final class TimelineQuery {
             while (rows.next()) {
                 MediaRef ref = new MediaRef(rows.getLong(1), Path.of(rows.getString(2)), rows.getString(3),
                         rows.getLong(4));
-                items.add(new TimelineItem(ref, rows.getLong(5)));
+                // getInt returns 0 for NULL (size unknown), which is what TimelineItem expects.
+                items.add(new TimelineItem(ref, rows.getLong(5), rows.getInt(6), rows.getInt(7)));
             }
         }
         return items;

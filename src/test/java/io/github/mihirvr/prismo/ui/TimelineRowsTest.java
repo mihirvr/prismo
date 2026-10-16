@@ -75,13 +75,31 @@ class TimelineRowsTest {
         assertEquals(-1, TimelineRows.rowOf(rows, 99));
     }
 
+    @Test
+    void upAndDownKeepTheColumnAndSkipHeaders() {
+        List<TimelineItem> items = new ArrayList<>(on(2026, 10, 15, 3)); // ids 1-3
+        items.addAll(on(2026, 8, 1, 3)); // ids 4-6
+        List<TimelineRow> rows = TimelineRows.build(items, 2, TODAY);
+        // H Today, [1 2], [3], H August, [4 5], [6]
+
+        assertEquals(3, TimelineRows.verticalNeighbour(rows, 2, +1));  // column 1 → shorter row's last
+        assertEquals(4, TimelineRows.verticalNeighbour(rows, 3, +1));  // across the August header
+        assertEquals(3, TimelineRows.verticalNeighbour(rows, 5, -1));  // across the header, to the short row
+        assertEquals(1, TimelineRows.verticalNeighbour(rows, 3, -1));
+        assertEquals(4, TimelineRows.verticalNeighbour(rows, 6, -1));
+        assertEquals(6, TimelineRows.verticalNeighbour(rows, 5, +1));
+        assertEquals(-1, TimelineRows.verticalNeighbour(rows, 1, -1)); // top row
+        assertEquals(-1, TimelineRows.verticalNeighbour(rows, 6, +1)); // bottom row
+        assertEquals(-1, TimelineRows.verticalNeighbour(rows, 99, +1)); // not on the Timeline
+    }
+
     private List<TimelineItem> on(int year, int month, int day, int count) {
         List<TimelineItem> items = new ArrayList<>();
         for (int i = 0; i < count; i++) {
             long id = nextId++;
             // Same day, slightly earlier each time: newest first, like the query returns them.
             long sortDate = DateGroupsTest.floating(year, month, day, 12, 0) - i * 60_000L;
-            items.add(new TimelineItem(new MediaRef(id, Path.of(id + ".jpg"), "jpg", 0), sortDate));
+            items.add(new TimelineItem(new MediaRef(id, Path.of(id + ".jpg"), "jpg", 0), sortDate, 0, 0));
         }
         return items;
     }

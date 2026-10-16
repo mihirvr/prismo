@@ -22,7 +22,7 @@ repositories {
 // Fine on Gradle 9; before moving to Gradle 10, update the plugin or replace it with plain config.
 javafx {
     version = libs.versions.javafx.get()
-    modules = listOf("javafx.controls")
+    modules = listOf("javafx.controls", "javafx.media")
 }
 
 dependencies {
@@ -38,8 +38,9 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-// javafx.graphics = JavaFX's native rendering; ALL-UNNAMED = classpath jars, i.e. sqlite-jdbc's native SQLite.
-val nativeAccess = "--enable-native-access=javafx.graphics,ALL-UNNAMED"
+// javafx.graphics = JavaFX's native rendering; javafx.media = its native video player (the viewer, #6);
+// ALL-UNNAMED = classpath jars, i.e. sqlite-jdbc's native SQLite.
+val nativeAccess = "--enable-native-access=javafx.graphics,javafx.media,ALL-UNNAMED"
 
 application {
     mainClass = "io.github.mihirvr.prismo.Launcher"

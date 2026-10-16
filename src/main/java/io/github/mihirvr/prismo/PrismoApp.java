@@ -11,9 +11,11 @@ import io.github.mihirvr.prismo.thumbs.MediaRefs;
 import io.github.mihirvr.prismo.thumbs.ThumbnailCache;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
+import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
 import io.github.mihirvr.prismo.ui.TimelineView;
+import io.github.mihirvr.prismo.viewer.MediaViewer;
 import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
@@ -29,10 +31,12 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
@@ -61,7 +65,9 @@ public final class PrismoApp extends Application {
             Thread.ofPlatform().name("prismo-indexer").daemon(true).factory());
 
     private final Label status = new Label("Starting…");
+    private ThumbnailLoader thumbnailLoader;
     private TimelineView timeline;
+    private MediaViewer viewer;
 
     /** Runs on the JavaFX-Launcher thread, before any window exists, so slow setup here never freezes the UI. */
     @Override
@@ -88,9 +94,17 @@ public final class PrismoApp extends Application {
     /** Runs on the JavaFX Application Thread. */
     @Override
     public void start(Stage stage) {
-        timeline = new TimelineView(thumbnails);
+        thumbnailLoader = new ThumbnailLoader(thumbnails);
+        timeline = new TimelineView(thumbnailLoader);
         timeline.setThumbnailSize(savedThumbnailSize);
         timeline.setPlaceholder(new Label("No photos yet. Click \"Add folder…\" to choose a folder to show."));
+        // HostServices opens a file in the system's default app (MOV, MKV… aren't played in the app yet).
+        viewer = new MediaViewer(thumbnailLoader, getHostServices()::showDocument);
+        timeline.setOnOpen(viewer::open);
+        viewer.setOnClose(item -> {
+            timeline.reveal(item.ref().id());
+            timeline.requestFocus();
+        });
 
         Label title = new Label("Prismo");
         title.getStyleClass().add("app-title");
@@ -107,12 +121,18 @@ public final class PrismoApp extends Application {
         status.getStyleClass().add("status-bar");
         status.setMaxWidth(Double.MAX_VALUE);
 
-        BorderPane root = new BorderPane(timeline, topBar, null, status, null);
+        BorderPane main = new BorderPane(timeline, topBar, null, status, null);
+        // The viewer is an overlay over the whole window, hidden until a photo is opened.
+        StackPane root = new StackPane(main, viewer);
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
         scene.getStylesheets().add(PrismoApp.class.getResource("/ui/prismo.css").toExternalForm());
         stage.setTitle("Prismo");
         stage.setScene(scene);
+        // The viewer handles Esc itself (leave full screen first, then close), so JavaFX's own Esc is turned off.
+        stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
+        stage.setFullScreenExitHint("Press F11 or Esc to leave full screen");
         stage.show();
+        timeline.requestFocus();
         log.info("Main window shown");
 
         // Show what's already indexed straight away, then pick up anything that changed since the last run.
@@ -215,8 +235,13 @@ public final class PrismoApp extends Application {
         if (!indexingThread.awaitTermination(10, TimeUnit.SECONDS)) {
             log.warn("Indexer did not stop within 10 s");
         }
+        if (viewer != null) {
+            viewer.dispose();
+        }
+        if (thumbnailLoader != null) {
+            thumbnailLoader.close();
+        }
         if (timeline != null) {
-            timeline.close();
             // Queued on the writer thread; database.close() below waits for it.
             settings.put(THUMBNAIL_SIZE_SETTING, Long.toString(Math.round(timeline.thumbnailSizeProperty().get())));
         }

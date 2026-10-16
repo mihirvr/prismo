@@ -37,6 +37,30 @@ final class TimelineRows {
         return rows;
     }
 
+    /**
+     * Arrow Up / Down on the Timeline: the item in the same column of the next thumbnail row above
+     * ({@code direction} −1) or below (+1), skipping headers. A shorter row gives its last item.
+     *
+     * @return that item's media id, or -1 if {@code id} isn't in the rows or there is no row that way
+     */
+    static long verticalNeighbour(List<TimelineRow> rows, long id, int direction) {
+        int row = rowOf(rows, id);
+        if (row < 0) {
+            return -1;
+        }
+        List<TimelineItem> from = ((TimelineRow.Thumbs) rows.get(row)).items();
+        int column = 0;
+        while (from.get(column).ref().id() != id) {
+            column++;
+        }
+        for (int r = row + direction; r >= 0 && r < rows.size(); r += direction) {
+            if (rows.get(r) instanceof TimelineRow.Thumbs(List<TimelineItem> items)) {
+                return items.get(Math.min(column, items.size() - 1)).ref().id();
+            }
+        }
+        return -1;
+    }
+
     /** Index of the thumbnail row holding media {@code id}, or -1. */
     static int rowOf(List<TimelineRow> rows, long id) {
         for (int i = 0; i < rows.size(); i++) {

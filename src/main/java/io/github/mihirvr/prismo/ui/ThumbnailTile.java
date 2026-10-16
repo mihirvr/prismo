@@ -10,6 +10,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 
 /**
@@ -24,6 +25,8 @@ final class ThumbnailTile extends StackPane {
     private final ThumbnailLoader loader;
     private final ImageView view = new ImageView();
     private final Label placeholder = new Label();
+    /** Drawn over the image when this tile has keyboard focus. */
+    private final Region focusRing = new Region();
     private MediaRef shown;
     private ThumbnailLoader.Load pending;
     private Image waitingFor;
@@ -41,7 +44,19 @@ final class ThumbnailTile extends StackPane {
         view.setSmooth(true);
         setMinSize(USE_PREF_SIZE, USE_PREF_SIZE);
         setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
-        getChildren().addAll(view, placeholder);
+        focusRing.getStyleClass().add("thumb-focus-ring");
+        focusRing.setVisible(false);
+        focusRing.setMouseTransparent(true);
+        getChildren().addAll(view, placeholder, focusRing);
+    }
+
+    /** The file this tile shows, or null if it's empty. */
+    MediaRef ref() {
+        return shown;
+    }
+
+    void setFocusRing(boolean on) {
+        focusRing.setVisible(on);
     }
 
     /** Shows {@code ref} at {@code size} × {@code size}. Cheap if it's already showing {@code ref}. */
@@ -74,6 +89,7 @@ final class ThumbnailTile extends StackPane {
         }
         stopWaiting();
         shown = null;
+        focusRing.setVisible(false);
         view.setImage(null);
         placeholder.setText("");
         placeholder.setVisible(false);

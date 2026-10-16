@@ -33,6 +33,7 @@ class TimelineQueryTest {
                                    (5, '/hid.jpg', '/', 'hid.jpg', 'jpg', 'photo', 1, 0,   0, 400,  1, NULL),
                                    (6, '/d.png',   '/', 'd.png',   'png', 'photo', 1, 500, 0, NULL, 0, NULL),
                                    (7, '/e.gif',   '/', 'e.gif',   'gif', 'gif',   1, 0,   0, 300,  0, NULL)""");
+                    s.executeUpdate("UPDATE media SET width = 4000, height = 3000 WHERE id = 1");
                 }
                 return null;
             }).get();
@@ -43,6 +44,11 @@ class TimelineQueryTest {
             assertEquals(List.of(6L, 7L, 2L, 3L, 1L), items.stream().map(item -> item.ref().id()).toList());
             assertEquals(500, items.getFirst().sortDate());
             assertEquals("mp4", items.get(2).ref().extension());
+            // The viewer's size hint: known for id 1, 0 × 0 when the indexer couldn't read it (NULL).
+            assertEquals(4000, items.get(4).width());
+            assertEquals(3000, items.get(4).height());
+            assertEquals(0, items.getFirst().width());
+            assertEquals(0, items.getFirst().height());
         }
     }
 
