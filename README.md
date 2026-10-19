@@ -55,7 +55,7 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 **Early development: v0.5 Core Loop in progress**
 
-The app runs (`./gradlew run`). You can add a folder; Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Click a photo (or move with the arrow keys and press Enter) to open it in the viewer: zoom, pan, rotate, slideshow, and MP4 playback. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer. Next: Search, Filesystem Watcher. No installer yet.
+The app runs (`./gradlew run`). You can add a folder; Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Click a photo (or move with the arrow keys and press Enter) to open it in the viewer: zoom, pan, rotate, slideshow, and MP4 playback. Type in the search box (Ctrl+F) to find files by name, folder, camera, date or resolution. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, and the search box of Search. Next: Filters and Sort (the rest of Search), Filesystem Watcher. No installer yet.
 
 - [Project Outline](docs/PROJECT.md) — full design document
 - [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
@@ -113,10 +113,11 @@ prismo/
 │   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress
 │   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, JPEG files on disk, on-screen-first queue
 │   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles, loader, keyboard focus
+│   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, MP4 playback
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
-│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__...)
+│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index)
 │   │       └── ui/prismo.css       # The app's stylesheet
 │   └── test/
 │       ├── java/...                # Unit tests, mirroring the main packages (+ testing/ shared helpers)
@@ -132,7 +133,7 @@ prismo/
 
 Build and run: `./gradlew run` · tests: `./gradlew test`.
 
-New packages appear as features land (search, file watcher, …).
+New packages appear as features land (file watcher, collections, …).
 
 ---
 

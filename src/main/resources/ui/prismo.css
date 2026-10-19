@@ -15,6 +15,21 @@
     -fx-font-weight: bold;
 }
 
+/* Search: the box in the top bar, its result count, and the "no matches" text in an empty results grid. */
+.search-bar {
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.search-field {
+    -fx-pref-width: 320;
+}
+
+.search-count,
+.search-no-matches {
+    -fx-text-fill: #666666;
+}
+
 .status-bar {
     -fx-padding: 4 12 4 12;
     -fx-font-size: 11px;

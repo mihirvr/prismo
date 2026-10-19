@@ -104,7 +104,7 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | Walking folders, `stat`-ing files | I/O-bound, pure Java | Virtual threads |
 | Reading metadata (metadata-extractor) | I/O + parsing, pure Java | Virtual threads |
 | Writing to SQLite | Native (JNI) | **One dedicated platform thread** (the "writer") |
-| Reading from SQLite (UI queries, search) | Native (JNI) | Small fixed pool of platform threads |
+| Reading from SQLite (UI queries, search) | Native (JNI) | Platform threads, a fresh read-only connection each time: the Timeline loads on the indexing thread, searches on one `prismo-search` thread (only the newest search runs; built in #7) |
 | Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1), at below-normal thread priority. Its queue puts thumbnails on screen first and skips requests for rows that scrolled away. |
 | HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
 | Viewer: decoding full-size stills | CPU-bound | 2 platform threads at normal priority (someone is waiting for the result) |
@@ -131,10 +131,14 @@ Work moves between stages through **bounded queues**. When the writer falls behi
 
 **Migrations:** hand-written and numbered (`V1__init.sql`, `V2__...`) in `src/main/resources/db/`. The current schema version is kept in `PRAGMA user_version`. On startup, run every script whose number is above `user_version`, each in its own transaction. No Flyway: the job is small and doing it by hand teaches how it works.
 
-**Search (FTS5):**
-- An FTS5 table that mirrors the `Media` table (an external-content table), kept in sync by triggers.
-- Use the **`trigram` tokenizer** for file and folder names. It matches any part of a name (`"0101"` finds `IMG_20240101.jpg`), and it also speeds up `LIKE '%...%'` and `GLOB` queries. Limit: a search shorter than 3 characters matches nothing through the trigram index, so very short queries need a plain `LIKE` fallback.
-- Structured fields (camera, date, extension, resolution) are normal indexed columns, not FTS.
+**Search (FTS5, built in #7):**
+- An FTS5 table `media_fts` (migration V3) that mirrors the `media` table (an external-content table), kept in sync by triggers. Checked: the indexer's upsert (`ON CONFLICT DO UPDATE`) fires the update trigger, and FTS5's `integrity-check` passes after insert, upsert, update and delete.
+- **`trigram` tokenizer** with `remove_diacritics 1` over file name, folder path, camera make and camera model. It matches any part of a text, ignoring case and accents (`0101` finds `IMG_20240101.jpg`, `cafe` finds `Café`). A search word shorter than 3 characters matches nothing through the trigram index, so those words use a plain `LIKE '%…%'` (with `%`, `_`, `\` escaped).
+- **Camera is in the FTS index** (changed in #7, agreed): people type part of a camera name ("nikon", "iphone 13"). Matching it with `LIKE` instead would turn every search into a full table scan.
+- Extension needs no column of its own: it's part of the file name. Date and resolution stay normal columns: a search word that looks like a year, month, date or `4000x3000` also matches those columns (see `SearchQuery`).
+- Every typed word is passed as a quoted FTS5 string, so search text is never read as FTS5 query syntax.
+- **Query plan trap (measured):** with `ORDER BY sort_date`, SQLite chose to walk `idx_media_sort_date` and fetch every row one at a time for a `LIKE` search: 639 ms on 100,000 rows, against 35 ms for a straight table scan plus a sort. Search sorts by `+sort_date` (the unary `+` stops that index being used for the sort).
+- **Measured (synthetic, this machine; 100,000 rows written straight to the table, each query through a fresh read connection like the app):** 532 hits 9 ms, 12,576 hits ("goa") 60 ms, 90,079 hits ("img") 305 ms, "2024" (index + date range) 187 ms, a 1-character `LIKE` matching 87,616 rows 310 ms (medians of 5). Index size: 27 MB for 100,000 rows (the `media` table itself: 19 MB). Indexing cost: the real indexer on 10,000 tiny JPEGs took 3.9–4.5 s with the triggers against 1.9–2.3 s without (2 runs each), about 0.2 ms more per file; real photos spend more time on reading, so the share will be smaller (not measured).
 
 ---
 

@@ -136,6 +136,19 @@ public final class TimelineView extends StackPane {
         rebuild(false);
     }
 
+    /** Replaces everything shown with a different set (a new search): from the top, nothing focused. */
+    public void showFromTop(List<TimelineItem> newItems) {
+        items = List.copyOf(newItems);
+        focusedId = NO_FOCUS;
+        list.getItems().setAll(buildRows());
+        list.scrollTo(0);
+    }
+
+    /** The first item, or null if there are none. */
+    public TimelineItem firstItem() {
+        return items.isEmpty() ? null : items.getFirst();
+    }
+
     /** Called with the Timeline's items and the index to open, on a click or Enter. */
     public void setOnOpen(BiConsumer<List<TimelineItem>, Integer> onOpen) {
         this.onOpen = onOpen;
@@ -325,8 +338,7 @@ public final class TimelineView extends StackPane {
     private void rebuild(boolean columnsChanged) {
         boolean keepFocus = columnsChanged && isOnScreen(TimelineRows.rowOf(list.getItems(), focusedId));
         Anchor anchor = keepFocus ? new Anchor(focusedId, false) : anchor();
-        long today = LocalDate.now(clock).toEpochDay();
-        List<TimelineRow> rows = TimelineRows.build(items, layout.columns(), today);
+        List<TimelineRow> rows = buildRows();
         list.getItems().setAll(rows);
         if (anchor != null) {
             int row = TimelineRows.rowOf(rows, anchor.mediaId());
@@ -334,6 +346,10 @@ public final class TimelineView extends StackPane {
                 list.scrollTo(anchor.header() ? row - 1 : row);
             }
         }
+    }
+
+    private List<TimelineRow> buildRows() {
+        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay());
     }
 
     /** Which photo is at the top of the view now, or null at the very top / before the first layout. */

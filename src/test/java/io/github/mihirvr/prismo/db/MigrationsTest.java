@@ -29,6 +29,27 @@ class MigrationsTest {
             assertTrue(tableExists(connection, "media"));
             assertTrue(tableExists(connection, "settings"));
             assertTrue(tableExists(connection, "library_roots"));
+            assertTrue(tableExists(connection, "media_fts"));
+        }
+    }
+
+    @Test
+    void searchMigrationIndexesFilesAlreadyInTheLibrary() throws Exception {
+        try (Connection connection = Database.connect(url("upgrade.db"), false)) {
+            new Migrations(List.of("V1__initial_schema.sql", "V2__library_roots.sql")).migrate(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO media (path, folder, file_name, extension, media_type, size_bytes,
+                                           date_modified, date_added, camera_model)
+                        VALUES ('D:\\Goa\\IMG_20240101.jpg', 'D:\\Goa', 'IMG_20240101.jpg', 'jpg', 'photo', 1,
+                                0, 0, 'iPhone 13')""");
+            }
+
+            new Migrations().migrate(connection);
+
+            assertEquals(1, ftsMatches(connection, "\"0101\""));
+            assertEquals(1, ftsMatches(connection, "\"goa\""));
+            assertEquals(1, ftsMatches(connection, "\"iphone\""));
         }
     }
 
@@ -68,6 +89,15 @@ class MigrationsTest {
 
     private String url(String name) {
         return "jdbc:sqlite:" + tmp.resolve(name);
+    }
+
+    private static int ftsMatches(Connection connection, String match) throws SQLException {
+        try (var select = connection.prepareStatement("SELECT count(*) FROM media_fts WHERE media_fts MATCH ?")) {
+            select.setString(1, match);
+            try (ResultSet rows = select.executeQuery()) {
+                return rows.getInt(1);
+            }
+        }
     }
 
     static boolean tableExists(Connection connection, String table) throws SQLException {

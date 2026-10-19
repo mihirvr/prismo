@@ -7,6 +7,8 @@ import io.github.mihirvr.prismo.index.IndexProgress;
 import io.github.mihirvr.prismo.index.Indexer;
 import io.github.mihirvr.prismo.index.MetadataReader;
 import io.github.mihirvr.prismo.platform.AppPaths;
+import io.github.mihirvr.prismo.search.SearchBar;
+import io.github.mihirvr.prismo.search.Searcher;
 import io.github.mihirvr.prismo.thumbs.MediaRefs;
 import io.github.mihirvr.prismo.thumbs.ThumbnailCache;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
@@ -31,6 +33,8 @@ import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
@@ -59,6 +63,7 @@ public final class PrismoApp extends Application {
     private LibraryRootStore libraryRoots;
     private Indexer indexer;
     private ThumbnailService thumbnails;
+    private Searcher searcher;
     private double savedThumbnailSize = TimelineView.DEFAULT_THUMBNAIL_SIZE;
     /** One indexing run at a time; extra requests queue up behind it. */
     private final ExecutorService indexingThread = Executors.newSingleThreadExecutor(
@@ -67,6 +72,8 @@ public final class PrismoApp extends Application {
     private final Label status = new Label("Starting…");
     private ThumbnailLoader thumbnailLoader;
     private TimelineView timeline;
+    private TimelineView searchResults;
+    private SearchBar searchBar;
     private MediaViewer viewer;
 
     /** Runs on the JavaFX-Launcher thread, before any window exists, so slow setup here never freezes the UI. */
@@ -84,6 +91,7 @@ public final class PrismoApp extends Application {
         indexer = new Indexer(database, new MetadataReader(ZoneId.systemDefault()));
         thumbnails = new ThumbnailService(new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE),
                 new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
+        searcher = new Searcher(database);
         try {
             settings.get(THUMBNAIL_SIZE_SETTING).ifPresent(value -> savedThumbnailSize = Double.parseDouble(value));
         } catch (NumberFormatException e) {
@@ -101,9 +109,22 @@ public final class PrismoApp extends Application {
         // HostServices opens a file in the system's default app (MOV, MKV… aren't played in the app yet).
         viewer = new MediaViewer(thumbnailLoader, getHostServices()::showDocument);
         timeline.setOnOpen(viewer::open);
+
+        // Search results get their own grid, so the Timeline keeps its place while searching.
+        searchResults = new TimelineView(thumbnailLoader);
+        searchResults.thumbnailSizeProperty().bindBidirectional(timeline.thumbnailSizeProperty());
+        searchResults.setOnOpen(viewer::open);
+        searchResults.setVisible(false);
+        searchBar = new SearchBar(searcher, searchResults);
+        searchBar.activeProperty().addListener((_, _, searching) -> {
+            searchResults.setVisible(searching);
+            timeline.setVisible(!searching);
+        });
+        searchBar.setOnLeave(() -> currentGrid().requestFocus());
         viewer.setOnClose(item -> {
-            timeline.reveal(item.ref().id());
-            timeline.requestFocus();
+            TimelineView grid = currentGrid();
+            grid.reveal(item.ref().id());
+            grid.requestFocus();
         });
 
         Label title = new Label("Prismo");
@@ -116,12 +137,12 @@ public final class PrismoApp extends Application {
         size.setTooltip(new Tooltip("Thumbnail size (or Ctrl + mouse wheel)"));
         Button addFolder = new Button("Add folder…");
         addFolder.setOnAction(event -> chooseFolder(stage));
-        HBox topBar = new HBox(title, spacer, new Label("Size"), size, addFolder);
+        HBox topBar = new HBox(title, searchBar, spacer, new Label("Size"), size, addFolder);
         topBar.getStyleClass().add("top-bar");
         status.getStyleClass().add("status-bar");
         status.setMaxWidth(Double.MAX_VALUE);
 
-        BorderPane main = new BorderPane(timeline, topBar, null, status, null);
+        BorderPane main = new BorderPane(new StackPane(timeline, searchResults), topBar, null, status, null);
         // The viewer is an overlay over the whole window, hidden until a photo is opened.
         StackPane root = new StackPane(main, viewer);
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
@@ -131,12 +152,22 @@ public final class PrismoApp extends Application {
         // The viewer handles Esc itself (leave full screen first, then close), so JavaFX's own Esc is turned off.
         stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
         stage.setFullScreenExitHint("Press F11 or Esc to leave full screen");
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN), () -> {
+            if (!viewer.isOpen()) {
+                searchBar.focusField();
+            }
+        });
         stage.show();
         timeline.requestFocus();
         log.info("Main window shown");
 
         // Show what's already indexed straight away, then pick up anything that changed since the last run.
         startIndexing();
+    }
+
+    /** The grid on screen: the search results while searching, otherwise the Timeline. */
+    private TimelineView currentGrid() {
+        return searchBar.isActive() ? searchResults : timeline;
     }
 
     private void chooseFolder(Stage owner) {
@@ -199,7 +230,10 @@ public final class PrismoApp extends Application {
         long start = System.nanoTime();
         List<TimelineItem> items = database.read(TimelineQuery::load);
         log.info("Timeline loaded: {} items in {} ms", items.size(), (System.nanoTime() - start) / 1_000_000);
-        Platform.runLater(() -> timeline.setItems(items));
+        Platform.runLater(() -> {
+            timeline.setItems(items);
+            searchBar.refresh(); // new or changed files may match the search on screen
+        });
     }
 
     /** {@link #loadTimeline} for the indexer's progress callback, which can't throw SQLException. */
@@ -247,6 +281,9 @@ public final class PrismoApp extends Application {
         }
         if (thumbnails != null) {
             thumbnails.close();
+        }
+        if (searcher != null) {
+            searcher.close();
         }
         if (database != null) {
             database.close();
