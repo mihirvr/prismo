@@ -20,13 +20,20 @@ import io.github.mihirvr.prismo.ui.TimelineView;
 import io.github.mihirvr.prismo.ui.ViewOptions;
 import io.github.mihirvr.prismo.ui.ViewOptionsBar;
 import io.github.mihirvr.prismo.viewer.MediaViewer;
+import io.github.mihirvr.prismo.watch.ChangeBatcher;
+import io.github.mihirvr.prismo.watch.FileWatcher;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Path;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.ZoneId;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import javafx.application.Application;
@@ -61,6 +68,11 @@ public final class PrismoApp extends Application {
     private static final String THUMBNAIL_SIZE_SETTING = "timeline.thumbnail_size";
     /** While indexing, show newly found files at most this often. */
     private static final long TIMELINE_RELOAD_NANOS = 3_000_000_000L;
+    /** Watcher events are handled once a path has been quiet this long, but no later than MAX_WAIT. */
+    private static final Duration CHANGES_QUIET = Duration.ofSeconds(1);
+    private static final Duration CHANGES_MAX_WAIT = Duration.ofSeconds(5);
+    /** The safety net: a full rescan this often catches anything the watcher missed. */
+    private static final long RESCAN_MINUTES = 30;
 
     private Database database;
     private SettingsStore settings;
@@ -68,6 +80,12 @@ public final class PrismoApp extends Application {
     private Indexer indexer;
     private ThumbnailService thumbnails;
     private Searcher searcher;
+    private ChangeBatcher changes;
+    private FileWatcher watcher;
+    /** Library folders being watched. Indexing thread only. */
+    private final Set<Path> watchedRoots = new HashSet<>();
+    private final ScheduledExecutorService rescanTimer = Executors.newSingleThreadScheduledExecutor(
+            Thread.ofPlatform().name("prismo-rescan-timer").daemon(true).factory());
     private double savedThumbnailSize = TimelineView.DEFAULT_THUMBNAIL_SIZE;
     /** One indexing run at a time; extra requests queue up behind it. */
     private final ExecutorService indexingThread = Executors.newSingleThreadExecutor(
@@ -108,6 +126,10 @@ public final class PrismoApp extends Application {
         thumbnails = new ThumbnailService(new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE),
                 new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
         searcher = new Searcher(database);
+        // Watcher events → batches (debounced) → applied on the indexing thread, after any run already queued.
+        changes = new ChangeBatcher(CHANGES_QUIET, CHANGES_MAX_WAIT,
+                batch -> indexingThread.execute(() -> applyChanges(batch)));
+        watcher = FileWatcher.forThisComputer(changes);
         try {
             settings.get(THUMBNAIL_SIZE_SETTING).ifPresent(value -> savedThumbnailSize = Double.parseDouble(value));
         } catch (NumberFormatException e) {
@@ -189,6 +211,7 @@ public final class PrismoApp extends Application {
 
         // Show what's already indexed straight away, then pick up anything that changed since the last run.
         startIndexing();
+        rescanTimer.scheduleWithFixedDelay(this::startIndexing, RESCAN_MINUTES, RESCAN_MINUTES, TimeUnit.MINUTES);
     }
 
     /** The grid on screen: the search results while searching, otherwise the Timeline. */
@@ -225,6 +248,7 @@ public final class PrismoApp extends Application {
                     Platform.runLater(() -> status.setText("No library folders yet. Click \"Add folder…\"."));
                     return;
                 }
+                watchNewRoots(roots); // before the walk, so nothing that changes during it is missed
                 // Only touched on this thread (the progress callback runs here too); arrays so the lambda can update them.
                 long[] lastLoad = {System.nanoTime()};
                 int[] shownIndexed = {0};
@@ -238,7 +262,7 @@ public final class PrismoApp extends Application {
                         shownIndexed[0] = progress.indexed();
                     }
                 });
-                if (indexed.indexed() > shownIndexed[0]) {
+                if (indexed.indexed() > shownIndexed[0] || indexed.moved() > 0 || indexed.removed() > 0) {
                     loadTimeline();
                 }
                 warmThumbnails(describe(indexed));
@@ -299,9 +323,66 @@ public final class PrismoApp extends Application {
                         p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(), p.failed()))));
     }
 
+    /** Indexing thread: starts watching library folders not watched yet. A failure leaves the periodic rescan. */
+    private void watchNewRoots(List<Path> roots) {
+        for (Path root : roots) {
+            if (!watchedRoots.add(root)) {
+                continue;
+            }
+            try {
+                watcher.watch(root);
+            } catch (IOException | RuntimeException e) {
+                watchedRoots.remove(root); // tried again at the next rescan
+                log.warn("Can't watch {} for changes: {}", root, e.toString());
+                Platform.runLater(() -> status.setText("Live updates are off for " + root + " (" + e.getMessage()
+                        + "); it is rescanned every " + RESCAN_MINUTES + " minutes instead."));
+            }
+        }
+    }
+
+    /** Indexing thread: applies one batch of watcher changes, then refreshes what's on screen. */
+    private void applyChanges(ChangeBatcher.Batch batch) {
+        try {
+            batch.stopped().forEach((root, reason) -> {
+                watchedRoots.remove(root); // watched again at the next rescan if it's back
+                log.warn("Stopped watching {}: {}", root, reason);
+                Platform.runLater(() -> status.setText("Not watching " + root + ": " + reason
+                        + ". It is rescanned every " + RESCAN_MINUTES + " minutes."));
+            });
+            boolean changed = false;
+            if (!batch.rescan().isEmpty()) {
+                // Events were lost (e.g. thousands of files copied at once): only a full look is safe.
+                changed = indexer.index(List.copyOf(batch.rescan()), _ -> { }).changedAnything();
+            }
+            if (!batch.changed().isEmpty()) {
+                IndexProgress result = indexer.update(batch.changed(), _ -> { });
+                changed |= result.changedAnything();
+                if (result.changedAnything()) {
+                    Platform.runLater(() -> status.setText(describeUpdate(result)));
+                }
+            }
+            if (changed) {
+                loadTimeline(); // also re-runs the search on screen
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); // app is shutting down
+        } catch (SQLException | RuntimeException e) {
+            log.error("Applying file changes failed", e);
+            Platform.runLater(() -> status.setText("Updating from file changes failed: " + e.getMessage()));
+        }
+    }
+
+    private static String describeUpdate(IndexProgress p) {
+        return "Updated from file changes: %,d new or changed · %,d moved or renamed · %,d removed"
+                .formatted(p.indexed(), p.moved(), p.removed());
+    }
+
     private static String describe(IndexProgress p) {
         String counts = "%,d files · %,d new or changed · %,d unchanged · %,d unreadable"
                 .formatted(p.found(), p.indexed(), p.unchanged(), p.failed());
+        if (p.moved() > 0 || p.removed() > 0) {
+            counts += " · %,d moved · %,d removed".formatted(p.moved(), p.removed());
+        }
         return p.done()
                 ? "Library up to date (%.1f s): %s".formatted(p.elapsed().toMillis() / 1000.0, counts)
                 : "Indexing… " + counts;
@@ -310,6 +391,14 @@ public final class PrismoApp extends Application {
     /** Runs on the JavaFX Application Thread after the last window closes. */
     @Override
     public void stop() throws InterruptedException {
+        // No new work for the indexing thread: stop the timer, the watcher and its batches first.
+        rescanTimer.shutdownNow();
+        if (watcher != null) {
+            watcher.close();
+        }
+        if (changes != null) {
+            changes.close();
+        }
         // Stop the indexer before the database: it may still be queueing writes.
         indexingThread.shutdownNow();
         if (!indexingThread.awaitTermination(10, TimeUnit.SECONDS)) {

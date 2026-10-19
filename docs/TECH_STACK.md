@@ -101,7 +101,8 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 
 | Work | Kind | Runs on |
 |---|---|---|
-| Walking folders, `stat`-ing files | I/O-bound, pure Java | Virtual threads |
+| Walking folders, `stat`-ing files | I/O-bound, pure Java | The indexing thread (`prismo-indexer`), one run or watcher batch at a time |
+| Watching folders | Blocking on OS events | One `prismo-watcher` platform thread; batches timed on `prismo-watch-batch`; the 30-minute rescan on `prismo-rescan-timer` |
 | Reading metadata (metadata-extractor) | I/O + parsing, pure Java | Virtual threads |
 | Writing to SQLite | Native (JNI) | **One dedicated platform thread** (the "writer") |
 | Reading from SQLite (UI queries, search) | Native (JNI) | Platform threads, a fresh read-only connection each time: the Timeline on one `prismo-timeline` thread, searches on one `prismo-search` thread. On both, only the newest request runs (built in #7) |
@@ -168,6 +169,8 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 3. Apply the EXIF orientation when making the thumbnail, so the cached file is already the right way up.
 4. **Save as JPEG files** on disk (ImageIO can write JPEG, but TwelveMonkeys WEBP is read-only).
 
+**Opening the user's files:** always through `java.nio` (`platform/FileReads`), never `java.io`. On Windows a file open through `FileInputStream` / `RandomAccessFile` can't be deleted or renamed by anyone until it's closed (checked in #8, 6 of 6), and `ImageIO.createImageInputStream(File)` and metadata-extractor's `readMetadata(File)` both open files that way. ImageIO gets a small buffered `ImageInputStream` over a file channel (not ImageIO's stream version, which copies to a temp file by default); measured 2–3 % faster than the old way (synthetic 12 and 24 MP JPEGs, 8 of 8). Still locking: JavaFX's own loading of animated GIFs in the viewer (brief), and a video while it plays.
+
 **Cache layout:** `<cache dir>/thumbs/<size>/<two hex chars from the id>/<media id>.jpg`. The two-character subfolders keep any one folder from holding hundreds of thousands of files. To know when a thumbnail is stale, the thumbnail file's own modified time is set to the source file's modified time when it is written; it is fresh while the two match. No database writes and no cache table. Files that fail to decode get an empty `<media id>.fail` marker stamped the same way, so they aren't retried until they change. Thumbnails are written to a temp file and atomically renamed into place.
 
 **Showing thumbnails in JavaFX:**
@@ -191,24 +194,26 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 
 ## File watching
 
-`java.nio.file.WatchService` sits behind our own `FileWatcher` interface, so the backend can be swapped later.
+Built in #8 (`watch/` package). `java.nio.file.WatchService` sits behind our own `FileWatcher` interface, so the backend can be swapped later.
 
-What we must handle ourselves:
-- **It isn't recursive on Linux.** Linux uses inotify, so every folder must be registered one by one, and folders created later must be registered when they appear. inotify also caps the number of watches per user (`fs.inotify.max_user_watches`), and a big library can hit that cap. When it does, fall back to scheduled rescans for that location and say so in the UI.
-- **Windows can watch a whole tree** with the non-standard `com.sun.nio.file.ExtendedWatchEventModifier.FILE_TREE` (module `jdk.unsupported`). **(verify in #8)**
-- **`OVERFLOW` events** mean events were lost. The only safe response is to rescan the affected location.
-- **Debounce:** collect events for a short window with a `ScheduledExecutorService`, then process each path once, so a burst of writes doesn't trigger repeated work on the same file.
-- **Network drives (SMB/NFS):** no live watching. Manual or scheduled rescan only, as `PROJECT.md` says.
+- **Windows: one watch per library folder covering the whole tree** (`TreeWatcher`), with `com.sun.nio.file.ExtendedWatchEventModifier.FILE_TREE` (module `jdk.unsupported`). Checked in #8 on Windows 11 / JDK 25: it works and reports paths below the root. Naming that class in code makes javac warn "internal proprietary API", which our `-Werror` build turns into an error, so it is looked up by name at runtime. **Packaging (#10): the `jlink` runtime must include `jdk.unsupported`.** `jdeps` can't see a lookup by name, so add it by hand.
+- **Linux (and anywhere `FILE_TREE` is missing): one watch per folder** (`DirectoryWatcher`), with folders created later registered as they appear and then reported whole (files may land before the registration). When inotify's per-user limit (`fs.inotify.max_user_watches`) is hit, that library folder stops being watched live and the UI says so; the periodic rescan keeps it current. **Not run on Linux yet** (no Linux machine; with CI in #10). The same class runs on Windows in the tests.
+- **What Windows reports** (checked in #8): a rename or move is "old path deleted" + "new path created"; a renamed or moved-in folder is reported only as the folder, not the files inside, so a created folder is walked; about 1,500 files created or deleted at once gave `OVERFLOW` in a scratch program that read events late (the app's own reading thread may keep up; a test checks "all reported, or an overflow").
+- **`OVERFLOW`:** events were lost, so that library folder is rescanned (cheap: unchanged files aren't opened).
+- **Debounce:** events are collected until nothing new has arrived for 1 s (5 s at most), then each path is handled once; a path inside another path of the batch is dropped.
+- **Safety net:** a full rescan every 30 minutes catches anything missed (and re-watches folders that stopped being watched).
+- **Deleted files:** if the library folder can be reached, a file that is gone has its row removed. If the library folder itself can't be reached (an unplugged drive), nothing under it is touched. Never under a folder that couldn't be read, and only after a complete walk.
+- **Network drives (SMB/NFS):** not detected yet. A network folder is watched like any other; change notifications over SMB are not reliable, and the 30-minute rescan covers it.
 
 ### Rename / move detection
 
-A rename often shows up as "delete old path" + "create new path". To keep favorite/hidden/progress state, we have to recognise that it's the same file:
+A rename shows up as "delete old path" + "create new path". To keep favorite/hidden/progress state, the old row must follow the file:
 
-1. **File ID where it exists.** On Linux, `BasicFileAttributes.fileKey()` returns the device + inode. **On Windows the JDK's `fileKey()` has returned `null`** (see the 2023 OpenJDK nio-dev thread "Implement WindowsFileAttributes#fileKey"), so we can't rely on it there. **(verify on JDK 25 in #8)**
-2. **Fingerprint as the fallback, on every OS:** file size + a hash (SHA-256 from the JDK's `MessageDigest`) of the first and last 64 KiB. This is cheap and good enough to pair a "delete" with a "create" seen a short time apart.
-3. If a pair matches, update the existing row's path instead of deleting and re-adding it.
+1. **No file ID on Windows:** `BasicFileAttributes.fileKey()` returned `null` on JDK 25 (checked in #8, 2 of 2). Linux gives device + inode, but one rule for both OSes is simpler.
+2. **Matching by what a move keeps (built in #8, agreed 2026-10-19):** size + modified time + media type. Within a group, the same file name wins (a renamed folder); otherwise exactly one gone and one new file make a rename; anything else is ambiguous and treated as delete + add (`MoveMatcher`).
+3. A matched pair keeps the **old row** (same id, so the thumbnail cache and user state stay) with the new path.
 
-This also answers the open question in `PROJECT.md` (content hash vs file ID): use both, file ID first.
+The fingerprint first planned here (SHA-256 of the first and last 64 KiB, stored per file) was not built: it needs a new column and about 128 KiB of extra reading per file at index time. It would only help when several files share size, time and type. This answers the open question in `PROJECT.md` (content hash vs file ID).
 
 ---
 

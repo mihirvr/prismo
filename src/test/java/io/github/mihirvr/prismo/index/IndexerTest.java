@@ -136,7 +136,7 @@ class IndexerTest {
         indexer.index(List.of(library, sibling), progress -> { });
 
         Path realLibrary = library.toRealPath();
-        var stamps = database.read(c -> MediaStore.stampsUnder(c, realLibrary));
+        var stamps = database.read(c -> MediaStore.rowsUnder(c, realLibrary));
 
         assertEquals(4, stamps.size());
         assertTrue(stamps.keySet().stream().allMatch(p -> p.startsWith(realLibrary + realLibrary.getFileSystem().getSeparator())));

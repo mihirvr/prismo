@@ -55,7 +55,7 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 **Early development: v0.5 Core Loop in progress**
 
-The app runs (`./gradlew run`). You can add a folder; Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Click a photo (or move with the arrow keys and press Enter) to open it in the viewer: zoom, pan, rotate, slideshow, and MP4 playback. Type in the search box (Ctrl+F) to find files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search. Next: Filesystem Watcher. No installer yet.
+The app runs (`./gradlew run`). You can add a folder; Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Click a photo (or move with the arrow keys and press Enter) to open it in the viewer: zoom, pan, rotate, slideshow, and MP4 playback. Type in the search box (Ctrl+F) to find files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results. Files you add, rename, move or delete in your folders show up in Prismo by themselves within a second or two. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher. Next: Collections. No installer yet.
 
 - [Project Outline](docs/PROJECT.md) — full design document
 - [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
@@ -108,12 +108,13 @@ prismo/
 │   │   ├── java/io/github/mihirvr/prismo/
 │   │   │   ├── Launcher.java       # Entry point (main)
 │   │   │   ├── PrismoApp.java      # JavaFX application: startup, main window, shutdown
-│   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders
+│   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders, file reads that never lock a file
 │   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders
-│   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress
+│   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress; removes gone files, follows moves
 │   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, JPEG files on disk, on-screen-first queue
 │   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles, loader, keyboard focus; shared Filters + Sort
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
+│   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, MP4 playback
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)

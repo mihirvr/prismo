@@ -1,9 +1,9 @@
 package io.github.mihirvr.prismo.thumbs;
 
-import com.drew.imaging.ImageMetadataReader;
 import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifDirectoryBase;
 import com.drew.metadata.exif.ExifIFD0Directory;
+import io.github.mihirvr.prismo.platform.FileReads;
 import java.awt.geom.AffineTransform;
 import java.nio.file.Path;
 
@@ -23,7 +23,7 @@ public final class ExifOrientation {
     /** The file's EXIF orientation, or 1 ("as stored") if it has none or it can't be read. */
     public static int read(Path file) {
         try {
-            Metadata metadata = ImageMetadataReader.readMetadata(file.toFile());
+            Metadata metadata = FileReads.metadata(file);
             ExifIFD0Directory ifd0 = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
             Integer value = ifd0 == null ? null : ifd0.getInteger(ExifDirectoryBase.TAG_ORIENTATION);
             return value == null || value < 1 || value > 8 ? 1 : value;

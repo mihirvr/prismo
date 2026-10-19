@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.viewer;
 
+import io.github.mihirvr.prismo.platform.FileReads;
 import io.github.mihirvr.prismo.thumbs.ExifOrientation;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
@@ -54,7 +55,7 @@ final class StillDecoder {
         BufferedImage decoded;
         int fullWidth;
         int fullHeight;
-        try (ImageInputStream in = ImageIO.createImageInputStream(file.toFile())) {
+        try (ImageInputStream in = FileReads.image(file)) {
             if (in == null) {
                 throw new IOException("Cannot open " + file);
             }

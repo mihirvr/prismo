@@ -295,7 +295,7 @@ Refresh UI incrementally
 
 - **Local / USB drives**: real-time filesystem monitoring — detects new files, deleted files, renamed files/folders, drive connect/disconnect
 - **Network / NAS drives**: manual or scheduled rescan only — real-time watch is not reliable over SMB/NFS
-- **Rename/move detection**: a plain OS rename event often looks identical to delete+create and cannot be assumed to "just work". Proposed: match by file ID where the OS gives one (Linux inode), plus a cheap content fingerprint (size + hash of the first/last 64 KiB) as the fallback on every OS, so favorite/hide/progress state survives a move. Details in `TECH_STACK.md`.
+- **Rename/move detection**: a plain OS rename event often looks identical to delete+create and cannot be assumed to "just work". Built in #8: a gone file and a new file with the same size, modified time and media type are the same file (same name preferred), so favorite/hide/progress state survives a move. Windows gives Java no file ID, so this works the same on every OS. Details in `TECH_STACK.md`.
 
 ---
 
@@ -444,7 +444,6 @@ Moved to **`TECH_STACK.md`**: libraries, versions, Java/JavaFX version, threadin
 ## Open Questions Before Build
 
 - Confirm target library size to design/test against
-- Confirm the rename/move detection proposal (file ID + fingerprint, see `TECH_STACK.md`) once tested in #8
 - Confirm trash retention/auto-purge policy (auto-purge deletes real files)
 - Video thumbnails: confirm bundling an LGPL `ffmpeg` build (decide in #4)
 - HEIC: bundle `libheif` native libraries per OS, or rely on the Linux distro package?

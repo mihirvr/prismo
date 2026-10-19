@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.thumbs;
 
+import io.github.mihirvr.prismo.platform.FileReads;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -52,7 +53,7 @@ public final class ThumbnailGenerator {
     }
 
     private BufferedImage decodeSubsampled(Path source) throws IOException {
-        try (ImageInputStream in = ImageIO.createImageInputStream(source.toFile())) {
+        try (ImageInputStream in = FileReads.image(source)) {
             if (in == null) {
                 throw new IOException("Cannot open " + source);
             }

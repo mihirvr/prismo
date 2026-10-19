@@ -1,6 +1,5 @@
 package io.github.mihirvr.prismo.index;
 
-import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Directory;
 import com.drew.metadata.Metadata;
@@ -17,6 +16,7 @@ import com.drew.metadata.mp4.Mp4Directory;
 import com.drew.metadata.mp4.media.Mp4VideoDirectory;
 import com.drew.metadata.png.PngDirectory;
 import com.drew.metadata.webp.WebpDirectory;
+import io.github.mihirvr.prismo.platform.FileReads;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -93,7 +93,7 @@ public final class MetadataReader {
 
     private static Metadata readMetadata(Path file) {
         try {
-            return ImageMetadataReader.readMetadata(file.toFile());
+            return FileReads.metadata(file);
         } catch (ImageProcessingException | IOException | RuntimeException e) {
             // Unknown container, truncated or corrupt file: index it anyway, without metadata.
             log.debug("No metadata for {}: {}", file, e.toString());

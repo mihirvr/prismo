@@ -9,25 +9,29 @@ import java.sql.Types;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** The indexer's SQL against the {@code media} table. Each method takes the connection it should use. */
 final class MediaStore {
 
-    /** What the indexer needs to decide whether a file changed since it was last indexed. */
-    record Stamp(long sizeBytes, long dateModified) {
+    /**
+     * What the indexer knows about an indexed file: enough to tell whether it changed since it was last
+     * indexed (size + modified time), and to recognise it after a move or rename ({@link MoveMatcher}).
+     */
+    record Row(long id, String path, long sizeBytes, long dateModified) {
     }
 
     private MediaStore() {
     }
 
     /**
-     * Size + modified time of every indexed file under {@code root}.
+     * Every indexed file under {@code root}, by path.
      *
      * <p>Uses a range on {@code path} ({@code root\} ≤ path < {@code root]}, where ']' is the character
      * right after the separator) instead of {@code LIKE 'root%'}: a range can use the UNIQUE index on
      * path, and needs no escaping of '%' or '_' in folder names.
      */
-    static Map<String, Stamp> stampsUnder(Connection connection, Path root) throws SQLException {
+    static Map<String, Row> rowsUnder(Connection connection, Path root) throws SQLException {
         String prefix = root.toString();
         char separator = root.getFileSystem().getSeparator().charAt(0);
         if (prefix.charAt(prefix.length() - 1) != separator) {
@@ -35,18 +39,67 @@ final class MediaStore {
         }
         String upperBound = prefix.substring(0, prefix.length() - 1) + (char) (separator + 1);
 
-        Map<String, Stamp> stamps = new HashMap<>();
+        Map<String, Row> found = new HashMap<>();
         try (PreparedStatement select = connection.prepareStatement(
-                "SELECT path, size_bytes, date_modified FROM media WHERE path >= ? AND path < ?")) {
+                "SELECT id, path, size_bytes, date_modified FROM media WHERE path >= ? AND path < ?")) {
             select.setString(1, prefix);
             select.setString(2, upperBound);
             try (ResultSet rows = select.executeQuery()) {
                 while (rows.next()) {
-                    stamps.put(rows.getString(1), new Stamp(rows.getLong(2), rows.getLong(3)));
+                    Row row = new Row(rows.getLong(1), rows.getString(2), rows.getLong(3), rows.getLong(4));
+                    found.put(row.path(), row);
                 }
             }
         }
-        return stamps;
+        return found;
+    }
+
+    /** The indexed file at exactly {@code path}, if any. */
+    static Optional<Row> rowAt(Connection connection, String path) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT id, path, size_bytes, date_modified FROM media WHERE path = ?")) {
+            select.setString(1, path);
+            try (ResultSet rows = select.executeQuery()) {
+                return rows.next()
+                        ? Optional.of(new Row(rows.getLong(1), rows.getString(2), rows.getLong(3), rows.getLong(4)))
+                        : Optional.empty();
+            }
+        }
+    }
+
+    /**
+     * Applies what {@link MoveMatcher} decided, in the caller's transaction.
+     *
+     * <ul>
+     *   <li>A move: the row just inserted for the new path is deleted, and the old row takes the new path,
+     *       so it keeps its id (thumbnail cache, viewer) and the user's state (favorite, hidden, trash,
+     *       video position, date added). Delete first: {@code path} is UNIQUE.</li>
+     *   <li>A removal: the row is deleted (the FTS5 triggers update search).</li>
+     * </ul>
+     */
+    static void applyMovesAndRemovals(Connection connection, MoveMatcher.Result result) throws SQLException {
+        try (PreparedStatement deleteNew = connection.prepareStatement("DELETE FROM media WHERE path = ?");
+                PreparedStatement move = connection.prepareStatement(
+                        "UPDATE media SET path = ?, folder = ?, file_name = ?, extension = ? WHERE id = ?");
+                PreparedStatement remove = connection.prepareStatement("DELETE FROM media WHERE id = ?")) {
+            for (MoveMatcher.Move m : result.moves()) {
+                Path to = Path.of(m.to().path());
+                String fileName = to.getFileName().toString();
+                deleteNew.setString(1, m.to().path());
+                deleteNew.executeUpdate();
+                move.setString(1, m.to().path());
+                move.setString(2, to.getParent().toString());
+                move.setString(3, fileName);
+                move.setString(4, MediaType.extensionOf(fileName));
+                move.setLong(5, m.from().id());
+                move.executeUpdate();
+            }
+            for (Row row : result.removed()) {
+                remove.setLong(1, row.id());
+                remove.addBatch();
+            }
+            remove.executeBatch();
+        }
     }
 
     /**
