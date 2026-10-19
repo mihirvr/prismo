@@ -4,8 +4,8 @@ package io.github.mihirvr.prismo.ui;
  * The shared Filters (PROJECT.md "Filters"): which media a view shows. One at a time; {@link #ALL} shows
  * everything. Used by the Timeline and by search alike, so there is one definition of each filter.
  *
- * <p>Each filter is a fixed SQL condition on the {@code media} table (no user text in it). Favorites and
- * Hidden are not here yet: nothing can set those flags so far.
+ * <p>Each filter is a fixed SQL condition on the {@code media} table (no user text in it). There is no Hidden
+ * filter: hidden items are shown only on the Collections page "Hidden" ({@link MediaScope}).
  */
 public enum MediaFilter {
     ALL("All", null),
@@ -25,7 +25,8 @@ public enum MediaFilter {
      * a "Screenshots" folder), or a name starting "Screen Shot" (older macOS). LIKE ignores case for A–Z.
      */
     SCREENSHOTS("Screenshots",
-            "(file_name LIKE '%screenshot%' OR folder LIKE '%screenshot%' OR file_name LIKE 'screen shot%')");
+            "(file_name LIKE '%screenshot%' OR folder LIKE '%screenshot%' OR file_name LIKE 'screen shot%')"),
+    FAVORITES("Favorites", "favorite = 1");
 
     private final String label;
     private final String condition;

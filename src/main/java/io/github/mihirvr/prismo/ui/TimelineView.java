@@ -9,10 +9,13 @@ import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.geometry.Bounds;
 import javafx.scene.Node;
+import javafx.scene.control.ContextMenu;
 import javafx.scene.control.IndexedCell;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.skin.VirtualFlow;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
@@ -33,6 +36,10 @@ import javafx.scene.layout.StackPane;
  * <p><b>Keyboard.</b> One photo can have keyboard focus (a ring around it). Arrow keys move it, Enter opens
  * it, and it's scrolled into view. Focus is kept as a media id, not a cell, so it survives row rebuilds.
  * The ListView itself never takes focus (no selection colours); this pane does, and handles the keys.
+ *
+ * <p><b>Item actions.</b> F / H / Delete on the focused photo, and a right-click menu on any tile, run an
+ * {@link ItemAction} through the handler set with {@link #setOnAction}. When the photo leaves this view
+ * (hidden, trashed…), the focus moves on to its neighbour; the photo itself goes at the next reload.
  *
  * <p>All methods run on the JavaFX Application Thread.
  */
@@ -67,6 +74,8 @@ public final class TimelineView extends StackPane {
     private GridLayout layout = new GridLayout(1, DEFAULT_THUMBNAIL_SIZE);
     private long focusedId = NO_FOCUS;
     private BiConsumer<List<TimelineItem>, Integer> onOpen = (_, _) -> { };
+    private ItemAction.Handler onAction = (_, _) -> false;
+    private ContextMenu menu;
     /**
      * How many more layout passes may still scroll the focused photo fully into view; 0 = done. Set by an arrow-key
      * move whose first scroll couldn't be exact (see {@link #scrollIntoView}).
@@ -162,6 +171,11 @@ public final class TimelineView extends StackPane {
         this.onOpen = onOpen;
     }
 
+    /** Runs the item actions (keys and the right-click menu). */
+    public void setOnAction(ItemAction.Handler onAction) {
+        this.onAction = onAction;
+    }
+
     /** Puts the keyboard focus on media {@code id} and scrolls it into view (back from the viewer). */
     public void reveal(long id) {
         moveFocus(id);
@@ -201,7 +215,15 @@ public final class TimelineView extends StackPane {
             case UP -> moveFocusVertically(-1);
             case DOWN -> moveFocusVertically(+1);
             case ENTER -> open(focusedId);
-            default -> handled = false;
+            default -> {
+                int at = indexOf(focusedId);
+                ItemAction action = at < 0 || event.isShortcutDown() || event.isAltDown()
+                        ? null : ItemAction.forKey(event.getCode(), items.get(at));
+                handled = action != null;
+                if (handled) {
+                    perform(action, items.get(at));
+                }
+            }
         }
         if (handled) {
             event.consume();
@@ -302,6 +324,41 @@ public final class TimelineView extends StackPane {
         if (at >= 0) {
             onOpen.accept(items, at);
         }
+    }
+
+    /** Runs {@code action}; if the item leaves this view, the focus moves to the next item (or the previous). */
+    private void perform(ItemAction action, TimelineItem item) {
+        int at = indexOf(item.ref().id());
+        if (!onAction.perform(action, item) || action.keepsItemInView() || at < 0 || item.ref().id() != focusedId) {
+            return;
+        }
+        if (at + 1 < items.size()) {
+            moveFocus(items.get(at + 1).ref().id());
+        } else if (at > 0) {
+            moveFocus(items.get(at - 1).ref().id());
+        }
+    }
+
+    /** The right-click menu for one tile: Open, then what {@link ItemAction#available} allows. */
+    private void showMenu(ThumbnailTile tile, double screenX, double screenY) {
+        int at = tile.ref() == null ? -1 : indexOf(tile.ref().id());
+        if (at < 0) {
+            return;
+        }
+        TimelineItem item = items.get(at);
+        moveFocus(item.ref().id());
+        if (menu != null) {
+            menu.hide();
+        }
+        MenuItem open = new MenuItem("Open");
+        open.setOnAction(_ -> open(item.ref().id()));
+        menu = new ContextMenu(open, new SeparatorMenuItem());
+        for (ItemAction action : ItemAction.available(item)) {
+            MenuItem entry = new MenuItem(action.menuText());
+            entry.setOnAction(_ -> perform(action, item));
+            menu.getItems().add(entry);
+        }
+        menu.show(tile, screenX, screenY);
     }
 
     /** Position in {@link #items}, or -1. A linear scan: one click or key press, ~1 ms for 100,000 items. */
@@ -429,6 +486,7 @@ public final class TimelineView extends StackPane {
                     showTiles(rowItems.size());
                     for (int i = 0; i < rowItems.size(); i++) {
                         tiles.get(i).show(rowItems.get(i).ref(), layout.cellSize());
+                        tiles.get(i).setFavorite(rowItems.get(i).favorite());
                     }
                     setGraphic(thumbs);
                 }
@@ -464,6 +522,10 @@ public final class TimelineView extends StackPane {
                     moveFocus(id);
                     open(id);
                 }
+            });
+            tile.setOnContextMenuRequested(event -> {
+                showMenu(tile, event.getScreenX(), event.getScreenY());
+                event.consume();
             });
             return tile;
         }

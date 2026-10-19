@@ -90,6 +90,8 @@ class TimelineQueryTest {
                                (8, '/a/pic.webp', '/a', 'pic.webp', 'webp', 'photo', 60, 20, 8, 150, NULL, NULL, 0, NULL),
                                (9, '/a/trash.jpg', '/a', 'trash.jpg', 'jpg', 'photo', 1, 1, 9, 999, 10, 5, 0, 1),
                                (10, '/a/hid.png', '/a', 'hid.png', 'png', 'photo', 1, 1, 10, 999, 10, 5, 1, NULL)""");
+                // Favorites: 2 shows; 9 (in Trash) and 10 (hidden) are left out like everywhere else.
+                s.executeUpdate("UPDATE media SET favorite = 1 WHERE id IN (2, 9, 10)");
             }
             return null;
         }).get();
@@ -115,7 +117,8 @@ class TimelineQueryTest {
                 Map.entry(MediaFilter.WEBP, List.of(8L)),
                 Map.entry(MediaFilter.LANDSCAPE, List.of(7L, 3L, 1L)), // 5 is square; 6 and 8 have no size
                 Map.entry(MediaFilter.PORTRAIT, List.of(4L, 2L)),
-                Map.entry(MediaFilter.SCREENSHOTS, List.of(4L, 7L))); // 4 by its name, 7 by its folder
+                Map.entry(MediaFilter.SCREENSHOTS, List.of(4L, 7L)), // 4 by its name, 7 by its folder
+                Map.entry(MediaFilter.FAVORITES, List.of(2L)));
         assertEquals(MediaFilter.values().length, expected.size(), "every filter is checked");
         try (Database database = library()) {
             for (MediaFilter filter : MediaFilter.values()) {

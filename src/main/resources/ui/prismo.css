@@ -94,6 +94,58 @@
     -fx-border-width: 3;
 }
 
+/* A favorite's heart, bottom left of its tile. */
+.thumb-favorite {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 15px;
+    -fx-padding: 2 6 2 6;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 3, 0.3, 0, 0);
+}
+
+/* The two tabs in the top bar: Timeline | Collections. */
+.tabs .toggle-button {
+    -fx-min-width: 96;
+}
+
+/* Collections: the page list on the left, a header row over each page. */
+.collections-pages {
+    -fx-font-size: 13px;
+    -fx-background-insets: 0;
+    -fx-padding: 4 0 0 0;
+}
+
+/* No striped empty rows under the six pages. */
+.collections-pages .list-cell:empty,
+.collections-pages .list-cell:odd:empty {
+    -fx-background-color: transparent;
+}
+
+.collections-header {
+    -fx-padding: 8 12 8 12;
+    -fx-alignment: center-left;
+}
+
+.collections-title {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+}
+
+.collections-hint,
+.collections-placeholder,
+.album-count {
+    -fx-text-fill: #666666;
+}
+
+.album-card {
+    -fx-spacing: 2;
+    -fx-cursor: hand;
+}
+
+.album-name {
+    -fx-font-weight: bold;
+    -fx-text-overrun: ellipsis;
+}
+
 /* The viewer: an overlay over the whole window. Dark, so the photo stands out. */
 .viewer {
     -fx-background-color: #111111;
@@ -108,6 +160,10 @@
 .viewer-top-bar .label,
 .viewer-video-controls .label {
     -fx-text-fill: #eeeeee;
+}
+
+.viewer-favorite-on {
+    -fx-text-fill: #e0245e;
 }
 
 .viewer-file-name {

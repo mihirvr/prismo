@@ -110,6 +110,8 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
 | Viewer: decoding full-size stills | CPU-bound | 2 platform threads at normal priority (someone is waiting for the result) |
 | Viewer: opening a video | Native | A short-lived platform thread per video |
+| Collections pages (#9) | Native (JNI) | The same `prismo-timeline` thread as the Timeline, newest load wins |
+| "Delete permanently" (#9) | I/O | A short-lived virtual thread per file (Recycle Bin call or delete), then the row on the writer |
 | Updating the UI | — | `Platform.runLater`, batched (e.g. a few times per second, not once per file) |
 
 Why native work isn't on virtual threads: a native call pins the virtual thread to its carrier, so we gain nothing and can starve other virtual threads. Platform threads make the cost visible and bounded.
@@ -223,6 +225,7 @@ The fingerprint first planned here (SHA-256 of the first and last 64 KiB, stored
 - **Thumbnails on screen:** the UI checks the cache off the UI thread (the freshness check is a file `stat`), keeps the last 300 decoded images in an in-memory LRU, and cancels a tile's request when its row scrolls away.
 - **Viewer (#6):** an overlay inside the main window, not a second window. Cache-first: the 320 px thumbnail shows at once, in the place and size the full image will take (the indexed width/height), then the full image replaces it. The previous and next photos are decoded ahead; at most three full images are kept. Full images over 24 MP are decoded subsampled: JavaFX drew images up to 20,000 px wide in tests, so the limit is memory (4 bytes per pixel), not the GPU.
 - **Search, Filters and Sort (#7):** the search box sits in the top bar; results show in a second copy of the Timeline grid, so the Timeline keeps its place. One shared Filters + Sort bar (second row) applies to both. Date sorts keep date headers (grouped by that date, in local time for modified/added); other sorts show a plain grid.
+- **Collections (#9):** a second tab (Timeline | Collections). Every page (Folders, Albums, Favorites, Recently Added, Hidden, Trash) is the same grid over the one `media` table with a different `WHERE` (`MediaScope`); Folders adds a tree with "Include subfolders", Albums a grid of folder cards. Folder ranges and `GROUP BY` use `+folder` so SQLite reads the table instead of walking `idx_media_folder` (measured, synthetic 100k: tree 456 → 101 ms, albums 1,041 → 255 ms). Favorite / hide / Trash / restore / delete permanently are one shared set of actions (viewer buttons, keys F / H / Delete, right-click menu).
 - Styling with JavaFX CSS; themes (Light / Dark / AMOLED) are separate stylesheets.
 
 ---

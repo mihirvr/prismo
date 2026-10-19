@@ -24,26 +24,43 @@ public final class TimelineQuery {
     /**
      * The columns {@link #items} reads, in this order. Other queries that return Timeline items (search)
      * select them too. The fifth is the date the view groups by: {@code sort_date}, or the sort's own date
-     * column for "Date modified" / "Date added".
+     * column for "Date modified" / "Date added". The last three are the item's favorite / hidden / Trash state.
      */
     public static String columns(ViewOptions options) {
         String date = options.sort().dates() == MediaSort.Dates.INSTANT ? options.sort().expression() : "sort_date";
-        return "id, path, extension, date_modified, " + date + ", width, height";
+        return "id, path, extension, date_modified, " + date
+                + ", width, height, favorite, hidden, trashed_at IS NOT NULL";
     }
 
     /**
      * Everything the Timeline shows for these options: not in Trash, not hidden, filtered and sorted.
+     *
+     * @param zone this computer's time zone, for the date headers of "Date modified" / "Date added"
+     */
+    public static List<TimelineItem> load(Connection connection, ViewOptions options, ZoneId zone)
+            throws SQLException {
+        return load(connection, MediaScope.LIBRARY, options, zone);
+    }
+
+    /**
+     * What one view shows: the rows of {@code scope}, filtered and sorted by {@code options} (pass them through
+     * {@link MediaScope#applyTo} first).
      *
      * <p>{@code id} in the same direction breaks ties, so the order never changes between reloads. The table
      * is read straight through and sorted, never walked in index order (see {@link ViewOptions#sqlOrderBy}).
      *
      * @param zone this computer's time zone, for the date headers of "Date modified" / "Date added"
      */
-    public static List<TimelineItem> load(Connection connection, ViewOptions options, ZoneId zone)
+    public static List<TimelineItem> load(Connection connection, MediaScope scope, ViewOptions options, ZoneId zone)
             throws SQLException {
-        try (PreparedStatement select = connection.prepareStatement(sql(options));
-                ResultSet rows = select.executeQuery()) {
-            return items(rows, options, zone);
+        try (PreparedStatement select = connection.prepareStatement(sql(scope, options))) {
+            List<Object> params = scope.params();
+            for (int i = 0; i < params.size(); i++) {
+                select.setObject(i + 1, params.get(i));
+            }
+            try (ResultSet rows = select.executeQuery()) {
+                return items(rows, options, zone);
+            }
         }
     }
 
@@ -53,8 +70,12 @@ public final class TimelineQuery {
     }
 
     static String sql(ViewOptions options) {
+        return sql(MediaScope.LIBRARY, options);
+    }
+
+    static String sql(MediaScope scope, ViewOptions options) {
         StringBuilder sql = new StringBuilder("SELECT ").append(columns(options))
-                .append(" FROM media WHERE trashed_at IS NULL AND hidden = 0");
+                .append(" FROM media WHERE ").append(scope.sqlCondition());
         if (options.sqlCondition() != null) {
             sql.append(" AND ").append(options.sqlCondition());
         }
@@ -78,7 +99,8 @@ public final class TimelineQuery {
                 date += rules.getOffset(Instant.ofEpochMilli(date)).getTotalSeconds() * 1000L;
             }
             // getInt returns 0 for NULL (size unknown), which is what TimelineItem expects.
-            items.add(new TimelineItem(ref, date, rows.getInt(6), rows.getInt(7)));
+            items.add(new TimelineItem(ref, date, rows.getInt(6), rows.getInt(7), rows.getBoolean(8),
+                    rows.getBoolean(9), rows.getBoolean(10)));
         }
         return items;
     }

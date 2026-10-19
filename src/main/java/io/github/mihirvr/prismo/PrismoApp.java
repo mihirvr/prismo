@@ -1,5 +1,9 @@
 package io.github.mihirvr.prismo;
 
+import io.github.mihirvr.prismo.collections.CollectionsPage;
+import io.github.mihirvr.prismo.collections.FileRemover;
+import io.github.mihirvr.prismo.collections.ItemActions;
+import io.github.mihirvr.prismo.collections.MediaFlags;
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.db.LibraryRootStore;
 import io.github.mihirvr.prismo.db.SettingsStore;
@@ -13,6 +17,7 @@ import io.github.mihirvr.prismo.thumbs.MediaRefs;
 import io.github.mihirvr.prismo.thumbs.ThumbnailCache;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
+import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
@@ -39,9 +44,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
@@ -78,6 +88,7 @@ public final class PrismoApp extends Application {
     private SettingsStore settings;
     private LibraryRootStore libraryRoots;
     private Indexer indexer;
+    private ThumbnailCache thumbnailCache;
     private ThumbnailService thumbnails;
     private Searcher searcher;
     private ChangeBatcher changes;
@@ -109,6 +120,10 @@ public final class PrismoApp extends Application {
     private TimelineView searchResults;
     private SearchBar searchBar;
     private MediaViewer viewer;
+    private CollectionsPage collections;
+    private ViewOptionsBar viewBar;
+    private final ToggleButton timelineTab = new ToggleButton("Timeline");
+    private final ToggleButton collectionsTab = new ToggleButton("Collections");
 
     /** Runs on the JavaFX-Launcher thread, before any window exists, so slow setup here never freezes the UI. */
     @Override
@@ -123,8 +138,8 @@ public final class PrismoApp extends Application {
         settings = new SettingsStore(database);
         libraryRoots = new LibraryRootStore(database);
         indexer = new Indexer(database, new MetadataReader(ZoneId.systemDefault()));
-        thumbnails = new ThumbnailService(new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE),
-                new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
+        thumbnailCache = new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE);
+        thumbnails = new ThumbnailService(thumbnailCache, new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
         searcher = new Searcher(database);
         // Watcher events → batches (debounced) → applied on the indexing thread, after any run already queued.
         changes = new ChangeBatcher(CHANGES_QUIET, CHANGES_MAX_WAIT,
@@ -148,16 +163,29 @@ public final class PrismoApp extends Application {
         viewer = new MediaViewer(thumbnailLoader, getHostServices()::showDocument);
         timeline.setOnOpen(viewer::open);
 
+        // The Collections tab: its pages load on the Timeline's load thread, so loads never overlap.
+        collections = new CollectionsPage(database, thumbnailLoader, timelineLoads);
+        collections.grid().thumbnailSizeProperty().bindBidirectional(timeline.thumbnailSizeProperty());
+        collections.setOnOpen(viewer::open);
+        collections.setVisible(false);
+
         // Search results get their own grid, so the Timeline keeps its place while searching.
         searchResults = new TimelineView(thumbnailLoader);
         searchResults.thumbnailSizeProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         searchResults.setOnOpen(viewer::open);
         searchResults.setVisible(false);
         searchBar = new SearchBar(searcher, searchResults);
-        searchBar.activeProperty().addListener((_, _, searching) -> {
-            searchResults.setVisible(searching);
-            timeline.setVisible(!searching);
-        });
+        searchBar.activeProperty().addListener((_, _, _) -> showCurrentView());
+
+        // Favorite / hide / Trash / restore / delete, the same from every grid and the viewer.
+        FileRemover remover = FileRemover.forThisComputer();
+        ItemActions actions = new ItemActions(new MediaFlags(database), remover, thumbnailCache::fileFor,
+                item -> confirmDelete(stage, remover, item), Platform::runLater, status::setText,
+                this::libraryChanged);
+        timeline.setOnAction(actions);
+        searchResults.setOnAction(actions);
+        collections.setOnAction(actions);
+        viewer.setOnAction(actions);
         searchBar.setOnLeave(() -> currentGrid().requestFocus());
         viewer.setOnClose(item -> {
             TimelineView grid = currentGrid();
@@ -169,19 +197,36 @@ public final class PrismoApp extends Application {
         title.getStyleClass().add("app-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        ViewOptionsBar viewBar = new ViewOptionsBar();
+        ToggleGroup tabs = new ToggleGroup();
+        timelineTab.setToggleGroup(tabs);
+        collectionsTab.setToggleGroup(tabs);
+        timelineTab.setTooltip(new Tooltip("Everything, by date (Ctrl+1)"));
+        collectionsTab.setTooltip(new Tooltip("Folders, Albums, Favorites, Recently Added, Hidden, Trash (Ctrl+2)"));
+        timelineTab.setSelected(true);
+        tabs.selectedToggleProperty().addListener((_, old, selected) -> {
+            if (selected == null) {
+                old.setSelected(true); // clicking the open tab again keeps it open
+            } else {
+                showCurrentView();
+            }
+        });
+        HBox tabBar = new HBox(timelineTab, collectionsTab);
+        tabBar.getStyleClass().add("tabs");
+        viewBar = new ViewOptionsBar();
         viewBar.optionsProperty().addListener((_, _, options) -> {
             viewOptions = options;
             searchBar.setOptions(options);
+            collections.setOptions(options);
             loadTimeline();
         });
+        collections.sortLockedProperty().addListener((_, _, _) -> updateSortLock());
         Slider size = new Slider(TimelineView.MIN_THUMBNAIL_SIZE, TimelineView.MAX_THUMBNAIL_SIZE,
                 timeline.thumbnailSizeProperty().get());
         size.valueProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         size.setTooltip(new Tooltip("Thumbnail size (or Ctrl + mouse wheel)"));
         Button addFolder = new Button("Add folder…");
         addFolder.setOnAction(event -> chooseFolder(stage));
-        HBox topBar = new HBox(title, searchBar, spacer, addFolder);
+        HBox topBar = new HBox(title, tabBar, searchBar, spacer, addFolder);
         topBar.getStyleClass().add("top-bar");
         Region viewSpacer = new Region();
         HBox.setHgrow(viewSpacer, Priority.ALWAYS);
@@ -189,8 +234,8 @@ public final class PrismoApp extends Application {
         status.getStyleClass().add("status-bar");
         status.setMaxWidth(Double.MAX_VALUE);
 
-        BorderPane main = new BorderPane(new StackPane(timeline, searchResults), new VBox(topBar, viewBar), null,
-                status, null);
+        BorderPane main = new BorderPane(new StackPane(timeline, collections, searchResults),
+                new VBox(topBar, viewBar), null, status, null);
         // The viewer is an overlay over the whole window, hidden until a photo is opened.
         StackPane root = new StackPane(main, viewer);
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
@@ -205,6 +250,16 @@ public final class PrismoApp extends Application {
                 searchBar.focusField();
             }
         });
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.DIGIT1, KeyCombination.SHORTCUT_DOWN), () -> {
+            if (!viewer.isOpen()) {
+                timelineTab.setSelected(true);
+            }
+        });
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.DIGIT2, KeyCombination.SHORTCUT_DOWN), () -> {
+            if (!viewer.isOpen()) {
+                collectionsTab.setSelected(true);
+            }
+        });
         stage.show();
         timeline.requestFocus();
         log.info("Main window shown");
@@ -214,9 +269,59 @@ public final class PrismoApp extends Application {
         rescanTimer.scheduleWithFixedDelay(this::startIndexing, RESCAN_MINUTES, RESCAN_MINUTES, TimeUnit.MINUTES);
     }
 
-    /** The grid on screen: the search results while searching, otherwise the Timeline. */
+    /** The grid on screen: the search results while searching, otherwise the open tab's grid. */
     private TimelineView currentGrid() {
-        return searchBar.isActive() ? searchResults : timeline;
+        if (searchBar.isActive()) {
+            return searchResults;
+        }
+        return collectionsTab.isSelected() ? collections.grid() : timeline;
+    }
+
+    /** Shows the search results while searching, otherwise the open tab. */
+    private void showCurrentView() {
+        boolean searching = searchBar.isActive();
+        searchResults.setVisible(searching);
+        timeline.setVisible(!searching && timelineTab.isSelected());
+        collections.setVisible(!searching && collectionsTab.isSelected());
+        updateSortLock();
+    }
+
+    /** Recently Added has a fixed order: the Sort controls show it, locked, while that page is on screen. */
+    private void updateSortLock() {
+        boolean locked = collections.isVisible() && collections.sortLockedProperty().get();
+        viewBar.setSortLocked(locked ? MediaScope.RECENTLY_ADDED.applyTo(viewOptions) : null);
+    }
+
+    /**
+     * Asks before "Delete permanently". Cancel is the default button, so Enter never deletes. The text says
+     * what will really happen: the Recycle Bin where Java can use it, otherwise a real delete.
+     */
+    private static boolean confirmDelete(Stage owner, FileRemover remover, TimelineItem item) {
+        String name = item.ref().path().getFileName().toString();
+        ButtonType delete = new ButtonType(remover.usesRecycleBin() ? "Move to Recycle Bin" : "Delete for good",
+                ButtonBar.ButtonData.OK_DONE);
+        String text = remover.usesRecycleBin()
+                ? "The file is moved from its folder to the Recycle Bin, and Prismo forgets it. You can get it back"
+                        + " from the Recycle Bin. On drives that have no Recycle Bin (USB sticks, network drives),"
+                        + " Windows may delete it for good."
+                : "The file is deleted from disk for good. This can't be undone.";
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, text + "\n\n" + item.ref().path(), delete,
+                ButtonType.CANCEL);
+        alert.initOwner(owner);
+        alert.setTitle("Delete permanently");
+        alert.setHeaderText("Delete \u201c" + name + "\u201d permanently?");
+        ((Button) alert.getDialogPane().lookupButton(delete)).setDefaultButton(false);
+        ((Button) alert.getDialogPane().lookupButton(ButtonType.CANCEL)).setDefaultButton(true);
+        return alert.showAndWait().filter(delete::equals).isPresent();
+    }
+
+    /**
+     * Something in the library changed (an index run, file changes, an item action): reload the Timeline (which
+     * also re-runs the search on screen) and the Collections page. Called from any thread.
+     */
+    private void libraryChanged() {
+        loadTimeline();
+        Platform.runLater(collections::refresh);
     }
 
     private void chooseFolder(Stage owner) {
@@ -257,13 +362,13 @@ public final class PrismoApp extends Application {
                     // A first index of a big folder takes a while: show what's found so far every few seconds.
                     if (progress.indexed() > shownIndexed[0]
                             && System.nanoTime() - lastLoad[0] >= TIMELINE_RELOAD_NANOS) {
-                        loadTimeline();
+                        libraryChanged();
                         lastLoad[0] = System.nanoTime();
                         shownIndexed[0] = progress.indexed();
                     }
                 });
                 if (indexed.indexed() > shownIndexed[0] || indexed.moved() > 0 || indexed.removed() > 0) {
-                    loadTimeline();
+                    libraryChanged();
                 }
                 warmThumbnails(describe(indexed));
             } catch (InterruptedException e) {
@@ -362,7 +467,7 @@ public final class PrismoApp extends Application {
                 }
             }
             if (changed) {
-                loadTimeline(); // also re-runs the search on screen
+                libraryChanged(); // also re-runs the search on screen
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt(); // app is shutting down

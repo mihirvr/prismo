@@ -120,7 +120,8 @@ class TimelineRowsTest {
             long id = nextId++;
             // Same day, slightly earlier each time: newest first, like the query returns them.
             long sortDate = DateGroupsTest.floating(year, month, day, 12, 0) - i * 60_000L;
-            items.add(new TimelineItem(new MediaRef(id, Path.of(id + ".jpg"), "jpg", 0), sortDate, 0, 0));
+            items.add(new TimelineItem(new MediaRef(id, Path.of(id + ".jpg"), "jpg", 0), sortDate, 0, 0,
+                    false, false, false));
         }
         return items;
     }

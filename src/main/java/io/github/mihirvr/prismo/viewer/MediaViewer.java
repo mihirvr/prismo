@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.viewer;
 
 import io.github.mihirvr.prismo.thumbs.MediaRef;
+import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import java.nio.file.Files;
@@ -45,7 +46,9 @@ import org.slf4j.LoggerFactory;
  * shown is dropped.
  *
  * <p><b>Keys:</b> Left / Right previous / next, Esc back (or out of full screen first), F11 full screen,
- * R rotate (view only), + / − / 0 zoom in / out / fit, Space play / pause a video or start / stop the slideshow.
+ * R rotate (view only), + / − / 0 zoom in / out / fit, Space play / pause a video or start / stop the slideshow,
+ * F favorite, H hide, Delete to Trash (in Trash: delete permanently). An action that takes the item out of the
+ * list it was opened on (hide, Trash, restore, delete) moves on to the next one; favoriting keeps it.
  * <b>Mouse:</b> wheel zooms around the cursor, drag pans, double-click toggles fit / 100%, trackpad pinch zooms.
  *
  * <p>All methods run on the JavaFX Application Thread.
@@ -74,10 +77,13 @@ public final class MediaViewer extends StackPane {
     private final Label counter = new Label();
     private final Label zoom = new Label();
     private final Button slideshowButton = new Button();
+    /** One button per action {@link ItemAction#available} for the shown item, rebuilt for each item. */
+    private final HBox actionButtons = new HBox(6);
 
     private List<TimelineItem> items = List.of();
     private int index = -1;
     private Consumer<TimelineItem> onClose = _ -> { };
+    private ItemAction.Handler onAction = (_, _) -> false;
 
     /** The thumbnail load for the shown item, if one is running. */
     private ThumbnailLoader.Load thumbnailLoad;
@@ -123,6 +129,11 @@ public final class MediaViewer extends StackPane {
     /** Called with the item that was showing when the viewer closes, so the Timeline can scroll to it. */
     public void setOnClose(Consumer<TimelineItem> onClose) {
         this.onClose = onClose;
+    }
+
+    /** Runs favorite / hide / Trash / restore / delete for the shown item. */
+    public void setOnAction(ItemAction.Handler onAction) {
+        this.onAction = onAction;
     }
 
     /** Opens on {@code items.get(index)}. {@code items} is kept as is: a Timeline reload doesn't change it. */
@@ -180,6 +191,7 @@ public final class MediaViewer extends StackPane {
         }
         fileName.setText(ref.path().getFileName().toString());
         counter.setText("%,d / %,d".formatted(index + 1, items.size()));
+        updateActionButtons();
         sizeKnown = item.width() > 0 && item.height() > 0;
         transform.setImage(sizeKnown ? item.width() : 1, sizeKnown ? item.height() : 1);
         applyTransform();
@@ -368,6 +380,58 @@ public final class MediaViewer extends StackPane {
         return isOpen() && item != null && item.ref().equals(ref);
     }
 
+    // --- Item actions ---
+
+    private void updateActionButtons() {
+        TimelineItem item = current();
+        actionButtons.getChildren().clear();
+        if (item == null) {
+            return;
+        }
+        for (ItemAction action : ItemAction.available(item)) {
+            Button button = button(action.buttonText(), action.tooltip(), () -> act(action));
+            button.getStyleClass().add("viewer-action");
+            if (action == ItemAction.UNFAVORITE) {
+                button.getStyleClass().add("viewer-favorite-on");
+            }
+            actionButtons.getChildren().add(button);
+        }
+    }
+
+    /**
+     * Does {@code action} to the shown item. Favoriting updates it in place; anything else takes it out of this
+     * list (it now belongs to another page): the next item shows, or the previous at the end, or the viewer closes.
+     */
+    private void act(ItemAction action) {
+        TimelineItem item = current();
+        if (item == null || !ItemAction.available(item).contains(action) || !onAction.perform(action, item)) {
+            return;
+        }
+        List<TimelineItem> changed = new ArrayList<>(items);
+        if (action.keepsItemInView()) {
+            changed.set(index, action.applyTo(item));
+            items = List.copyOf(changed);
+            updateActionButtons();
+            return;
+        }
+        changed.remove(index);
+        items = List.copyOf(changed);
+        if (items.isEmpty()) {
+            slideshow.stop();
+            clearStage();
+            fullImages.keepOnly(List.of());
+            if (stage() instanceof Stage stage && stage.isFullScreen()) {
+                stage.setFullScreen(false);
+            }
+            setVisible(false);
+            index = -1;
+            onClose.accept(item);
+            return;
+        }
+        show(Math.min(index, items.size() - 1));
+        slideshow.restart();
+    }
+
     // --- Navigation, slideshow, full screen ---
 
     private void step(int delta) {
@@ -512,6 +576,13 @@ public final class MediaViewer extends StackPane {
                 transform.fit();
                 applyTransform();
             }
+            case F, H, DELETE -> {
+                ItemAction action = current() == null || event.isShortcutDown() || event.isAltDown()
+                        ? null : ItemAction.forKey(event.getCode(), current());
+                if (action != null) {
+                    act(action);
+                }
+            }
             default -> handled = false;
         }
         if (handled) {
@@ -539,7 +610,9 @@ public final class MediaViewer extends StackPane {
         zoom.getStyleClass().add("viewer-counter");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        HBox bar = new HBox(10, back, fileName, counter, spacer, zoom, previous, next, rotate, slideshowButton, fullScreen);
+        actionButtons.setAlignment(Pos.CENTER_LEFT);
+        HBox bar = new HBox(10, back, fileName, counter, spacer, zoom, actionButtons, previous, next, rotate,
+                slideshowButton, fullScreen);
         bar.getStyleClass().add("viewer-top-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMaxHeight(USE_PREF_SIZE);
@@ -583,6 +656,11 @@ public final class MediaViewer extends StackPane {
 
     int index() {
         return index;
+    }
+
+    /** For tests and tools: the action buttons for the shown item. */
+    HBox actionButtons() {
+        return actionButtons;
     }
 
     /** For tests: the path of the item showing. */

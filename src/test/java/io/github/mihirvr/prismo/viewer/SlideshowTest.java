@@ -14,7 +14,8 @@ class SlideshowTest {
     private static List<TimelineItem> items(String... extensions) {
         List<TimelineItem> items = new ArrayList<>();
         for (int i = 0; i < extensions.length; i++) {
-            items.add(new TimelineItem(new MediaRef(i, Path.of(i + "." + extensions[i]), extensions[i], 0), 0, 0, 0));
+            items.add(new TimelineItem(new MediaRef(i, Path.of(i + "." + extensions[i]), extensions[i], 0), 0, 0, 0,
+                    false, false, false));
         }
         return items;
     }

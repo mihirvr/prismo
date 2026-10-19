@@ -6,6 +6,7 @@ import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
 import java.util.Locale;
 import javafx.beans.value.ChangeListener;
+import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Label;
 import javafx.scene.image.Image;
@@ -27,6 +28,8 @@ final class ThumbnailTile extends StackPane {
     private final Label placeholder = new Label();
     /** Drawn over the image when this tile has keyboard focus. */
     private final Region focusRing = new Region();
+    /** A small heart in the corner of a favorite. */
+    private final Label favorite = new Label("♥");
     private MediaRef shown;
     private ThumbnailLoader.Load pending;
     private Image waitingFor;
@@ -47,7 +50,11 @@ final class ThumbnailTile extends StackPane {
         focusRing.getStyleClass().add("thumb-focus-ring");
         focusRing.setVisible(false);
         focusRing.setMouseTransparent(true);
-        getChildren().addAll(view, placeholder, focusRing);
+        favorite.getStyleClass().add("thumb-favorite");
+        favorite.setVisible(false);
+        favorite.setMouseTransparent(true);
+        StackPane.setAlignment(favorite, Pos.BOTTOM_LEFT);
+        getChildren().addAll(view, placeholder, favorite, focusRing);
     }
 
     /** The file this tile shows, or null if it's empty. */
@@ -57,6 +64,17 @@ final class ThumbnailTile extends StackPane {
 
     void setFocusRing(boolean on) {
         focusRing.setVisible(on);
+    }
+
+    void setFavorite(boolean on) {
+        favorite.setVisible(on);
+    }
+
+    /** Shows only {@code text} at {@code size} × {@code size} (an album with no photo to use as its cover). */
+    void showText(String text, double size) {
+        clear();
+        setPrefSize(size, size);
+        showPlaceholder(text);
     }
 
     /** Shows {@code ref} at {@code size} × {@code size}. Cheap if it's already showing {@code ref}. */
@@ -90,6 +108,7 @@ final class ThumbnailTile extends StackPane {
         stopWaiting();
         shown = null;
         focusRing.setVisible(false);
+        favorite.setVisible(false);
         view.setImage(null);
         placeholder.setText("");
         placeholder.setVisible(false);

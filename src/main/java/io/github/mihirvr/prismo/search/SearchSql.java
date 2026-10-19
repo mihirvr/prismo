@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo.search;
 import io.github.mihirvr.prismo.search.SearchQuery.MonthOfYear;
 import io.github.mihirvr.prismo.search.SearchQuery.Range;
 import io.github.mihirvr.prismo.search.SearchQuery.Word;
+import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
 import io.github.mihirvr.prismo.ui.ViewOptions;
@@ -84,7 +85,7 @@ public final class SearchSql {
 
     static Built build(SearchQuery query, ViewOptions options) {
         StringBuilder sql = new StringBuilder("SELECT ").append(TimelineQuery.columns(options))
-                .append(" FROM media WHERE trashed_at IS NULL AND hidden = 0");
+                .append(" FROM media WHERE ").append(MediaScope.LIBRARY.sqlCondition());
         if (options.sqlCondition() != null) {
             sql.append(" AND ").append(options.sqlCondition());
         }

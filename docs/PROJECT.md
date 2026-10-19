@@ -205,7 +205,7 @@ App-level soft delete (flag + hidden from all views) — consistent across Windo
 
 - **Delete** = move to Prismo's Trash. The file stays on disk, untouched; only the database flag changes.
 - **Restore** = clear the flag.
-- **Delete permanently** (from Trash only, after a confirmation dialog) = the file is really deleted from disk. This is the only way Prismo removes a file.
+- **Delete permanently** (from Trash only, after a confirmation dialog) = the file is removed from its folder: into the operating system's Recycle Bin where Java can use it (Windows), otherwise deleted for good. The dialog says which one will happen. This is the only way Prismo removes a file. (Decided in #9.)
 - Auto-purge after N days would delete real files without the user present, so it is **off by default** and its policy is an open question.
 
 ---
