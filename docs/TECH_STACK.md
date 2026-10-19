@@ -205,6 +205,7 @@ Built in #8 (`watch/` package). `java.nio.file.WatchService` sits behind our own
 - **Debounce:** events are collected until nothing new has arrived for 1 s (5 s at most), then each path is handled once; a path inside another path of the batch is dropped.
 - **Safety net:** a full rescan every 30 minutes catches anything missed (and re-watches folders that stopped being watched).
 - **Deleted files:** if the library folder can be reached, a file that is gone has its row removed. If the library folder itself can't be reached (an unplugged drive), nothing under it is touched. Never under a folder that couldn't be read, and only after a complete walk.
+- **Library folders turned off or removed (#9):** that folder is unwatched (`FileWatcher.unwatch`), and watcher batches still waiting for it are dropped. A folder turned off keeps its rows; every query leaves them out with one shared condition (`LibraryRootStore.NOT_IN_DISABLED_FOLDER`, free when nothing is off: measured on synthetic 100k rows, no difference within noise; with 2 folders off the Timeline went from ~360 to ~430 ms). Library folders never nest: a folder inside one is refused, a parent replaces the ones inside it.
 - **Network drives (SMB/NFS):** not detected yet. A network folder is watched like any other; change notifications over SMB are not reliable, and the 30-minute rescan covers it.
 
 ### Rename / move detection

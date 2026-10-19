@@ -53,9 +53,9 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Early development: v0.5 Core Loop in progress**
+**Early development: v1.0 MVP in progress** (v0.1 Foundation and v0.5 Core Loop done)
 
-The app runs (`./gradlew run`). You can add a folder; Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Click a photo (or move with the arrow keys and press Enter) to open it in the viewer: zoom, pan, rotate, slideshow, and MP4 playback. Type in the search box (Ctrl+F) to find files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results. Files you add, rename, move or delete in your folders show up in Prismo by themselves within a second or two. The Collections tab has Folders (a folder tree, with or without subfolders), Albums (one per folder), Favorites, Recently Added, Hidden and Trash; press F / H / Delete (or right-click) to favorite, hide or move something to Trash. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher; Collections in progress (managing library folders is next). No installer yet.
+The app runs (`./gradlew run`). You can add folders ("Library folders…"); Prismo indexes it, makes thumbnails in the background, and shows everything on a date-grouped Timeline. Click a photo (or move with the arrow keys and press Enter) to open it in the viewer: zoom, pan, rotate, slideshow, and MP4 playback. Type in the search box (Ctrl+F) to find files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results. Files you add, rename, move or delete in your folders show up in Prismo by themselves within a second or two. The Collections tab has Folders (a folder tree, with or without subfolders), Albums (one per folder), Favorites, Recently Added, Hidden and Trash; press F / H / Delete (or right-click) to favorite, hide or move something to Trash. "Library folders…" adds, turns off or removes the folders Prismo shows. Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections. Next: Packaging. No installer yet.
 
 - [Project Outline](docs/PROJECT.md) — full design document
 - [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
@@ -114,7 +114,7 @@ prismo/
 │   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, JPEG files on disk, on-screen-first queue
 │   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles, loader, keyboard focus; shared Filters + Sort; page scopes, item actions, album grid
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
-│   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions
+│   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, Library folders dialog
 │   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, MP4 playback
 │   │   └── resources/

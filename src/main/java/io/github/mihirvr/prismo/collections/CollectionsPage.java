@@ -320,7 +320,7 @@ public final class CollectionsPage extends BorderPane {
 
     private String emptyText(Request request, Loaded loaded) {
         if (loaded.scope() == null) {
-            return "No library folders yet. Click \"Add folder…\".";
+            return "No library folders yet. Click \"Library folders…\" to add one.";
         }
         String filtered = request.options().filter() == ViewOptions.DEFAULT.filter() ? ""
                 : " (showing only " + request.options().filter() + ")";

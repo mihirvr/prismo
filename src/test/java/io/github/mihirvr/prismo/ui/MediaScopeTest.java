@@ -86,6 +86,25 @@ class MediaScopeTest {
     }
 
     @Test
+    void everyPageLeavesOutADisabledLibraryFolder() throws Exception {
+        try (Database database = library()) {
+            database.write(c -> {
+                try (PreparedStatement insert = c.prepareStatement(
+                        "INSERT INTO library_roots (path, enabled, added_at) VALUES (?, 0, 0)")) {
+                    insert.setString(1, GOA);
+                    return insert.executeUpdate();
+                }
+            }).get();
+
+            assertEquals(List.of(9L, 6L, 1L), ids(database, MediaScope.LIBRARY), "Goa's 2 and 3 left out");
+            assertEquals(List.of(), ids(database, MediaScope.FAVORITES));
+            assertEquals(List.of(8L), ids(database, MediaScope.TRASH), "Goa's 5 and 10 left out");
+            assertEquals(List.of(1L), ids(database, MediaScope.folder(PHOTOS, true)));
+            assertEquals(List.of(1L, 6L, 9L), ids(database, MediaScope.RECENTLY_ADDED));
+        }
+    }
+
+    @Test
     void recentlyAddedIsNewestAddedFirstWhateverTheSort() throws Exception {
         try (Database database = library()) {
             List<Long> newestAdded = List.of(1L, 2L, 3L, 6L, 9L);

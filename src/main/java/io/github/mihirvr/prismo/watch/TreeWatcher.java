@@ -62,6 +62,18 @@ final class TreeWatcher implements FileWatcher {
         log.info("Watching {} (whole tree)", root);
     }
 
+    @Override
+    public void unwatch(Path root) {
+        roots.entrySet().removeIf(entry -> {
+            if (entry.getValue().equals(root)) {
+                entry.getKey().cancel();
+                log.info("Stopped watching {}", root);
+                return true;
+            }
+            return false;
+        });
+    }
+
     private void run() {
         try {
             while (true) {

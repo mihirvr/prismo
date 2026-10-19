@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.ui;
 
+import io.github.mihirvr.prismo.db.LibraryRootStore;
 import java.io.File;
 import java.util.List;
 
@@ -9,7 +10,7 @@ import java.util.List;
  * different condition (PROJECT.md "Database"): nothing is copied.
  *
  * <p>Hidden items are only on the Hidden page and items in Trash only on the Trash page; everywhere else
- * leaves both out.
+ * leaves both out. Every scope leaves out the rows of disabled library folders (#9 step 2).
  *
  * @param folder    the folder's path as stored in {@code media.folder}, for {@link Kind#FOLDER}; else null
  * @param recursive for a folder: also everything in the folders below it (Recursive View)
@@ -53,6 +54,10 @@ public record MediaScope(Kind kind, String folder, boolean recursive) {
      * machine): the whole library through its top folder 340–353 ms against 785–794 ms for the walk.
      */
     public String sqlCondition() {
+        return own() + " AND " + LibraryRootStore.NOT_IN_DISABLED_FOLDER;
+    }
+
+    private String own() {
         return switch (kind) {
             case LIBRARY, RECENTLY_ADDED -> VISIBLE;
             case FAVORITES -> VISIBLE + " AND favorite = 1";

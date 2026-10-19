@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo;
 import io.github.mihirvr.prismo.collections.CollectionsPage;
 import io.github.mihirvr.prismo.collections.FileRemover;
 import io.github.mihirvr.prismo.collections.ItemActions;
+import io.github.mihirvr.prismo.collections.LibraryFoldersDialog;
 import io.github.mihirvr.prismo.collections.MediaFlags;
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.db.LibraryRootStore;
@@ -27,15 +28,19 @@ import io.github.mihirvr.prismo.ui.ViewOptionsBar;
 import io.github.mihirvr.prismo.viewer.MediaViewer;
 import io.github.mihirvr.prismo.watch.ChangeBatcher;
 import io.github.mihirvr.prismo.watch.FileWatcher;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -62,7 +67,6 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
-import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -224,9 +228,10 @@ public final class PrismoApp extends Application {
                 timeline.thumbnailSizeProperty().get());
         size.valueProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         size.setTooltip(new Tooltip("Thumbnail size (or Ctrl + mouse wheel)"));
-        Button addFolder = new Button("Add folder…");
-        addFolder.setOnAction(event -> chooseFolder(stage));
-        HBox topBar = new HBox(title, tabBar, searchBar, spacer, addFolder);
+        Button libraryFolders = new Button("Library folders…");
+        libraryFolders.setTooltip(new Tooltip("Add, turn off or remove the folders Prismo shows"));
+        libraryFolders.setOnAction(_ -> new LibraryFoldersDialog(stage, libraryRoots, libraryOperations()).show());
+        HBox topBar = new HBox(title, tabBar, searchBar, spacer, libraryFolders);
         topBar.getStyleClass().add("top-bar");
         Region viewSpacer = new Region();
         HBox.setHgrow(viewSpacer, Priority.ALWAYS);
@@ -324,24 +329,78 @@ public final class PrismoApp extends Application {
         Platform.runLater(collections::refresh);
     }
 
-    private void chooseFolder(Stage owner) {
-        File folder = new DirectoryChooser().showDialog(owner);
-        if (folder == null) {
-            return;
-        }
-        try {
-            libraryRoots.add(folder.toPath()).whenComplete((added, error) -> {
-                if (error != null) {
-                    log.warn("Could not add library folder {}", folder, error);
-                    Platform.runLater(() -> status.setText("Could not add " + folder + ": " + error.getMessage()));
-                } else {
-                    log.info("Added library folder {}", added);
-                    startIndexing();
-                }
-            });
-        } catch (IOException e) {
-            status.setText("Can't open " + folder + ": " + e.getMessage());
-        }
+    /**
+     * What the Library folders dialog does. Every change runs on the indexing thread, after any index run or
+     * watcher batch already queued, so it never races them; then every view reloads.
+     */
+    private LibraryFoldersDialog.Operations libraryOperations() {
+        return new LibraryFoldersDialog.Operations() {
+            @Override
+            public CompletableFuture<String> add(Path folder) {
+                return onIndexingThread(() -> {
+                    LibraryRootStore.Added added = libraryRoots.add(folder).get();
+                    if (!added.added()) {
+                        return added.path() + " is already in the library: it is inside " + added.insideOf() + ".";
+                    }
+                    for (Path inner : added.absorbed()) {
+                        watcher.unwatch(inner); // the new folder's watch covers it
+                        watchedRoots.remove(inner);
+                    }
+                    log.info("Added library folder {} (replaces {})", added.path(), added.absorbed());
+                    startIndexing(); // queued next: watches it and indexes it
+                    return "Added " + added.path() + "." + (added.absorbed().isEmpty() ? ""
+                            : " It holds %d library folder(s) that were already here; they are now part of it."
+                                    .formatted(added.absorbed().size()));
+                });
+            }
+
+            @Override
+            public CompletableFuture<Void> setEnabled(Path root, boolean enabled) {
+                return onIndexingThread(() -> {
+                    if (!enabled) {
+                        watcher.unwatch(root);
+                        watchedRoots.remove(root);
+                    }
+                    libraryRoots.setEnabled(root, enabled).get();
+                    log.info("Library folder {} turned {}", root, enabled ? "on" : "off");
+                    libraryChanged();
+                    if (enabled) {
+                        startIndexing(); // catches up on anything that changed while it was off
+                    }
+                    return null;
+                });
+            }
+
+            @Override
+            public CompletableFuture<Integer> remove(Path root) {
+                return onIndexingThread(() -> {
+                    watcher.unwatch(root);
+                    watchedRoots.remove(root);
+                    int forgotten = libraryRoots.remove(root).get();
+                    log.info("Removed library folder {}: {} rows forgotten", root, forgotten);
+                    libraryChanged();
+                    return forgotten;
+                });
+            }
+        };
+    }
+
+    /** A step of work that may throw, for {@link #onIndexingThread}. */
+    private interface IndexingWork<T> {
+        T run() throws Exception;
+    }
+
+    private <T> CompletableFuture<T> onIndexingThread(IndexingWork<T> work) {
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return work.run();
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new CompletionException(e instanceof ExecutionException && e.getCause() != null
+                        ? e.getCause() : e);
+            }
+        }, indexingThread);
     }
 
     private void startIndexing() {
@@ -350,7 +409,7 @@ public final class PrismoApp extends Application {
                 loadTimeline();
                 var roots = libraryRoots.enabledRoots();
                 if (roots.isEmpty()) {
-                    Platform.runLater(() -> status.setText("No library folders yet. Click \"Add folder…\"."));
+                    Platform.runLater(() -> status.setText("No library folders yet. Click \"Library folders…\" to add one."));
                     return;
                 }
                 watchNewRoots(roots); // before the walk, so nothing that changes during it is missed
@@ -416,13 +475,13 @@ public final class PrismoApp extends Application {
         }
         shownOptions = options;
         timelinePlaceholder.setText(options.filter() == ViewOptions.DEFAULT.filter()
-                ? "No photos yet. Click \"Add folder…\" to choose a folder to show."
+                ? "No photos yet. Click \"Library folders…\" to choose a folder to show."
                 : "Nothing to show for \"" + options.filter() + "\".");
     }
 
     /** Runs on the indexing thread after an index run: makes every missing thumbnail, newest first. */
     private void warmThumbnails(String indexSummary) throws SQLException, InterruptedException {
-        var images = database.read(c -> MediaRefs.newestImages(c, Integer.MAX_VALUE));
+        var images = database.read(c -> MediaRefs.newestImages(c));
         thumbnails.warmUp(images, p -> Platform.runLater(() -> status.setText(indexSummary
                 + "  ·  Thumbnails %s %,d / %,d (%,d unsupported, %,d failed)".formatted(
                         p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(), p.failed()))));
@@ -448,6 +507,8 @@ public final class PrismoApp extends Application {
     /** Indexing thread: applies one batch of watcher changes, then refreshes what's on screen. */
     private void applyChanges(ChangeBatcher.Batch batch) {
         try {
+            // A folder turned off or removed while its events waited: they no longer count.
+            Set<Path> enabled = new HashSet<>(libraryRoots.enabledRoots());
             batch.stopped().forEach((root, reason) -> {
                 watchedRoots.remove(root); // watched again at the next rescan if it's back
                 log.warn("Stopped watching {}: {}", root, reason);
@@ -455,12 +516,15 @@ public final class PrismoApp extends Application {
                         + ". It is rescanned every " + RESCAN_MINUTES + " minutes."));
             });
             boolean changed = false;
-            if (!batch.rescan().isEmpty()) {
+            List<Path> rescan = batch.rescan().stream().filter(enabled::contains).toList();
+            Map<Path, Set<Path>> paths = new HashMap<>(batch.changed());
+            paths.keySet().retainAll(enabled);
+            if (!rescan.isEmpty()) {
                 // Events were lost (e.g. thousands of files copied at once): only a full look is safe.
-                changed = indexer.index(List.copyOf(batch.rescan()), _ -> { }).changedAnything();
+                changed = indexer.index(rescan, _ -> { }).changedAnything();
             }
-            if (!batch.changed().isEmpty()) {
-                IndexProgress result = indexer.update(batch.changed(), _ -> { });
+            if (!paths.isEmpty()) {
+                IndexProgress result = indexer.update(paths, _ -> { });
                 changed |= result.changedAnything();
                 if (result.changedAnything()) {
                     Platform.runLater(() -> status.setText(describeUpdate(result)));

@@ -103,6 +103,14 @@ final class DirectoryWatcher implements FileWatcher {
         return true;
     }
 
+    @Override
+    public void unwatch(Path root) {
+        if (roots.remove(root) != null) {
+            stopRoot(root);
+            log.info("Stopped watching {}", root);
+        }
+    }
+
     /** inotify's "User limit of inotify watches reached" (ENOSPC). */
     static boolean isWatchLimit(IOException e) {
         String message = String.valueOf(e.getMessage()).toLowerCase(Locale.ROOT);

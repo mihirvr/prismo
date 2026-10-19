@@ -135,6 +135,42 @@ class WatcherTest {
         }
     }
 
+    @Test
+    void afterUnwatchNothingMoreIsReportedAndOtherFoldersStillAre() throws Exception {
+        Path off = Files.createDirectories(tmp.resolve("off").resolve("sub")).getParent().toRealPath();
+        Path on = Files.createDirectories(tmp.resolve("on")).toRealPath();
+        List<FileWatcher> watchers = new ArrayList<>();
+        Recorder tree = new Recorder();
+        Recorder folders = new Recorder();
+        if (TreeWatcher.isAvailable()) {
+            watchers.add(new TreeWatcher(tree));
+        }
+        watchers.add(new DirectoryWatcher(folders));
+        try {
+            for (FileWatcher watcher : watchers) {
+                watcher.watch(off);
+                watcher.watch(on);
+                watcher.unwatch(off);
+                watcher.unwatch(off); // twice: a no-op
+            }
+            Files.writeString(off.resolve("sub").resolve("a.jpg"), "x");
+            Files.writeString(off.resolve("b.jpg"), "x");
+            Files.writeString(on.resolve("c.jpg"), "x");
+            for (Recorder recorder : TreeWatcher.isAvailable() ? List.of(tree, folders) : List.of(folders)) {
+                List<String> got = recorder.drain(500);
+                assertTrue(got.contains("changed c.jpg"), "the other folder is still watched: " + got);
+                assertTrue(got.stream().allMatch(e -> e.equals("changed c.jpg")), "nothing from the unwatched one: " + got);
+            }
+            for (FileWatcher watcher : watchers) {
+                watcher.watch(off); // and it can be watched again
+            }
+            Files.writeString(off.resolve("d.jpg"), "x");
+            assertTrue(folders.drain(500).contains("changed d.jpg"));
+        } finally {
+            watchers.forEach(FileWatcher::close);
+        }
+    }
+
     private static void checkCommonEvents(Path root, Recorder recorder) throws Exception {
         String sep = root.getFileSystem().getSeparator();
         Path file = Files.writeString(root.resolve("sub").resolve("deep").resolve("a.jpg"), "hello");

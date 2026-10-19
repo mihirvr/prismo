@@ -38,6 +38,12 @@ public interface FileWatcher extends AutoCloseable {
     /** Starts watching {@code root} (a library folder, in its real on-disk form). Watching it twice is a no-op. */
     void watch(Path root) throws IOException;
 
+    /**
+     * Stops watching {@code root} (a library folder disabled or removed). Events already queued for it are
+     * dropped; not watched is a no-op. The listener is not told ({@link Listener#stopped} is for failures).
+     */
+    void unwatch(Path root);
+
     /** Stops watching everything and ends the watcher's thread. */
     @Override
     void close();
