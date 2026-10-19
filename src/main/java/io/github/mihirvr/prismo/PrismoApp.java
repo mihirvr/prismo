@@ -17,6 +17,8 @@ import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
 import io.github.mihirvr.prismo.ui.TimelineView;
+import io.github.mihirvr.prismo.ui.ViewOptions;
+import io.github.mihirvr.prismo.ui.ViewOptionsBar;
 import io.github.mihirvr.prismo.viewer.MediaViewer;
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +28,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import javafx.application.Application;
 import javafx.application.Platform;
 import javafx.scene.Scene;
@@ -41,6 +44,7 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Stage;
 import org.slf4j.Logger;
@@ -68,8 +72,20 @@ public final class PrismoApp extends Application {
     /** One indexing run at a time; extra requests queue up behind it. */
     private final ExecutorService indexingThread = Executors.newSingleThreadExecutor(
             Thread.ofPlatform().name("prismo-indexer").daemon(true).factory());
+    /**
+     * Loads the Timeline, one load at a time, in the order asked; a load that a newer one has replaced while it
+     * waited is skipped. Its own thread, so a filter or sort change never waits behind an index run.
+     */
+    private final ExecutorService timelineLoads = Executors.newSingleThreadExecutor(
+            Thread.ofPlatform().name("prismo-timeline").daemon(true).factory());
+    private final AtomicLong latestTimelineLoad = new AtomicLong();
+    /** The Filters + Sort choice. Set on the UI thread, read by the load thread. */
+    private volatile ViewOptions viewOptions = ViewOptions.DEFAULT;
+    /** UI thread only: the options of the items the Timeline shows now (null before the first load). */
+    private ViewOptions shownOptions;
 
     private final Label status = new Label("Starting…");
+    private final Label timelinePlaceholder = new Label();
     private ThumbnailLoader thumbnailLoader;
     private TimelineView timeline;
     private TimelineView searchResults;
@@ -105,7 +121,7 @@ public final class PrismoApp extends Application {
         thumbnailLoader = new ThumbnailLoader(thumbnails);
         timeline = new TimelineView(thumbnailLoader);
         timeline.setThumbnailSize(savedThumbnailSize);
-        timeline.setPlaceholder(new Label("No photos yet. Click \"Add folder…\" to choose a folder to show."));
+        timeline.setPlaceholder(timelinePlaceholder);
         // HostServices opens a file in the system's default app (MOV, MKV… aren't played in the app yet).
         viewer = new MediaViewer(thumbnailLoader, getHostServices()::showDocument);
         timeline.setOnOpen(viewer::open);
@@ -131,18 +147,28 @@ public final class PrismoApp extends Application {
         title.getStyleClass().add("app-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+        ViewOptionsBar viewBar = new ViewOptionsBar();
+        viewBar.optionsProperty().addListener((_, _, options) -> {
+            viewOptions = options;
+            searchBar.setOptions(options);
+            loadTimeline();
+        });
         Slider size = new Slider(TimelineView.MIN_THUMBNAIL_SIZE, TimelineView.MAX_THUMBNAIL_SIZE,
                 timeline.thumbnailSizeProperty().get());
         size.valueProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         size.setTooltip(new Tooltip("Thumbnail size (or Ctrl + mouse wheel)"));
         Button addFolder = new Button("Add folder…");
         addFolder.setOnAction(event -> chooseFolder(stage));
-        HBox topBar = new HBox(title, searchBar, spacer, new Label("Size"), size, addFolder);
+        HBox topBar = new HBox(title, searchBar, spacer, addFolder);
         topBar.getStyleClass().add("top-bar");
+        Region viewSpacer = new Region();
+        HBox.setHgrow(viewSpacer, Priority.ALWAYS);
+        viewBar.getChildren().addAll(viewSpacer, new Label("Size"), size);
         status.getStyleClass().add("status-bar");
         status.setMaxWidth(Double.MAX_VALUE);
 
-        BorderPane main = new BorderPane(new StackPane(timeline, searchResults), topBar, null, status, null);
+        BorderPane main = new BorderPane(new StackPane(timeline, searchResults), new VBox(topBar, viewBar), null,
+                status, null);
         // The viewer is an overlay over the whole window, hidden until a photo is opened.
         StackPane root = new StackPane(main, viewer);
         Scene scene = new Scene(root, DEFAULT_WIDTH, DEFAULT_HEIGHT);
@@ -207,7 +233,7 @@ public final class PrismoApp extends Application {
                     // A first index of a big folder takes a while: show what's found so far every few seconds.
                     if (progress.indexed() > shownIndexed[0]
                             && System.nanoTime() - lastLoad[0] >= TIMELINE_RELOAD_NANOS) {
-                        reloadTimelineQuietly();
+                        loadTimeline();
                         lastLoad[0] = System.nanoTime();
                         shownIndexed[0] = progress.indexed();
                     }
@@ -225,24 +251,44 @@ public final class PrismoApp extends Application {
         });
     }
 
-    /** Runs on the indexing thread: reads the Timeline from the database and hands it to the UI. */
-    private void loadTimeline() throws SQLException {
-        long start = System.nanoTime();
-        List<TimelineItem> items = database.read(TimelineQuery::load);
-        log.info("Timeline loaded: {} items in {} ms", items.size(), (System.nanoTime() - start) / 1_000_000);
-        Platform.runLater(() -> {
-            timeline.setItems(items);
-            searchBar.refresh(); // new or changed files may match the search on screen
+    /**
+     * Reads the Timeline for the current Filters + Sort on the {@code prismo-timeline} thread and hands it to
+     * the UI. Called from any thread: after an index run (new files) and when the options change.
+     */
+    private void loadTimeline() {
+        long number = latestTimelineLoad.incrementAndGet();
+        timelineLoads.execute(() -> {
+            if (number != latestTimelineLoad.get()) {
+                return; // a newer load is queued behind this one and will read newer data anyway
+            }
+            ViewOptions options = viewOptions;
+            try {
+                long start = System.nanoTime();
+                List<TimelineItem> items = database.read(c -> TimelineQuery.load(c, options, ZoneId.systemDefault()));
+                log.info("Timeline loaded: {} items in {} ms", items.size(), (System.nanoTime() - start) / 1_000_000);
+                Platform.runLater(() -> showTimeline(items, options));
+            } catch (SQLException | RuntimeException e) {
+                log.warn("Could not load the timeline", e);
+                Platform.runLater(() -> status.setText("Could not load the timeline: " + e.getMessage()));
+            }
         });
     }
 
-    /** {@link #loadTimeline} for the indexer's progress callback, which can't throw SQLException. */
-    private void reloadTimelineQuietly() {
-        try {
-            loadTimeline();
-        } catch (SQLException e) {
-            log.warn("Could not reload the timeline while indexing", e);
+    /** UI thread: shows a loaded Timeline, unless the options changed while it loaded (that load is queued). */
+    private void showTimeline(List<TimelineItem> items, ViewOptions options) {
+        if (!options.equals(viewOptions)) {
+            return;
         }
+        if (options.equals(shownOptions)) {
+            timeline.setItems(items); // new data, same view: stay on the same photo
+            searchBar.refresh(); // new or changed files may match the search on screen
+        } else {
+            timeline.showFromTop(items, options.grouped()); // a different filter or sort: start at the top
+        }
+        shownOptions = options;
+        timelinePlaceholder.setText(options.filter() == ViewOptions.DEFAULT.filter()
+                ? "No photos yet. Click \"Add folder…\" to choose a folder to show."
+                : "Nothing to show for \"" + options.filter() + "\".");
     }
 
     /** Runs on the indexing thread after an index run: makes every missing thumbnail, newest first. */
@@ -268,6 +314,10 @@ public final class PrismoApp extends Application {
         indexingThread.shutdownNow();
         if (!indexingThread.awaitTermination(10, TimeUnit.SECONDS)) {
             log.warn("Indexer did not stop within 10 s");
+        }
+        timelineLoads.shutdownNow();
+        if (!timelineLoads.awaitTermination(5, TimeUnit.SECONDS)) {
+            log.warn("Timeline loading did not stop within 5 s");
         }
         if (viewer != null) {
             viewer.dispose();

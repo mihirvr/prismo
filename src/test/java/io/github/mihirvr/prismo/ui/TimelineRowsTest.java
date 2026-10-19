@@ -31,6 +31,27 @@ class TimelineRowsTest {
     }
 
     @Test
+    void ungroupedIsRowsOfColumnsWithNoHeaders() {
+        List<TimelineItem> items = new ArrayList<>();
+        items.addAll(on(2026, 10, 15, 2));
+        items.addAll(on(2026, 9, 20, 3));
+
+        assertEquals(List.of("T 2", "T 2", "T 1"), describe(TimelineRows.build(items, 2, TODAY, false)));
+        assertTrue(TimelineRows.build(List.of(), 2, TODAY, false).isEmpty());
+    }
+
+    @Test
+    void oldestFirstStillGroupsByDate() {
+        List<TimelineItem> items = new ArrayList<>();
+        items.addAll(on(2026, 9, 2, 1));
+        items.addAll(on(2026, 9, 20, 1));
+        items.addAll(on(2026, 10, 15, 2));
+
+        assertEquals(List.of("H September 2026 2", "T 2", "H Today 2", "T 2"),
+                describe(TimelineRows.build(items, 2, TODAY, true)));
+    }
+
+    @Test
     void rowsKeepTheItemsInOrder() {
         List<TimelineItem> items = on(2026, 9, 1, 5);
 

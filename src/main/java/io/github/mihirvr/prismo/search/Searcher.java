@@ -2,8 +2,10 @@ package io.github.mihirvr.prismo.search;
 
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.ui.TimelineItem;
+import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,13 +27,13 @@ public final class Searcher implements AutoCloseable {
 
     private static final Logger log = LoggerFactory.getLogger(Searcher.class);
 
-    /** The items found for {@code text}, newest first. */
-    public record Result(String text, List<TimelineItem> items, Duration elapsed) {
+    /** The items found for {@code text}, filtered and sorted by {@code options}. */
+    public record Result(String text, ViewOptions options, List<TimelineItem> items, Duration elapsed) {
     }
 
     /** Runs one search. The real one reads the database; tests can hold it mid-search. */
     interface Query {
-        List<TimelineItem> run(SearchQuery query) throws SQLException;
+        List<TimelineItem> run(SearchQuery query, ViewOptions options) throws SQLException;
     }
 
     private final Query query;
@@ -39,7 +41,8 @@ public final class Searcher implements AutoCloseable {
     private final AtomicLong latest = new AtomicLong();
 
     public Searcher(Database database) {
-        this(query -> database.read(connection -> SearchSql.run(connection, query)),
+        this((query, options) -> database.read(
+                        connection -> SearchSql.run(connection, query, options, ZoneId.systemDefault())),
                 Executors.newSingleThreadExecutor(Thread.ofPlatform().name("prismo-search").daemon(true).factory()));
     }
 
@@ -50,10 +53,11 @@ public final class Searcher implements AutoCloseable {
     }
 
     /**
-     * Searches for {@code text} on the search thread. Exactly one of the callbacks runs there, and only if no
+     * Searches for {@code text}, filtered and sorted by {@code options}, on the search thread. Exactly one of the callbacks runs there, and only if no
      * newer search was asked for in the meantime.
      */
-    public void search(String text, Consumer<Result> onResult, Consumer<SQLException> onError) {
+    public void search(String text, ViewOptions options, Consumer<Result> onResult,
+            Consumer<SQLException> onError) {
         long number = latest.incrementAndGet();
         thread.execute(() -> {
             if (number != latest.get()) {
@@ -62,12 +66,12 @@ public final class Searcher implements AutoCloseable {
             SearchQuery parsed = SearchQuery.parse(text);
             long start = System.nanoTime();
             try {
-                List<TimelineItem> items = query.run(parsed);
+                List<TimelineItem> items = query.run(parsed, options);
                 Duration elapsed = Duration.ofNanos(System.nanoTime() - start);
                 log.debug("Search of {} words: {} results in {} ms", parsed.words().size(), items.size(),
                         elapsed.toMillis());
                 if (number == latest.get()) { // not replaced while it ran
-                    onResult.accept(new Result(text, items, elapsed));
+                    onResult.accept(new Result(text, options, items, elapsed));
                 }
             } catch (SQLException e) {
                 log.warn("Search failed", e);

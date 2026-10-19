@@ -104,7 +104,7 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | Walking folders, `stat`-ing files | I/O-bound, pure Java | Virtual threads |
 | Reading metadata (metadata-extractor) | I/O + parsing, pure Java | Virtual threads |
 | Writing to SQLite | Native (JNI) | **One dedicated platform thread** (the "writer") |
-| Reading from SQLite (UI queries, search) | Native (JNI) | Platform threads, a fresh read-only connection each time: the Timeline loads on the indexing thread, searches on one `prismo-search` thread (only the newest search runs; built in #7) |
+| Reading from SQLite (UI queries, search) | Native (JNI) | Platform threads, a fresh read-only connection each time: the Timeline on one `prismo-timeline` thread, searches on one `prismo-search` thread. On both, only the newest request runs (built in #7) |
 | Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1), at below-normal thread priority. Its queue puts thumbnails on screen first and skips requests for rows that scrolled away. |
 | HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
 | Viewer: decoding full-size stills | CPU-bound | 2 platform threads at normal priority (someone is waiting for the result) |
@@ -137,7 +137,7 @@ Work moves between stages through **bounded queues**. When the writer falls behi
 - **Camera is in the FTS index** (changed in #7, agreed): people type part of a camera name ("nikon", "iphone 13"). Matching it with `LIKE` instead would turn every search into a full table scan.
 - Extension needs no column of its own: it's part of the file name. Date and resolution stay normal columns: a search word that looks like a year, month, date or `4000x3000` also matches those columns (see `SearchQuery`).
 - Every typed word is passed as a quoted FTS5 string, so search text is never read as FTS5 query syntax.
-- **Query plan trap (measured):** with `ORDER BY sort_date`, SQLite chose to walk `idx_media_sort_date` and fetch every row one at a time for a `LIKE` search: 639 ms on 100,000 rows, against 35 ms for a straight table scan plus a sort. Search sorts by `+sort_date` (the unary `+` stops that index being used for the sort).
+- **Never walk the date index for a view (measured):** with `ORDER BY sort_date`, SQLite walks `idx_media_sort_date` and fetches every row one at a time in date order, instead of reading the table straight through and sorting. Synthetic, 100,000 rows: a 2-letter search 639 ms vs 35 ms; a Videos filter 520 vs 48 ms; even the whole Timeline 718–739 vs 250–262 ms. So every view and search sorts by `+sort_date` (the unary `+` stops the index being used for the order). This replaced #5's "index walk, no sort" choice.
 - **Measured (synthetic, this machine; 100,000 rows written straight to the table, each query through a fresh read connection like the app):** 532 hits 9 ms, 12,576 hits ("goa") 60 ms, 90,079 hits ("img") 305 ms, "2024" (index + date range) 187 ms, a 1-character `LIKE` matching 87,616 rows 310 ms (medians of 5). Index size: 27 MB for 100,000 rows (the `media` table itself: 19 MB). Indexing cost: the real indexer on 10,000 tiny JPEGs took 3.9–4.5 s with the triggers against 1.9–2.3 s without (2 runs each), about 0.2 ms more per file; real photos spend more time on reading, so the share will be smaller (not measured).
 
 ---
@@ -217,6 +217,7 @@ This also answers the open question in `PROJECT.md` (content hash vs file ID): u
 - **The grid must be virtualized** (only visible thumbnails exist as nodes). JavaFX has no built-in virtualized grid with section headers, so the Timeline is built on a `ListView`: each list item is a **row**, either a date header or a row of N thumbnails. When the window width or the thumbnail size changes, N is recomputed and the rows are rebuilt, keeping the same photo at the top. `ListView` already reuses cells as you scroll.
 - **Thumbnails on screen:** the UI checks the cache off the UI thread (the freshness check is a file `stat`), keeps the last 300 decoded images in an in-memory LRU, and cancels a tile's request when its row scrolls away.
 - **Viewer (#6):** an overlay inside the main window, not a second window. Cache-first: the 320 px thumbnail shows at once, in the place and size the full image will take (the indexed width/height), then the full image replaces it. The previous and next photos are decoded ahead; at most three full images are kept. Full images over 24 MP are decoded subsampled: JavaFX drew images up to 20,000 px wide in tests, so the limit is memory (4 bytes per pixel), not the GPU.
+- **Search, Filters and Sort (#7):** the search box sits in the top bar; results show in a second copy of the Timeline grid, so the Timeline keeps its place. One shared Filters + Sort bar (second row) applies to both. Date sorts keep date headers (grouped by that date, in local time for modified/added); other sorts show a plain grid.
 - Styling with JavaFX CSS; themes (Light / Dark / AMOLED) are separate stylesheets.
 
 ---

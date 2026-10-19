@@ -5,10 +5,12 @@ import io.github.mihirvr.prismo.search.SearchQuery.Range;
 import io.github.mihirvr.prismo.search.SearchQuery.Word;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
+import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -28,9 +30,9 @@ import java.util.List;
  * </ul>
  * Every value is a {@code ?} parameter; the SQL text is built only from the fixed pieces below.
  *
- * <p>Results: not in Trash, not hidden, newest first like the Timeline. The sort is written
- * {@code +sort_date} on purpose: the unary {@code +} stops SQLite from walking {@code idx_media_sort_date}
- * to avoid sorting. For a LIKE search it otherwise did exactly that, fetching the 100,000 rows one by one in
+ * <p>Results: not in Trash, not hidden, with the same Filters and Sort as the Timeline ({@link ViewOptions}).
+ * A date-taken sort is written {@code +sort_date} on purpose: the unary {@code +} stops SQLite from walking
+ * {@code idx_media_sort_date} to avoid sorting. For a LIKE search it otherwise did exactly that, fetching the 100,000 rows one by one in
  * date order: 639 ms against 35 ms for reading the table straight through and sorting the matches
  * (synthetic 100,000-row library, this machine).
  */
@@ -50,25 +52,42 @@ public final class SearchSql {
     private SearchSql() {
     }
 
-    /** Runs the search; an empty query finds nothing. */
-    public static List<TimelineItem> run(Connection connection, SearchQuery query) throws SQLException {
+    /**
+     * Runs the search; an empty query finds nothing.
+     *
+     * @param zone this computer's time zone, for the date headers of "Date modified" / "Date added"
+     */
+    public static List<TimelineItem> run(Connection connection, SearchQuery query, ViewOptions options, ZoneId zone)
+            throws SQLException {
         if (query.isEmpty()) {
             return List.of();
         }
-        Built built = build(query);
+        Built built = build(query, options);
         try (PreparedStatement select = connection.prepareStatement(built.sql())) {
             for (int i = 0; i < built.params().size(); i++) {
                 select.setObject(i + 1, built.params().get(i));
             }
             try (ResultSet rows = select.executeQuery()) {
-                return TimelineQuery.items(rows);
+                return TimelineQuery.items(rows, options, zone);
             }
         }
     }
 
+    /** The default options: everything, newest first. */
+    public static List<TimelineItem> run(Connection connection, SearchQuery query) throws SQLException {
+        return run(connection, query, ViewOptions.DEFAULT, ZoneId.systemDefault());
+    }
+
     static Built build(SearchQuery query) {
-        StringBuilder sql = new StringBuilder("SELECT ").append(TimelineQuery.COLUMNS)
+        return build(query, ViewOptions.DEFAULT);
+    }
+
+    static Built build(SearchQuery query, ViewOptions options) {
+        StringBuilder sql = new StringBuilder("SELECT ").append(TimelineQuery.columns(options))
                 .append(" FROM media WHERE trashed_at IS NULL AND hidden = 0");
+        if (options.sqlCondition() != null) {
+            sql.append(" AND ").append(options.sqlCondition());
+        }
         List<Object> params = new ArrayList<>();
         for (Word word : query.words()) {
             List<String> anyOf = new ArrayList<>();
@@ -97,7 +116,7 @@ public final class SearchSql {
             }
             sql.append(" AND (").append(String.join(" OR ", anyOf)).append(')');
         }
-        sql.append(" ORDER BY +sort_date DESC, id DESC");
+        sql.append(" ORDER BY ").append(options.sqlOrderBy());
         return new Built(sql.toString(), params);
     }
 

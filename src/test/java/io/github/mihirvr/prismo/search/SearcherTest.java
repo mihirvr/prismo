@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo.search;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.github.mihirvr.prismo.db.Database;
+import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.nio.file.Path;
 import java.sql.Statement;
 import java.util.List;
@@ -37,16 +38,16 @@ class SearcherTest {
             List<String> delivered = new CopyOnWriteArrayList<>();
             CountDownLatch release = new CountDownLatch(1);
             CountDownLatch done = new CountDownLatch(1);
-            Searcher.Query real = query -> {
+            Searcher.Query real = (query, options) -> {
                 ran.add(query.words().getFirst().text());
                 return database.read(connection -> SearchSql.run(connection, query));
             };
             try (Searcher searcher = new Searcher(real, thread)) {
                 // Hold the search thread, as a slow running query would, while three searches queue up.
                 thread.execute(() -> await(release));
-                searcher.search("g", r -> delivered.add(r.text()), e -> delivered.add("error"));
-                searcher.search("go", r -> delivered.add(r.text()), e -> delivered.add("error"));
-                searcher.search("goa", r -> {
+                searcher.search("g", ViewOptions.DEFAULT, r -> delivered.add(r.text()), e -> delivered.add("error"));
+                searcher.search("go", ViewOptions.DEFAULT, r -> delivered.add(r.text()), e -> delivered.add("error"));
+                searcher.search("goa", ViewOptions.DEFAULT, r -> {
                     delivered.add(r.text() + "=" + r.items().size());
                     done.countDown();
                 }, e -> delivered.add("error"));
@@ -66,7 +67,7 @@ class SearcherTest {
         CountDownLatch release = new CountDownLatch(1);
         CountDownLatch done = new CountDownLatch(1);
         List<String> delivered = new CopyOnWriteArrayList<>();
-        Searcher.Query held = query -> {
+        Searcher.Query held = (query, options) -> {
             if (query.words().getFirst().text().equals("old")) {
                 firstStarted.countDown();
                 await(release); // still running when the newer search is asked for
@@ -74,9 +75,9 @@ class SearcherTest {
             return List.of();
         };
         try (Searcher searcher = new Searcher(held, thread)) {
-            searcher.search("old", r -> delivered.add(r.text()), e -> delivered.add("error"));
+            searcher.search("old", ViewOptions.DEFAULT, r -> delivered.add(r.text()), e -> delivered.add("error"));
             firstStarted.await();
-            searcher.search("new", r -> {
+            searcher.search("new", ViewOptions.DEFAULT, r -> {
                 delivered.add(r.text());
                 done.countDown();
             }, e -> delivered.add("error"));

@@ -6,46 +6,79 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.zone.ZoneRules;
 import java.util.ArrayList;
 import java.util.List;
 
-/** The Timeline's query. */
+/** The Timeline's query, with the shared Filters and Sort ({@link ViewOptions}). */
 public final class TimelineQuery {
 
-    /** The columns {@link #items} reads, in this order. Other queries that return Timeline items select them too. */
-    public static final String COLUMNS = "id, path, extension, date_modified, sort_date, width, height";
-
-    static final String SQL = "SELECT " + COLUMNS + """
-             FROM media
-            WHERE trashed_at IS NULL AND hidden = 0
-            ORDER BY sort_date DESC, id DESC""";
+    /** The default view: everything, date taken, newest first. */
+    static final String SQL = sql(ViewOptions.DEFAULT);
 
     private TimelineQuery() {
     }
 
     /**
-     * Everything the Timeline shows, newest first: all media types, not in Trash, not hidden.
-     *
-     * <p>{@code id DESC} breaks ties between files with the same date, so the order never changes between
-     * reloads. It costs nothing: {@code id} is the rowid, and every SQLite index entry already ends with
-     * the rowid, so {@code idx_media_sort_date} is sorted by {@code (sort_date, id)} and is walked
-     * backwards without a separate sort step.
+     * The columns {@link #items} reads, in this order. Other queries that return Timeline items (search)
+     * select them too. The fifth is the date the view groups by: {@code sort_date}, or the sort's own date
+     * column for "Date modified" / "Date added".
      */
-    public static List<TimelineItem> load(Connection connection) throws SQLException {
-        try (PreparedStatement select = connection.prepareStatement(SQL);
+    public static String columns(ViewOptions options) {
+        String date = options.sort().dates() == MediaSort.Dates.INSTANT ? options.sort().expression() : "sort_date";
+        return "id, path, extension, date_modified, " + date + ", width, height";
+    }
+
+    /**
+     * Everything the Timeline shows for these options: not in Trash, not hidden, filtered and sorted.
+     *
+     * <p>{@code id} in the same direction breaks ties, so the order never changes between reloads. The table
+     * is read straight through and sorted, never walked in index order (see {@link ViewOptions#sqlOrderBy}).
+     *
+     * @param zone this computer's time zone, for the date headers of "Date modified" / "Date added"
+     */
+    public static List<TimelineItem> load(Connection connection, ViewOptions options, ZoneId zone)
+            throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement(sql(options));
                 ResultSet rows = select.executeQuery()) {
-            return items(rows);
+            return items(rows, options, zone);
         }
     }
 
-    /** Reads every row of a query that selects {@link #COLUMNS}. */
-    public static List<TimelineItem> items(ResultSet rows) throws SQLException {
+    /** The default view. */
+    public static List<TimelineItem> load(Connection connection) throws SQLException {
+        return load(connection, ViewOptions.DEFAULT, ZoneId.systemDefault());
+    }
+
+    static String sql(ViewOptions options) {
+        StringBuilder sql = new StringBuilder("SELECT ").append(columns(options))
+                .append(" FROM media WHERE trashed_at IS NULL AND hidden = 0");
+        if (options.sqlCondition() != null) {
+            sql.append(" AND ").append(options.sqlCondition());
+        }
+        return sql.append(" ORDER BY ").append(options.sqlOrderBy()).toString();
+    }
+
+    /**
+     * Reads every row of a query that selects {@link #columns}. For "Date modified" / "Date added" the fifth
+     * column is a real moment; it is turned into local wall-clock time stored as if it were UTC (the same
+     * "floating" form as {@code sort_date}), so the date headers show the day it was on this computer.
+     */
+    public static List<TimelineItem> items(ResultSet rows, ViewOptions options, ZoneId zone) throws SQLException {
+        boolean instants = options.sort().dates() == MediaSort.Dates.INSTANT;
+        ZoneRules rules = zone.getRules();
         List<TimelineItem> items = new ArrayList<>();
         while (rows.next()) {
             MediaRef ref = new MediaRef(rows.getLong(1), Path.of(rows.getString(2)), rows.getString(3),
                     rows.getLong(4));
+            long date = rows.getLong(5);
+            if (instants) {
+                date += rules.getOffset(Instant.ofEpochMilli(date)).getTotalSeconds() * 1000L;
+            }
             // getInt returns 0 for NULL (size unknown), which is what TimelineItem expects.
-            items.add(new TimelineItem(ref, rows.getLong(5), rows.getInt(6), rows.getInt(7)));
+            items.add(new TimelineItem(ref, date, rows.getInt(6), rows.getInt(7)));
         }
         return items;
     }

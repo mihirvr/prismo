@@ -10,16 +10,30 @@ final class TimelineRows {
     }
 
     /**
-     * Splits {@code items} (newest first) into groups, and each group into rows of {@code columns}.
+     * Splits {@code items} (in date order, either way) into groups, and each group into rows of {@code columns}.
      * Every group starts with a {@link TimelineRow.Header}.
      *
      * @param today the current day ({@link DateGroups#dayOf} units), for "Today" / "Yesterday"
      */
     static List<TimelineRow> build(List<TimelineItem> items, int columns, long today) {
+        return build(items, columns, today, true);
+    }
+
+    /**
+     * Like {@link #build(List, int, long)}, or with {@code grouped} false (sorts that aren't by date): no
+     * headers, just rows of {@code columns}.
+     */
+    static List<TimelineRow> build(List<TimelineItem> items, int columns, long today, boolean grouped) {
         if (columns < 1) {
             throw new IllegalArgumentException("columns must be at least 1: " + columns);
         }
         List<TimelineRow> rows = new ArrayList<>(items.size() / columns + 16);
+        if (!grouped) {
+            for (int from = 0; from < items.size(); from += columns) {
+                rows.add(new TimelineRow.Thumbs(items.subList(from, Math.min(from + columns, items.size()))));
+            }
+            return rows;
+        }
         int start = 0;
         while (start < items.size()) {
             long group = DateGroups.groupOf(DateGroups.dayOf(items.get(start).sortDate()), today);

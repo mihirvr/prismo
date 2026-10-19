@@ -1,7 +1,9 @@
 package io.github.mihirvr.prismo.search;
 
 import io.github.mihirvr.prismo.ui.TimelineItem;
+import io.github.mihirvr.prismo.ui.MediaFilter;
 import io.github.mihirvr.prismo.ui.TimelineView;
+import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.sql.SQLException;
 import java.util.List;
 import javafx.animation.PauseTransition;
@@ -39,8 +41,11 @@ public final class SearchBar extends HBox {
     private final Label noMatches = new Label();
     private final PauseTransition typing = new PauseTransition(TYPING_PAUSE);
     private final ReadOnlyBooleanWrapper active = new ReadOnlyBooleanWrapper(false);
-    /** The text whose results are on screen, or null when none are. */
+    /** The shared Filters + Sort, applied to every search. */
+    private ViewOptions options = ViewOptions.DEFAULT;
+    /** The text and options whose results are on screen; null when none are. */
     private String shownText;
+    private ViewOptions shownOptions;
     private Runnable onLeave = () -> { };
 
     /** @param results the view to show results in; its owner places it in the window */
@@ -95,6 +100,12 @@ public final class SearchBar extends HBox {
         }
     }
 
+    /** New Filters + Sort: searches again if there is text in the box. */
+    public void setOptions(ViewOptions newOptions) {
+        options = newOptions;
+        refresh();
+    }
+
     /** The text in the box. For tests and tools. */
     String text() {
         return field.getText();
@@ -102,24 +113,27 @@ public final class SearchBar extends HBox {
 
     private void search() {
         String text = field.getText();
-        searcher.search(text,
+        searcher.search(text, options,
                 result -> Platform.runLater(() -> show(result)),
                 error -> Platform.runLater(() -> failed(text, error)));
     }
 
     private void show(Searcher.Result result) {
-        if (!result.text().equals(field.getText())) {
-            return; // the text changed since; that search is on its way
+        if (!result.text().equals(field.getText()) || !result.options().equals(options)) {
+            return; // the text or the options changed since; that search is on its way
         }
-        if (result.text().equals(shownText)) {
+        if (result.text().equals(shownText) && result.options().equals(shownOptions)) {
             results.setItems(result.items()); // same search, newer data (indexing): stay where the user is
         } else {
-            results.showFromTop(result.items());
+            results.showFromTop(result.items(), result.options().grouped());
         }
         shownText = result.text();
+        shownOptions = result.options();
         int n = result.items().size();
         count.setText(n == 1 ? "1 result" : "%,d results".formatted(n));
-        noMatches.setText("No matches for “" + result.text().strip() + "”");
+        MediaFilter filter = result.options().filter();
+        noMatches.setText("No matches for “" + result.text().strip() + "”"
+                + (filter == MediaFilter.ALL ? "" : " in " + filter));
         active.set(true);
     }
 
@@ -131,9 +145,10 @@ public final class SearchBar extends HBox {
 
     private void clearResults() {
         shownText = null;
+        shownOptions = null;
         active.set(false);
         count.setText("");
-        results.showFromTop(List.of()); // drops the tiles, which cancels their thumbnail loads
+        results.showFromTop(List.of(), true); // drops the tiles, which cancels their thumbnail loads
     }
 
     private void onKey(KeyEvent event) {

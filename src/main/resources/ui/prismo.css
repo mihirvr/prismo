@@ -15,6 +15,17 @@
     -fx-font-weight: bold;
 }
 
+/* The second row: shared Filters + Sort, and the thumbnail size. */
+.view-options-bar {
+    -fx-padding: 0 12 8 12;
+    -fx-spacing: 8;
+    -fx-alignment: center-left;
+}
+
+.view-direction {
+    -fx-min-width: 110;
+}
+
 /* Search: the box in the top bar, its result count, and the "no matches" text in an empty results grid. */
 .search-bar {
     -fx-spacing: 8;

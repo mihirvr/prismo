@@ -5,6 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.mihirvr.prismo.db.Database;
+import io.github.mihirvr.prismo.ui.MediaFilter;
+import io.github.mihirvr.prismo.ui.MediaSort;
+import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -13,6 +16,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Types;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -153,6 +157,23 @@ class SearchSqlTest {
     }
 
     @Test
+    void theSharedFiltersAndSortApplyToSearchResults() throws Exception {
+        insert(new Row(1, "D:\\Goa", "beach.jpg").taken(2024, 1, 3).size(4000, 3000));
+        insert(new Row(2, "D:\\Goa", "Arrival.jpg").taken(2024, 1, 1).size(3000, 4000));
+        insert(new Row(3, "D:\\Goa", "cliff.jpg").taken(2024, 1, 2).size(4000, 3000));
+        insert(new Row(4, "D:\\Home", "sofa.jpg").taken(2024, 1, 4).size(4000, 3000));
+
+        ViewOptions landscape = ViewOptions.DEFAULT.withFilter(MediaFilter.LANDSCAPE);
+        assertEquals(List.of(1L, 3L), search("goa", landscape));
+        assertEquals(List.of(2L, 1L, 3L), search("goa", ViewOptions.DEFAULT.withSort(MediaSort.NAME)));
+        assertEquals(List.of(3L, 1L), search("goa", landscape.withDescending(false)));
+        assertEquals(List.of(2L), search("goa", ViewOptions.DEFAULT.withFilter(MediaFilter.PORTRAIT)));
+        assertEquals(List.of(), search("goa", ViewOptions.DEFAULT.withFilter(MediaFilter.VIDEOS)));
+        // The short-word (LIKE) path gets them too.
+        assertEquals(List.of(1L, 3L), search("oa", landscape));
+    }
+
+    @Test
     void theIndexFollowsInsertsUpsertsUpdatesAndDeletes() throws Exception {
         insert(new Row(1, "D:\\a", "clip.mp4").taken(2024, 1, 1));
         assertEquals(List.of(1L), search("clip"));
@@ -190,7 +211,11 @@ class SearchSqlTest {
     // --- helpers ---
 
     private List<Long> search(String text) throws SQLException {
-        return database.read(c -> SearchSql.run(c, SearchQuery.parse(text))).stream()
+        return search(text, ViewOptions.DEFAULT);
+    }
+
+    private List<Long> search(String text, ViewOptions options) throws SQLException {
+        return database.read(c -> SearchSql.run(c, SearchQuery.parse(text), options, ZoneId.of("UTC"))).stream()
                 .map(item -> item.ref().id()).toList();
     }
 

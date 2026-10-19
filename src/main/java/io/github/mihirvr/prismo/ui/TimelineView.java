@@ -62,6 +62,8 @@ public final class TimelineView extends StackPane {
     /** Every cell the list has made (a few dozen), to move the focus ring without rebuilding them. */
     private final List<RowCell> cells = new ArrayList<>();
     private List<TimelineItem> items = List.of();
+    /** Date headers on (date sorts) or off (a plain grid). */
+    private boolean grouped = true;
     private GridLayout layout = new GridLayout(1, DEFAULT_THUMBNAIL_SIZE);
     private long focusedId = NO_FOCUS;
     private BiConsumer<List<TimelineItem>, Integer> onOpen = (_, _) -> { };
@@ -136,8 +138,14 @@ public final class TimelineView extends StackPane {
         rebuild(false);
     }
 
-    /** Replaces everything shown with a different set (a new search): from the top, nothing focused. */
-    public void showFromTop(List<TimelineItem> newItems) {
+    /**
+     * Replaces everything shown with a different set (a new search, filter or sort): from the top, nothing
+     * focused.
+     *
+     * @param grouped date headers (date sorts) or a plain grid
+     */
+    public void showFromTop(List<TimelineItem> newItems, boolean grouped) {
+        this.grouped = grouped;
         items = List.copyOf(newItems);
         focusedId = NO_FOCUS;
         list.getItems().setAll(buildRows());
@@ -349,7 +357,7 @@ public final class TimelineView extends StackPane {
     }
 
     private List<TimelineRow> buildRows() {
-        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay());
+        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay(), grouped);
     }
 
     /** Which photo is at the top of the view now, or null at the very top / before the first layout. */
