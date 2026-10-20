@@ -32,6 +32,18 @@ class ViewOptionsTest {
     }
 
     @Test
+    void theFileExplorerSwitchIsKeptAcrossChangesAndDoesNotChangeTheOrder() {
+        assertFalse(ViewOptions.DEFAULT.osHiddenShown(), "off by default");
+        ViewOptions on = ViewOptions.DEFAULT.withOsHiddenShown(true);
+        assertTrue(on.withFilter(MediaFilter.VIDEOS).withSort(MediaSort.NAME).withDescending(true).osHiddenShown());
+        assertFalse(on.isDefault());
+        assertTrue(on.sameOrder(ViewOptions.DEFAULT), "same list order: a view stays where it is");
+        assertFalse(on.sameOrder(ViewOptions.DEFAULT.withSort(MediaSort.NAME)));
+        assertFalse(on.sameOrder(null));
+        assertEquals(on.sqlOrderBy(), ViewOptions.DEFAULT.sqlOrderBy());
+    }
+
+    @Test
     void orderByAddsTheIdTieBreakInTheSameDirection() {
         assertEquals("+sort_date DESC, id DESC", ViewOptions.DEFAULT.sqlOrderBy());
         assertEquals("+sort_date ASC, id ASC", ViewOptions.DEFAULT.withDescending(false).sqlOrderBy());

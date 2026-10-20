@@ -15,7 +15,8 @@ import java.util.function.LongSupplier;
  *   <li><b>Wall mode</b> (no sound, no sound device, or the sound has ended): now = time at the last anchor +
  *       time passed on {@code System.nanoTime}.</li>
  * </ul>
- * Paused, time stands still in both modes.
+ * Paused, time stands still in both modes. At a playback speed other than 1, media time runs that many times
+ * faster than the device or the wall clock (the sound thread speeds the sound up to match, see VideoPlayer).
  *
  * <p>Pure logic: the wall clock and the "samples played" counter are passed in, so tests can drive both.
  * Synchronized, because the sound thread, the picture thread and the UI thread all use it.
@@ -41,6 +42,8 @@ final class PlaybackClock {
     private long anchorFrames;
     /** Sound mode, after a seek: no new samples written yet, so time stands at the seek target. */
     private boolean waiting;
+    /** Media seconds per real second. */
+    private double speed = 1;
 
     PlaybackClock(LongSupplier nanoTime) {
         this.nanoTime = nanoTime;
@@ -105,6 +108,20 @@ final class PlaybackClock {
         return running;
     }
 
+    /** From now on media time runs {@code speed} times as fast. The time so far is kept (re-anchored). */
+    synchronized void setSpeed(double speed) {
+        anchorMicros = now();
+        anchorNanos = nanoTime.getAsLong();
+        if (framesPlayed != null) {
+            anchorFrames = framesPlayed.getAsLong();
+        }
+        this.speed = speed;
+    }
+
+    synchronized double speed() {
+        return speed;
+    }
+
     /** Jumps to {@code micros}. In sound mode, time then waits for {@link #soundStarts}. */
     synchronized void seek(long micros) {
         lastSeek = new Seek(lastSeek.number() + 1, micros);
@@ -123,8 +140,8 @@ final class PlaybackClock {
             return anchorMicros;
         }
         if (framesPlayed != null) {
-            return anchorMicros + (framesPlayed.getAsLong() - anchorFrames) * 1_000_000L / sampleRate;
+            return anchorMicros + Math.round((framesPlayed.getAsLong() - anchorFrames) * 1e6 / sampleRate * speed);
         }
-        return anchorMicros + (nanoTime.getAsLong() - anchorNanos) / 1_000L;
+        return anchorMicros + Math.round((nanoTime.getAsLong() - anchorNanos) / 1e3 * speed);
     }
 }

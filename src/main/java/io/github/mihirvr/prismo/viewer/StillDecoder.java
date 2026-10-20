@@ -1,7 +1,10 @@
 package io.github.mihirvr.prismo.viewer;
 
+import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.platform.FileReads;
 import io.github.mihirvr.prismo.thumbs.ExifOrientation;
+import io.github.mihirvr.prismo.thumbs.OtherStills;
+import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
@@ -52,6 +55,13 @@ final class StillDecoder {
         if (!Files.isRegularFile(file)) {
             throw new NoSuchFileException(file.toString());
         }
+        String extension = MediaType.extensionOf(file.getFileName().toString());
+        if (!ThumbnailGenerator.canDecode(extension) && OtherStills.handles(extension)) {
+            // HEIC through ffmpeg, RAW through its JPEG preview (P7): decoded whole, then the same steps as below.
+            BufferedImage picture = OtherStills.decode(file);
+            return toPixels(picture, picture.getWidth(), picture.getHeight(),
+                    OtherStills.needsExifRotation(extension) ? ExifOrientation.read(file) : 1);
+        }
         BufferedImage decoded;
         int fullWidth;
         int fullHeight;
@@ -80,6 +90,11 @@ final class StillDecoder {
             throw new IOException("Corrupt image data: " + e, e);
         }
 
+        return toPixels(decoded, fullWidth, fullHeight, ExifOrientation.read(file));
+    }
+
+    /** Premultiplied ARGB, turned by {@code orientation}; full sizes are the image's real ones (after turning). */
+    private static Pixels toPixels(BufferedImage decoded, int fullWidth, int fullHeight, int orientation) {
         int w = decoded.getWidth();
         int h = decoded.getHeight();
         // One Java2D draw turns any layout (BGR bytes, grey, palette, alpha) into premultiplied ARGB ints.
@@ -92,7 +107,6 @@ final class StillDecoder {
         }
         int[] argb = ((DataBufferInt) argbImage.getRaster().getDataBuffer()).getData();
 
-        int orientation = ExifOrientation.read(file);
         boolean swap = ExifOrientation.swapsSides(orientation);
         return new Pixels(ExifOrientation.apply(argb, w, h, orientation),
                 swap ? h : w, swap ? w : h,

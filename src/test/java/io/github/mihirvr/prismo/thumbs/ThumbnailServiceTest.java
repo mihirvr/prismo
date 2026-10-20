@@ -88,12 +88,24 @@ class ThumbnailServiceTest {
     }
 
     @Test
+    void aFileThatIsntThereIsTriedAgainOnceItIsBack() throws Exception {
+        Path png = tmp.resolve("on-usb.png");
+        MediaRef ref = ref(8, TestMedia.png(png, 300, 200));
+        Path away = Files.move(png, tmp.resolve("unplugged.png"));
+
+        assertInstanceOf(ThumbnailService.Missing.class, service.request(ref).get(), "unplugged: not a failure");
+        assertFalse(Files.exists(cache.failMarkerFor(8)), "nothing remembered");
+        Files.move(away, png);
+        assertInstanceOf(ThumbnailService.Ready.class, service.request(ref).get(), "plugged back in: made now");
+    }
+
+    @Test
     void unsupportedFormatIsReportedWithoutTryingToDecode() throws Exception {
-        MediaRef ref = ref(3, Files.write(tmp.resolve("photo.heic"), new byte[] {0}));
+        MediaRef ref = ref(3, Files.write(tmp.resolve("photo.xyz"), new byte[] {0}));
 
         var result = service.request(ref).get();
 
-        assertEquals(new ThumbnailService.Unsupported("heic"), result);
+        assertEquals(new ThumbnailService.Unsupported("xyz"), result);
         assertEquals(0, generated.get());
     }
 
@@ -133,12 +145,12 @@ class ThumbnailServiceTest {
                 ref(2, TestMedia.png(tmp.resolve("2.png"), 50, 50)),
                 ref(3, TestMedia.jpegWithExif(tmp.resolve("3.jpg"), 50, 50, "X", "Y", 1, "2024:01:01 00:00:00")),
                 ref(4, Files.write(tmp.resolve("4.jpg"), new byte[] {9})),
-                ref(5, Files.write(tmp.resolve("5.heic"), new byte[] {9})));
+                ref(5, Files.write(tmp.resolve("5.xyz"), new byte[] {9})));
         List<ThumbnailService.WarmUpProgress> updates = new ArrayList<>();
 
         var done = service.warmUp(refs, updates::add);
 
-        assertEquals(new ThumbnailService.WarmUpProgress(5, 3, 1, 1, true), done);
+        assertEquals(new ThumbnailService.WarmUpProgress(5, 3, 1, 1, 0, true), done);
         assertTrue(updates.get(updates.size() - 1).done());
     }
 
@@ -189,6 +201,31 @@ class ThumbnailServiceTest {
             // Visible beats background; among visible, the latest request (most likely still on screen) wins;
             // background keeps the order it was asked in.
             assertEquals(List.of("blocker", "v2", "v1", "a", "b"), order);
+        } finally {
+            one.close();
+        }
+    }
+
+    @Test
+    void moreThreadsStartAtOnceAndTheCountStaysInRange() throws Exception {
+        ThumbnailService one = oneThreadService();
+        try {
+            var blocker = occupyWorker(one); // the only thread is busy until released
+            one.setThreads(2);
+            var a = one.request(png(1, "a"), ThumbnailService.Priority.VISIBLE);
+
+            a.get(); // made by the new second thread while the first is still blocked
+            assertFalse(blocker.isDone());
+            assertEquals(2, one.threads());
+            releaseBlocker.countDown();
+            blocker.get();
+
+            one.setThreads(0);
+            assertEquals(1, one.threads(), "never fewer than one");
+            one.setThreads(ThumbnailService.MAX_THREADS + 5);
+            assertEquals(ThumbnailService.MAX_THREADS, one.threads(), "never more than one per core");
+            // The service still takes work after the changes.
+            assertInstanceOf(ThumbnailService.Ready.class, one.request(png(2, "b")).get());
         } finally {
             one.close();
         }

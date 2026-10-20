@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.viewer;
 
 import io.github.mihirvr.prismo.index.MediaType;
+import io.github.mihirvr.prismo.thumbs.OtherStills;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import java.util.Locale;
 
@@ -12,7 +13,7 @@ enum ViewMode {
     ANIMATED,
     /** Played in the app with FFmpeg: every video type Prismo indexes (MP4, M4V, MOV, MKV, WebM, AVI). */
     VIDEO,
-    /** Not shown in the app yet (HEIC, RAW): thumbnail or name + "Open with default app". */
+    /** Not shown in the app: thumbnail or name + "Open with default app". */
     EXTERNAL;
 
     static ViewMode of(String extension) {
@@ -23,7 +24,8 @@ enum ViewMode {
         if (MediaType.fromExtension(ext).orElse(null) == MediaType.VIDEO) {
             return VIDEO;
         }
-        return ThumbnailGenerator.canDecode(ext) ? STILL : EXTERNAL;
+        // HEIC and RAW are STILL too since P7: StillDecoder reads them through OtherStills.
+        return ThumbnailGenerator.canDecode(ext) || OtherStills.handles(ext) ? STILL : EXTERNAL;
     }
 
     /** The slideshow shows only pictures the app can draw itself. */

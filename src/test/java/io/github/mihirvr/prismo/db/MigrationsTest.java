@@ -54,6 +54,33 @@ class MigrationsTest {
     }
 
     @Test
+    void theHiddenMarkMigrationKeepsRowsAndStartsThemUnmarked() throws Exception {
+        try (Connection connection = Database.connect(url("v4.db"), false)) {
+            new Migrations(List.of("V1__initial_schema.sql", "V2__library_roots.sql", "V3__search.sql"))
+                    .migrate(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO media (path, folder, file_name, extension, media_type, size_bytes,
+                                           date_modified, date_added, hidden)
+                        VALUES ('D:\\a.jpg', 'D:\\', 'a.jpg', 'jpg', 'photo', 1, 0, 0, 1)""");
+            }
+
+            new Migrations().migrate(connection);
+
+            try (Statement statement = connection.createStatement();
+                    ResultSet row = statement.executeQuery("SELECT hidden, os_hidden FROM media")) {
+                assertTrue(row.next());
+                assertEquals(1, row.getInt(1), "Prismo's own Hide kept");
+                assertEquals(0, row.getInt(2), "the next index run reads the real mark");
+            }
+            try (Statement statement = connection.createStatement()) {
+                assertThrows(SQLException.class, () -> statement.executeUpdate("UPDATE media SET os_hidden = 2"),
+                        "0 or 1 only");
+            }
+        }
+    }
+
+    @Test
     void migratingTwiceChangesNothing() throws Exception {
         try (Connection connection = Database.connect(url("twice.db"), false)) {
             Migrations migrations = new Migrations();

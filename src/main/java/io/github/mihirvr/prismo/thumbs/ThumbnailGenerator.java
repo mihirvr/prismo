@@ -31,7 +31,8 @@ import javax.imageio.stream.ImageOutputStream;
  *   <li><b>Encode:</b> JPEG at quality 0.85.</li>
  * </ol>
  *
- * <p>Videos go to {@link VideoThumbnailer} instead (one frame, by the bundled {@code ffmpeg} program).
+ * <p>Videos go to {@link VideoThumbnailer} instead (one frame, by the bundled {@code ffmpeg} program). HEIC and RAW
+ * photos are read by {@link OtherStills} (ffmpeg, or the JPEG preview inside the RAW file), then scaled the same way.
  *
  * <p>Pure CPU + file work with no shared state, so it's safe to call from many threads at once.
  */
@@ -41,6 +42,7 @@ public final class ThumbnailGenerator {
 
     private final int size;
     private final VideoThumbnailer videos;
+    private final VideoThumbnailer.Program ffmpeg;
 
     public ThumbnailGenerator(int size) {
         this(size, VideoNatives::ffmpegExecutable);
@@ -50,6 +52,7 @@ public final class ThumbnailGenerator {
     ThumbnailGenerator(int size, VideoThumbnailer.Program ffmpeg) {
         this.size = size;
         this.videos = new VideoThumbnailer(ffmpeg, size);
+        this.ffmpeg = ffmpeg;
     }
 
     /** True if some installed ImageIO reader handles this extension (JDK readers + TwelveMonkeys plugins). */
@@ -57,9 +60,9 @@ public final class ThumbnailGenerator {
         return ImageIO.getImageReadersBySuffix(extension).hasNext();
     }
 
-    /** True if a thumbnail can be made for this extension: an image ImageIO decodes, or a video. */
+    /** True if a thumbnail can be made for this extension: an image ImageIO decodes, HEIC / RAW, or a video. */
     public static boolean canMake(String extension) {
-        return isVideo(extension) || canDecode(extension);
+        return isVideo(extension) || canDecode(extension) || OtherStills.handles(extension);
     }
 
     private static boolean isVideo(String extension) {
@@ -67,8 +70,15 @@ public final class ThumbnailGenerator {
     }
 
     public void generate(Path source, Path target) throws IOException {
-        if (isVideo(MediaType.extensionOf(source.getFileName().toString()))) {
+        String extension = MediaType.extensionOf(source.getFileName().toString());
+        if (isVideo(extension)) {
             videos.generate(source, target);
+            return;
+        }
+        if (!canDecode(extension) && OtherStills.handles(extension)) {
+            BufferedImage picture = OtherStills.decode(source, ffmpeg::path);
+            int orientation = OtherStills.needsExifRotation(extension) ? ExifOrientation.read(source) : 1;
+            writeJpeg(scaleAndOrient(picture, orientation), target);
             return;
         }
         BufferedImage decoded = decodeSubsampled(source);

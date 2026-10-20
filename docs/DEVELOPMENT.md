@@ -10,7 +10,7 @@
 
 # Current Repository State
 
-Issues #1–#9 are done: a Gradle project (Java 25, JavaFX 25), the SQLite database layer with migrations, the media indexer, the thumbnail cache, the Timeline UI, the media viewer, search (with the shared Filters and Sort), the filesystem watcher, and Collections (folders, albums, favorites, hidden, Trash, library folders). The app runs with `./gradlew run` and tests run with `./gradlew test`.
+Issues #1–#9 are done: a Gradle project (Java 25, JavaFX 25), the SQLite database layer with migrations, the media indexer, the thumbnail cache, the Timeline UI, the media viewer, search (with the shared Filters and Sort), the filesystem watcher, and Collections (folders, albums, favorites, hidden, Trash, library folders). After #9, before Packaging, came a round of pre-packaging work without its own issues: an FFmpeg-based video player with video thumbnails, a visual polish, the looks (Light / Dark / AMOLED / Follow system) with a Settings window, the app icon and remembered window place, and the viewer and video features (watch progress, subtitles, sound tracks, speed, full screen, right-click menus, the Info panel, the Windows Hidden mark). The app runs with `./gradlew run` and tests run with `./gradlew test` (`./gradlew build` runs them too; the compiler treats every warning as an error).
 
 The current file layout is the "Project Structure" section of `README.md`.
 

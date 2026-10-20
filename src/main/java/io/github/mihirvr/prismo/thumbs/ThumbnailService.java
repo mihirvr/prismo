@@ -2,6 +2,7 @@ package io.github.mihirvr.prismo.thumbs;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.FileTime;
@@ -40,7 +41,7 @@ public final class ThumbnailService implements AutoCloseable {
     private static final long PROGRESS_INTERVAL_NANOS = 100_000_000L;
 
     /** The outcome of a thumbnail request. */
-    public sealed interface Result permits Ready, Unsupported, Failed {
+    public sealed interface Result permits Ready, Unsupported, Failed, Missing {
     }
 
     /** The thumbnail exists at {@code file}. */
@@ -51,12 +52,19 @@ public final class ThumbnailService implements AutoCloseable {
     public record Unsupported(String extension) implements Result {
     }
 
-    /** The file couldn't be decoded (corrupt, truncated, missing). Not retried until the file changes. */
+    /** The file couldn't be decoded (corrupt, truncated). Not retried until the file changes. */
     public record Failed(String reason) implements Result {
     }
 
-    /** Warm-up progress: how many of {@code total} are done, by outcome. */
-    public record WarmUpProgress(int total, int ready, int unsupported, int failed, boolean done) {
+    /**
+     * The file isn't there: its drive is unplugged or its network folder is off (P7), or it was just deleted. Nothing
+     * is remembered, so it is tried again next time: a drive that is back must not keep "failed" thumbnails.
+     */
+    public record Missing(String reason) implements Result {
+    }
+
+    /** Warm-up progress: how many of {@code total} are done, by outcome ({@code missing}: files not there). */
+    public record WarmUpProgress(int total, int ready, int unsupported, int failed, int missing, boolean done) {
     }
 
     /** How urgent a request is. Declared most urgent first; the queue orders by this. */
@@ -76,12 +84,18 @@ public final class ThumbnailService implements AutoCloseable {
     private final ThumbnailCache cache;
     private final Generator generator;
     private final ThreadPoolExecutor pool;
-    private final int poolSize;
+    /** The number of generating threads now (Settings › Performance can change it while the app runs). */
+    private volatile int poolSize;
     private final ConcurrentHashMap<Long, Job> inFlight = new ConcurrentHashMap<>();
     private final AtomicLong sequence = new AtomicLong();
 
+    /** The most threads that can make thumbnails: one per core. */
+    public static final int MAX_THREADS = Runtime.getRuntime().availableProcessors();
+    /** The default: one per core minus one, so the UI keeps a core. */
+    public static final int DEFAULT_THREADS = Math.max(1, MAX_THREADS - 1);
+
     public ThumbnailService(ThumbnailCache cache, ThumbnailGenerator generator) {
-        this(cache, generator::generate, Math.max(1, Runtime.getRuntime().availableProcessors() - 1));
+        this(cache, generator::generate, DEFAULT_THREADS);
     }
 
     ThumbnailService(ThumbnailCache cache, Generator generator, int poolSize) {
@@ -96,6 +110,29 @@ public final class ThumbnailService implements AutoCloseable {
         // A task handed to a newly started thread skips the queue (and so the ordering). Starting every
         // thread now means every task goes through the queue.
         this.pool.prestartAllCoreThreads();
+    }
+
+    /**
+     * Settings › Performance: how many threads make thumbnails, 1 to {@link #MAX_THREADS}. Takes effect at
+     * once: more threads start now; with fewer, the extra ones end after the job they are on.
+     */
+    public void setThreads(int threads) {
+        int wanted = Math.clamp(threads, 1, MAX_THREADS);
+        // The core size may never be above the maximum, so the order depends on the direction.
+        if (wanted > pool.getMaximumPoolSize()) {
+            pool.setMaximumPoolSize(wanted);
+            pool.setCorePoolSize(wanted);
+        } else {
+            pool.setCorePoolSize(wanted);
+            pool.setMaximumPoolSize(wanted);
+        }
+        pool.prestartAllCoreThreads(); // so every task still goes through the sorted queue
+        poolSize = wanted;
+    }
+
+    /** The number of generating threads now. */
+    public int threads() {
+        return poolSize;
     }
 
     /** Same as {@code request(media, Priority.BACKGROUND)}. */
@@ -201,8 +238,12 @@ public final class ThumbnailService implements AutoCloseable {
             Files.deleteIfExists(marker);
             return new Ready(file);
         } catch (IOException | RuntimeException e) {
-            log.debug("Thumbnail failed for {}: {}", media.path(), e.toString());
             deleteQuietly(temp);
+            if (e instanceof NoSuchFileException || !Files.exists(media.path())) {
+                log.debug("No thumbnail for {}: the file isn't there", media.path());
+                return new Missing(e.toString()); // no marker: tried again once the file is back
+            }
+            log.debug("Thumbnail failed for {}: {}", media.path(), e.toString());
             writeFailMarker(marker, media.dateModified());
             return new Failed(e.toString());
         }
@@ -214,10 +255,12 @@ public final class ThumbnailService implements AutoCloseable {
      * futures at once. Interrupting the calling thread stops it.
      */
     public WarmUpProgress warmUp(List<MediaRef> media, Consumer<WarmUpProgress> progress) throws InterruptedException {
-        Semaphore window = new Semaphore(poolSize * 4);
+        int jobs = poolSize * 4; // read once: Settings may change the thread count meanwhile
+        Semaphore window = new Semaphore(jobs);
         AtomicInteger ready = new AtomicInteger();
         AtomicInteger unsupported = new AtomicInteger();
         AtomicInteger failed = new AtomicInteger();
+        AtomicInteger missing = new AtomicInteger();
         long lastReport = 0;
         for (MediaRef ref : media) {
             window.acquire(); // throws InterruptedException when the app shuts down
@@ -226,6 +269,7 @@ public final class ThumbnailService implements AutoCloseable {
                     case Ready _ -> ready.incrementAndGet();
                     case Unsupported _ -> unsupported.incrementAndGet();
                     case Failed _ -> failed.incrementAndGet();
+                    case Missing _ -> missing.incrementAndGet();
                     case null -> failed.incrementAndGet(); // the job itself threw
                 }
                 window.release();
@@ -233,12 +277,14 @@ public final class ThumbnailService implements AutoCloseable {
             long now = System.nanoTime();
             if (now - lastReport >= PROGRESS_INTERVAL_NANOS) {
                 lastReport = now;
-                progress.accept(new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(), false));
+                progress.accept(new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(),
+                        missing.get(), false));
             }
         }
-        window.acquire(poolSize * 4); // wait for the last jobs
-        window.release(poolSize * 4);
-        WarmUpProgress done = new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(), true);
+        window.acquire(jobs); // wait for the last jobs
+        window.release(jobs);
+        WarmUpProgress done = new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(),
+                missing.get(), true);
         progress.accept(done);
         return done;
     }

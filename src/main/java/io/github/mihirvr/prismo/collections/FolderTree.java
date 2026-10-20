@@ -30,6 +30,15 @@ public final class FolderTree {
      * @param totalCount media in it and every folder below it
      */
     public record Node(String path, String name, int ownCount, int totalCount, List<Node> children) {
+
+        /**
+         * The name to show: a library folder's {@link #name} is its whole path (it is a top, so the path tells
+         * them apart in a sort); on screen it shows only its last part ("Holidays"). A drive ("D:\") stays whole.
+         */
+        public String shownName() {
+            Path last = Path.of(path).getFileName();
+            return last == null ? path : last.toString();
+        }
     }
 
     private static final Comparator<Node> BY_NAME =
@@ -65,7 +74,7 @@ public final class FolderTree {
     }
 
     static String countsSql(ViewOptions options) {
-        return "SELECT folder, count(*) FROM media WHERE " + MediaScope.LIBRARY.sqlCondition()
+        return "SELECT folder, count(*) FROM media WHERE " + MediaScope.LIBRARY.sqlCondition(options.osHiddenShown())
                 + (options.sqlCondition() == null ? "" : " AND " + options.sqlCondition()) + " GROUP BY +folder";
     }
 

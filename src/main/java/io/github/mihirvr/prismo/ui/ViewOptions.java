@@ -1,17 +1,26 @@
 package io.github.mihirvr.prismo.ui;
 
 /**
- * The shared Filters + Sort choice, applied the same way to the Timeline and to search results.
+ * The shared Filters + Sort choice, applied the same way to the Timeline, search results and the Collections
+ * pages, plus the Settings switch "Show files hidden in File Explorer" (P6), which every view applies the same way
+ * too: carried here, a change reloads every view like a new filter does.
  *
  * <p>The SQL pieces come only from the fixed text in {@link MediaFilter} and {@link MediaSort}, never from
  * user input.
  *
- * @param descending true = newest / largest / Z first
+ * @param descending    true = newest / largest / Z first
+ * @param osHiddenShown true = files with the operating system's Hidden mark show like any other file; false (the
+ *                      default) = only on Collections › Hidden ({@link MediaScope#sqlCondition})
  */
-public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending) {
+public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending, boolean osHiddenShown) {
 
     /** Everything, date taken, newest first: the Timeline as it was before Filters and Sort existed. */
-    public static final ViewOptions DEFAULT = new ViewOptions(MediaFilter.ALL, MediaSort.DATE_TAKEN, true);
+    public static final ViewOptions DEFAULT = new ViewOptions(MediaFilter.ALL, MediaSort.DATE_TAKEN, true, false);
+
+    /** With the File Explorer switch off (the default). */
+    public ViewOptions(MediaFilter filter, MediaSort sort, boolean descending) {
+        this(filter, sort, descending, false);
+    }
 
     public boolean isDefault() {
         return equals(DEFAULT);
@@ -45,15 +54,27 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
     }
 
     public ViewOptions withFilter(MediaFilter newFilter) {
-        return new ViewOptions(newFilter, sort, descending);
+        return new ViewOptions(newFilter, sort, descending, osHiddenShown);
     }
 
     /** A new sort starts in its natural direction (see {@link MediaSort#descendingByDefault()}). */
     public ViewOptions withSort(MediaSort newSort) {
-        return new ViewOptions(filter, newSort, newSort.descendingByDefault());
+        return new ViewOptions(filter, newSort, newSort.descendingByDefault(), osHiddenShown);
     }
 
     public ViewOptions withDescending(boolean newDescending) {
-        return new ViewOptions(filter, sort, newDescending);
+        return new ViewOptions(filter, sort, newDescending, osHiddenShown);
+    }
+
+    public ViewOptions withOsHiddenShown(boolean shown) {
+        return new ViewOptions(filter, sort, descending, shown);
+    }
+
+    /**
+     * True if both show the same list in the same order, apart from the File Explorer switch: a view then stays
+     * where it is on a reload (only which items are in it changed), instead of starting from the top.
+     */
+    public boolean sameOrder(ViewOptions other) {
+        return other != null && withOsHiddenShown(false).equals(other.withOsHiddenShown(false));
     }
 }

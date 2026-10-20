@@ -1,14 +1,20 @@
 package io.github.mihirvr.prismo.ui;
 
+import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiConsumer;
+import java.util.function.BooleanSupplier;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
+import javafx.css.PseudoClass;
 import javafx.geometry.Bounds;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.IndexedCell;
 import javafx.scene.control.Label;
@@ -16,12 +22,17 @@ import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
 import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.skin.VirtualFlow;
+import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 
 /**
@@ -39,7 +50,15 @@ import javafx.scene.layout.StackPane;
  *
  * <p><b>Item actions.</b> F / H / Delete on the focused photo, and a right-click menu on any tile, run an
  * {@link ItemAction} through the handler set with {@link #setOnAction}. When the photo leaves this view
- * (hidden, trashed…), the focus moves on to its neighbour; the photo itself goes at the next reload.
+ * (hidden, trashed…), the focus moves on to its neighbour; the photo itself goes at the next reload. The menu
+ * also has the file items ({@link FileItems}: Show in folder, Open with default app, Copy with Ctrl+C) and Info
+ * (I or Alt+Enter: the viewer opens with its Info panel), and every entry shows its key.
+ *
+ * <p><b>Selection Mode</b> (P7). Ctrl-click, Space, the check circle on a tile (under the mouse) or the menu's
+ * Select start it; then a click adds or removes a tile, Shift-click (or Shift + an arrow) selects a range, Ctrl+A
+ * selects all. A floating bar shows the count and the actions for the whole selection ({@link ItemAction#forSelection},
+ * Copy, Move to folder); F / H / Delete / Ctrl+C work on it too. Esc or the bar's × clears it. The selection is a set of
+ * media ids ({@link Selection}): a reload keeps what is still shown, a new view (search, filter, page) clears it.
  *
  * <p>All methods run on the JavaFX Application Thread.
  */
@@ -59,8 +78,16 @@ public final class TimelineView extends StackPane {
     /** Ctrl + mouse wheel changes the thumbnail size by this factor per notch. */
     private static final double ZOOM_STEP = 1.1;
     private static final long NO_FOCUS = -1;
+    /** I opens the item with the viewer's Info panel; so does Alt+Enter (File Explorer's Properties key). */
+    private static final KeyCombination INFO = new KeyCodeCombination(KeyCode.I);
+    private static final KeyCombination INFO_EXPLORER_STYLE = new KeyCodeCombination(KeyCode.ENTER,
+            KeyCombination.ALT_DOWN);
     /** Layout passes allowed to settle a scroll-into-view (see {@link #afterLayout}). A safety limit, not tuned. */
     private static final int REVEAL_PASSES = 5;
+    /** On this pane while something is selected: every tile shows its check circle (CSS). */
+    private static final PseudoClass SELECTING = PseudoClass.getPseudoClass("selecting");
+    private static final KeyCombination SELECT_ALL = new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN);
+    private static final double BAR_ICON_SIZE = 18;
 
     private final ListView<TimelineRow> list = new ListView<>();
     private final ThumbnailLoader loader;
@@ -71,11 +98,22 @@ public final class TimelineView extends StackPane {
     private List<TimelineItem> items = List.of();
     /** Date headers on (date sorts) or off (a plain grid). */
     private boolean grouped = true;
+    /** How date headers split the items (Settings › Timeline); shared by every grid. */
+    private Grouping grouping = Grouping.DEFAULT;
     private GridLayout layout = new GridLayout(1, DEFAULT_THUMBNAIL_SIZE);
     private long focusedId = NO_FOCUS;
     private BiConsumer<List<TimelineItem>, Integer> onOpen = (_, _) -> { };
+    private BiConsumer<List<TimelineItem>, Integer> onInfo = (_, _) -> { };
     private ItemAction.Handler onAction = (_, _) -> false;
+    private FileItems fileItems = FileItems.NONE;
+    /** The Settings switch "Show files hidden in File Explorer" (which actions an item gets). */
+    private BooleanSupplier osHiddenShown = () -> false;
     private ContextMenu menu;
+    private final Selection selection = new Selection();
+    /** Library folders that can't be reached right now: their tiles are greyed (P7). */
+    private OfflineFolders offline = OfflineFolders.NONE;
+    /** Floats over the bottom of the grid while something is selected: the count and the actions. */
+    private final HBox selectionBar = new HBox();
     /**
      * How many more layout passes may still scroll the focused photo fully into view; 0 = done. Set by an arrow-key
      * move whose first scroll couldn't be exact (see {@link #scrollIntoView}).
@@ -115,7 +153,12 @@ public final class TimelineView extends StackPane {
         // The list never takes focus (no focus ring or selected-row colours); this pane does, for the arrow keys.
         list.setFocusTraversable(false);
         setFocusTraversable(true);
-        getChildren().add(list);
+        selectionBar.getStyleClass().add("selection-bar");
+        selectionBar.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+        selectionBar.setVisible(false);
+        StackPane.setAlignment(selectionBar, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(selectionBar, new Insets(0, 16, 14, 16));
+        getChildren().addAll(list, selectionBar);
 
         list.widthProperty().addListener((_, _, _) -> relayout());
         thumbnailSize.addListener((_, _, _) -> relayout());
@@ -145,6 +188,8 @@ public final class TimelineView extends StackPane {
     public void setItems(List<TimelineItem> newItems) {
         items = List.copyOf(newItems); // rows hold views into this list, so it must never change
         rebuild(false);
+        selection.retainShown(items);
+        updateSelection(); // also when nothing left it: the actions follow the items (Favorite becomes Remove)
     }
 
     /**
@@ -157,8 +202,10 @@ public final class TimelineView extends StackPane {
         this.grouped = grouped;
         items = List.copyOf(newItems);
         focusedId = NO_FOCUS;
+        selection.clear();
         list.getItems().setAll(buildRows());
         list.scrollTo(0);
+        updateSelection();
     }
 
     /** The first item, or null if there are none. */
@@ -171,9 +218,34 @@ public final class TimelineView extends StackPane {
         this.onOpen = onOpen;
     }
 
+    /** Called like {@link #setOnOpen}, for the Info item and the I key: the viewer opens with its Info panel. */
+    public void setOnInfo(BiConsumer<List<TimelineItem>, Integer> onInfo) {
+        this.onInfo = onInfo;
+    }
+
     /** Runs the item actions (keys and the right-click menu). */
     public void setOnAction(ItemAction.Handler onAction) {
         this.onAction = onAction;
+    }
+
+    /** The Settings switch "Show files hidden in File Explorer", read whenever the actions are worked out. */
+    public void setOsHiddenShown(BooleanSupplier osHiddenShown) {
+        this.osHiddenShown = osHiddenShown;
+    }
+
+    /** Show in folder, Open with default app and Copy (the menu and Ctrl+C). */
+    public void setFileItems(FileItems fileItems) {
+        this.fileItems = fileItems;
+    }
+
+    /** The library folders that can't be reached right now: their tiles are greyed and marked. */
+    public void setOffline(OfflineFolders newOffline) {
+        if (!newOffline.equals(offline)) {
+            offline = newOffline;
+            for (RowCell cell : cells) {
+                cell.updateMarks();
+            }
+        }
     }
 
     /** Puts the keyboard focus on media {@code id} and scrolls it into view (back from the viewer). */
@@ -188,6 +260,14 @@ public final class TimelineView extends StackPane {
 
     public void setThumbnailSize(double size) {
         thumbnailSize.set(Math.clamp(size, MIN_THUMBNAIL_SIZE, MAX_THUMBNAIL_SIZE));
+    }
+
+    /** How date headers split the items (Settings › Timeline); rebuilds the rows, staying on the same photo. */
+    public void setGrouping(Grouping newGrouping) {
+        if (newGrouping != grouping) {
+            grouping = newGrouping;
+            rebuild(false);
+        }
     }
 
     /** Shown when there is nothing to show. */
@@ -205,20 +285,52 @@ public final class TimelineView extends StackPane {
         return focusedId;
     }
 
+    /** The selected items, in the order shown. For tests and tools. */
+    List<TimelineItem> selectedItems() {
+        return selection.items(items);
+    }
+
+    /** The floating bar of Selection Mode. For tests and tools. */
+    HBox selectionBar() {
+        return selectionBar;
+    }
+
     // --- Keyboard focus ---
 
     private void onKey(KeyEvent event) {
+        if (SELECT_ALL.match(event)) {
+            selection.selectAll(items);
+            updateSelection();
+            event.consume();
+            return;
+        }
+        if (!selection.isEmpty() && onSelectionKey(event)) {
+            event.consume();
+            return;
+        }
+        int focused = indexOf(focusedId);
+        if (fileItems.handleKey(event, focused < 0 ? null : items.get(focused))) {
+            event.consume(); // Ctrl+C
+            return;
+        }
+        if (INFO.match(event) || INFO_EXPLORER_STYLE.match(event)) {
+            openInfo(focusedId);
+            event.consume();
+            return;
+        }
         boolean handled = true;
+        long before = focusedId;
         switch (event.getCode()) {
             case LEFT -> moveFocusBy(-1);
             case RIGHT -> moveFocusBy(+1);
             case UP -> moveFocusVertically(-1);
             case DOWN -> moveFocusVertically(+1);
             case ENTER -> open(focusedId);
+            case SPACE -> toggleSelected(focusedId);
             default -> {
                 int at = indexOf(focusedId);
                 ItemAction action = at < 0 || event.isShortcutDown() || event.isAltDown()
-                        ? null : ItemAction.forKey(event.getCode(), items.get(at));
+                        ? null : ItemAction.forKey(event.getCode(), items.get(at), osHiddenShown.getAsBoolean());
                 handled = action != null;
                 if (handled) {
                     perform(action, items.get(at));
@@ -228,6 +340,116 @@ public final class TimelineView extends StackPane {
         if (handled) {
             event.consume();
         }
+        if (event.isShiftDown() && event.getCode().isArrowKey() && focusedId != NO_FOCUS) {
+            // Shift + arrow: from where the focus was to where it is now, like File Explorer.
+            selection.anchorAt(before == NO_FOCUS ? focusedId : before);
+            selection.selectRange(items, focusedId, false);
+            updateSelection();
+        }
+    }
+
+    /**
+     * Keys that work on the whole selection: Esc clears it, Ctrl+C copies every file, F / H / Delete do the
+     * selection bar's action.
+     *
+     * @return true if the key was used
+     */
+    private boolean onSelectionKey(KeyEvent event) {
+        if (event.getCode() == KeyCode.ESCAPE) {
+            clearSelection();
+            return true;
+        }
+        if (FileItems.COPY.match(event)) {
+            fileItems.copy(selectedItems());
+            return true;
+        }
+        ItemAction action = event.isShortcutDown() || event.isAltDown() ? null
+                : ItemAction.forSelectionKey(event.getCode(), selectedItems(), osHiddenShown.getAsBoolean());
+        if (action == null) {
+            return false;
+        }
+        performOnSelection(action);
+        return true;
+    }
+
+    // --- Selection Mode ---
+
+    /** Adds or removes one item, and puts the keyboard focus on it. */
+    private void toggleSelected(long id) {
+        if (indexOf(id) < 0) {
+            return;
+        }
+        selection.toggle(id);
+        moveFocus(id);
+        updateSelection();
+    }
+
+    private void clearSelection() {
+        selection.clear();
+        updateSelection();
+    }
+
+    /** Runs a selection bar action on every selected item; after anything but a favorite change, the selection ends. */
+    private void performOnSelection(ItemAction action) {
+        List<TimelineItem> chosen = selectedItems();
+        if (chosen.isEmpty()) {
+            return;
+        }
+        if (onAction.performAll(action, chosen)
+                && !action.keepsItemInView(chosen.getFirst(), osHiddenShown.getAsBoolean())) {
+            clearSelection();
+        }
+    }
+
+    /** Shows the selection on the tiles and in the bar (hidden when nothing is selected). */
+    private void updateSelection() {
+        boolean selecting = !selection.isEmpty();
+        pseudoClassStateChanged(SELECTING, selecting);
+        for (RowCell cell : cells) {
+            cell.updateMarks();
+        }
+        selectionBar.setVisible(selecting);
+        if (!selecting) {
+            selectionBar.getChildren().clear();
+            return;
+        }
+        List<TimelineItem> chosen = selectedItems();
+        Button clear = barButton(Icon.CLOSE, null, "Clear selection (Esc)", this::clearSelection);
+        Label count = new Label("%,d selected".formatted(chosen.size()));
+        count.getStyleClass().add("selection-count");
+        Region gap = new Region();
+        gap.getStyleClass().add("selection-gap");
+        selectionBar.getChildren().setAll(clear, count, gap);
+        boolean shown = osHiddenShown.getAsBoolean();
+        for (ItemAction action : ItemAction.forSelection(chosen, shown)) {
+            selectionBar.getChildren().add(barButton(action.icon(), action.buttonText(), action.tooltip(),
+                    () -> performOnSelection(action)));
+        }
+        selectionBar.getChildren().add(barButton(Icon.COPY, null, "Copy (" + FileItems.COPY.getDisplayText() + ")",
+                () -> fileItems.copy(selectedItems())));
+        if (fileItems.canMove(chosen)) {
+            selectionBar.getChildren().add(barButton(Icon.MOVE, null, "Move to folder\u2026",
+                    () -> fileItems.move(selectedItems())));
+        }
+        Button all = barButton(Icon.CHECK, "Select all", "Select all (" + SELECT_ALL.getDisplayText() + ")", () -> {
+            selection.selectAll(items);
+            updateSelection();
+        });
+        all.setDisable(chosen.size() == items.size());
+        selectionBar.getChildren().add(all);
+    }
+
+    /** A button of the selection bar: an icon, maybe a few words, and a tooltip naming it with its key. */
+    private Button barButton(Icon icon, String text, String tooltip, Runnable action) {
+        Button button = new Button(text, icon.node(BAR_ICON_SIZE));
+        button.getStyleClass().add("selection-button");
+        if (text == null) {
+            button.getStyleClass().add("icon-button");
+        }
+        button.setTooltip(new Tooltip(tooltip));
+        button.setFocusTraversable(false); // keys stay with the grid
+        button.setOnAction(_ -> action.run());
+        return button;
     }
 
     /** Left / Right: the previous / next item in Timeline order, across rows and groups. */
@@ -270,7 +492,7 @@ public final class TimelineView extends StackPane {
     private void moveFocus(long id) {
         focusedId = id;
         for (RowCell cell : cells) {
-            cell.updateFocusRings();
+            cell.updateMarks();
         }
         if (!scrollIntoView(id)) {
             revealPasses = REVEAL_PASSES; // check again once the scroll has been laid out
@@ -326,10 +548,19 @@ public final class TimelineView extends StackPane {
         }
     }
 
+    /** Opens media {@code id} with the viewer's Info panel. */
+    private void openInfo(long id) {
+        int at = indexOf(id);
+        if (at >= 0) {
+            onInfo.accept(items, at);
+        }
+    }
+
     /** Runs {@code action}; if the item leaves this view, the focus moves to the next item (or the previous). */
     private void perform(ItemAction action, TimelineItem item) {
         int at = indexOf(item.ref().id());
-        if (!onAction.perform(action, item) || action.keepsItemInView() || at < 0 || item.ref().id() != focusedId) {
+        if (!onAction.perform(action, item) || action.keepsItemInView(item, osHiddenShown.getAsBoolean()) || at < 0
+                || item.ref().id() != focusedId) {
             return;
         }
         if (at + 1 < items.size()) {
@@ -339,7 +570,10 @@ public final class TimelineView extends StackPane {
         }
     }
 
-    /** The right-click menu for one tile: Open, then what {@link ItemAction#available} allows. */
+    /**
+     * The right-click menu for one tile: Open, then what {@link ItemAction#forMenu} allows, then the file items.
+     * Each entry shows its key (shown only: the keys themselves are handled in {@link #onKey}).
+     */
     private void showMenu(ThumbnailTile tile, double screenX, double screenY) {
         int at = tile.ref() == null ? -1 : indexOf(tile.ref().id());
         if (at < 0) {
@@ -350,15 +584,47 @@ public final class TimelineView extends StackPane {
         if (menu != null) {
             menu.hide();
         }
-        MenuItem open = new MenuItem("Open");
-        open.setOnAction(_ -> open(item.ref().id()));
-        menu = new ContextMenu(open, new SeparatorMenuItem());
-        for (ItemAction action : ItemAction.available(item)) {
-            MenuItem entry = new MenuItem(action.menuText());
-            entry.setOnAction(_ -> perform(action, item));
-            menu.getItems().add(entry);
+        if (selection.size() > 1 && selection.contains(item.ref().id())) {
+            menu = selectionMenu();
+            menu.show(tile, screenX, screenY);
+            return;
         }
+        MenuItem open = Menus.item("Open", Icon.IMAGE, new KeyCodeCombination(KeyCode.ENTER),
+                () -> open(item.ref().id()));
+        MenuItem select = Menus.item(selection.contains(item.ref().id()) ? "Unselect" : "Select", Icon.CHECK,
+                new KeyCodeCombination(KeyCode.SPACE), () -> toggleSelected(item.ref().id()));
+        menu = new ContextMenu(open, select, new SeparatorMenuItem());
+        for (ItemAction action : ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, osHiddenShown.getAsBoolean())) {
+            menu.getItems().add(Menus.item(action.menuText(), action.icon(),
+                    action.shortcut(item, osHiddenShown.getAsBoolean()),
+                    () -> perform(action, item)));
+        }
+        menu.getItems().add(new SeparatorMenuItem());
+        menu.getItems().addAll(fileItems.menuItems(item));
+        menu.getItems().add(Menus.item("Info", Icon.INFO, INFO, () -> openInfo(item.ref().id())));
         menu.show(tile, screenX, screenY);
+    }
+
+    /** The right-click menu on a selected tile while several are selected: what the selection bar does. */
+    private ContextMenu selectionMenu() {
+        List<TimelineItem> chosen = selectedItems();
+        ContextMenu selected = new ContextMenu();
+        MenuItem count = new MenuItem("%,d selected".formatted(chosen.size()));
+        count.setDisable(true);
+        selected.getItems().addAll(count, new SeparatorMenuItem());
+        for (ItemAction action : ItemAction.forSelection(chosen, osHiddenShown.getAsBoolean())) {
+            selected.getItems().add(Menus.item(action.menuText(), action.icon(), action.shortcut(),
+                    () -> performOnSelection(action)));
+        }
+        selected.getItems().add(new SeparatorMenuItem());
+        selected.getItems().addAll(fileItems.menuItems(chosen));
+        selected.getItems().addAll(new SeparatorMenuItem(),
+                Menus.item("Select all", Icon.CHECK, SELECT_ALL, () -> {
+                    selection.selectAll(items);
+                    updateSelection();
+                }),
+                Menus.item("Clear selection", Icon.CLOSE, new KeyCodeCombination(KeyCode.ESCAPE), this::clearSelection));
+        return selected;
     }
 
     /** Position in {@link #items}, or -1. A linear scan: one click or key press, ~1 ms for 100,000 items. */
@@ -414,7 +680,7 @@ public final class TimelineView extends StackPane {
     }
 
     private List<TimelineRow> buildRows() {
-        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay(), grouped);
+        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay(), grouping, grouped);
     }
 
     /** Which photo is at the top of the view now, or null at the very top / before the first layout. */
@@ -488,16 +754,20 @@ public final class TimelineView extends StackPane {
                         tiles.get(i).show(rowItems.get(i).ref(), layout.cellSize());
                         tiles.get(i).setFavorite(rowItems.get(i).favorite());
                         tiles.get(i).setVideoLength(rowItems.get(i).durationSeconds());
+                        tiles.get(i).setWatchProgress(rowItems.get(i).watchedSeconds(), rowItems.get(i).durationSeconds());
                     }
                     setGraphic(thumbs);
                 }
             }
-            updateFocusRings();
+            updateMarks();
         }
 
-        void updateFocusRings() {
+        /** The focus ring, the selected look and the offline mark of each tile. */
+        void updateMarks() {
             for (ThumbnailTile tile : tiles) {
                 tile.setFocusRing(tile.ref() != null && tile.ref().id() == focusedId);
+                tile.setSelected(tile.ref() != null && selection.contains(tile.ref().id()));
+                tile.setOffline(tile.ref() != null && offline.contains(tile.ref().path()));
             }
         }
 
@@ -514,16 +784,29 @@ public final class TimelineView extends StackPane {
             }
         }
 
-        /** A tile that opens its photo on a click (a click, not the end of a drag). */
+        /**
+         * A tile that opens its photo on a click (a click, not the end of a drag). Ctrl-click, and any click while
+         * something is selected, adds or removes it instead; Shift-click selects a range (Ctrl+Shift adds one).
+         */
         private ThumbnailTile newTile() {
             ThumbnailTile tile = new ThumbnailTile(loader);
             tile.setOnMouseClicked(event -> {
                 if (event.getButton() == MouseButton.PRIMARY && event.isStillSincePress() && tile.ref() != null) {
                     long id = tile.ref().id();
-                    moveFocus(id);
-                    open(id);
+                    if (event.isShiftDown()) {
+                        selection.anchorAt(focusedId != NO_FOCUS ? focusedId : id);
+                        selection.selectRange(items, id, event.isShortcutDown());
+                        moveFocus(id);
+                        updateSelection();
+                    } else if (event.isShortcutDown() || !selection.isEmpty()) {
+                        toggleSelected(id);
+                    } else {
+                        moveFocus(id);
+                        open(id);
+                    }
                 }
             });
+            tile.setOnCheck(() -> toggleSelected(tile.ref().id()));
             tile.setOnContextMenuRequested(event -> {
                 showMenu(tile, event.getScreenX(), event.getScreenY());
                 event.consume();

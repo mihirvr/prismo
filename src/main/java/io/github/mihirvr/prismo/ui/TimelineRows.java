@@ -16,14 +16,25 @@ final class TimelineRows {
      * @param today the current day ({@link DateGroups#dayOf} units), for "Today" / "Yesterday"
      */
     static List<TimelineRow> build(List<TimelineItem> items, int columns, long today) {
-        return build(items, columns, today, true);
+        return build(items, columns, today, Grouping.SMART);
+    }
+
+    /** Like {@link #build(List, int, long)}, grouped the way {@code grouping} says. */
+    static List<TimelineRow> build(List<TimelineItem> items, int columns, long today, Grouping grouping) {
+        return build(items, columns, today, grouping, true);
+    }
+
+    /** Like {@link #build(List, int, long, Grouping, boolean)} with Smart grouping. */
+    static List<TimelineRow> build(List<TimelineItem> items, int columns, long today, boolean grouped) {
+        return build(items, columns, today, Grouping.SMART, grouped);
     }
 
     /**
      * Like {@link #build(List, int, long)}, or with {@code grouped} false (sorts that aren't by date): no
      * headers, just rows of {@code columns}.
      */
-    static List<TimelineRow> build(List<TimelineItem> items, int columns, long today, boolean grouped) {
+    static List<TimelineRow> build(List<TimelineItem> items, int columns, long today, Grouping grouping,
+            boolean grouped) {
         if (columns < 1) {
             throw new IllegalArgumentException("columns must be at least 1: " + columns);
         }
@@ -36,12 +47,13 @@ final class TimelineRows {
         }
         int start = 0;
         while (start < items.size()) {
-            long group = DateGroups.groupOf(DateGroups.dayOf(items.get(start).sortDate()), today);
+            long group = DateGroups.groupOf(DateGroups.dayOf(items.get(start).sortDate()), today, grouping);
             int end = start + 1;
-            while (end < items.size() && DateGroups.groupOf(DateGroups.dayOf(items.get(end).sortDate()), today) == group) {
+            while (end < items.size()
+                    && DateGroups.groupOf(DateGroups.dayOf(items.get(end).sortDate()), today, grouping) == group) {
                 end++;
             }
-            rows.add(new TimelineRow.Header(DateGroups.labelOf(group), end - start));
+            rows.add(new TimelineRow.Header(DateGroups.labelOf(group, grouping), end - start));
             for (int from = start; from < end; from += columns) {
                 // A view into the caller's list, not a copy: the caller must not change the list afterwards.
                 rows.add(new TimelineRow.Thumbs(items.subList(from, Math.min(from + columns, end))));

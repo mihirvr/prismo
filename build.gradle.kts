@@ -60,6 +60,15 @@ application {
     applicationDefaultJvmArgs = listOf(nativeAccess)
 }
 
+// Settings › About shows the version: written into app.properties when the resources are copied.
+tasks.processResources {
+    val appVersion = project.version.toString()
+    inputs.property("appVersion", appVersion)
+    filesMatching("app.properties") {
+        expand("version" to appVersion)
+    }
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.compilerArgs.addAll(listOf("-Xlint:all", "-Werror"))

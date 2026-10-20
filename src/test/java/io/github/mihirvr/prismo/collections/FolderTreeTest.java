@@ -44,6 +44,17 @@ class FolderTreeTest {
     }
 
     @Test
+    void aLibraryFolderShowsOnlyItsLastPartAndADriveStaysWhole() {
+        Path photos = tmp.resolve("Photos").resolve("Holidays");
+        FolderTree.Node top = FolderTree.build(List.of(photos), Map.of(photos, 1)).getFirst();
+
+        assertEquals("Holidays", top.shownName(), "the whole path is its name (for sorting), not what's shown");
+        Path drive = tmp.getRoot();
+        assertEquals(drive.toString(), new FolderTree.Node(drive.toString(), drive.toString(), 0, 0, List.of())
+                .shownName(), "a drive has no last part");
+    }
+
+    @Test
     void libraryFoldersStayInTheirOrderAndStrayFoldersComeLast() {
         Path b = tmp.resolve("b");
         Path a = tmp.resolve("a");

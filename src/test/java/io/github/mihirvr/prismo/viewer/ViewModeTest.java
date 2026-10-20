@@ -17,9 +17,10 @@ class ViewModeTest {
         for (String video : new String[] {"mp4", "M4V", "mov", "mkv", "webm", "avi"}) {
             assertEquals(ViewMode.VIDEO, ViewMode.of(video), video); // all played in the app (FFmpeg)
         }
-        for (String external : new String[] {"heic", "nef", "cr2"}) {
-            assertEquals(ViewMode.EXTERNAL, ViewMode.of(external), external);
+        for (String other : new String[] {"heic", "nef", "cr2"}) {
+            assertEquals(ViewMode.STILL, ViewMode.of(other), other); // through OtherStills since P7
         }
+        assertEquals(ViewMode.EXTERNAL, ViewMode.of("xyz"), "a type nothing can show");
     }
 
     @Test

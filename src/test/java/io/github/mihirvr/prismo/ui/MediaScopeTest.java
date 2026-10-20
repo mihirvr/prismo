@@ -85,6 +85,41 @@ class MediaScopeTest {
         }
     }
 
+    /**
+     * Files hidden in File Explorer (os_hidden): 2 (Goa), 3 (Goa favorite) and 4 (also hidden in Prismo). The
+     * Settings switch "Show files hidden in File Explorer": off (the default) they are only on Hidden; on, they are
+     * like any other file, and on Hidden only if Prismo hid them too.
+     */
+    @Test
+    void filesHiddenInFileExplorerFollowTheSettingsSwitch() throws Exception {
+        try (Database database = library()) {
+            database.write(c -> {
+                try (Statement update = c.createStatement()) {
+                    return update.executeUpdate("UPDATE media SET os_hidden = 1 WHERE id IN (2, 3, 4)");
+                }
+            }).get();
+            ViewOptions off = ViewOptions.DEFAULT;
+            ViewOptions on = ViewOptions.DEFAULT.withOsHiddenShown(true);
+
+            assertEquals(List.of(9L, 6L, 1L), ids(database, MediaScope.LIBRARY, off));
+            assertEquals(List.of(), ids(database, MediaScope.FAVORITES, off));
+            assertEquals(List.of(7L, 4L, 3L, 2L), ids(database, MediaScope.HIDDEN, off));
+            assertEquals(List.of(1L), ids(database, MediaScope.folder(PHOTOS, true), off));
+            assertEquals(List.of(1L, 6L, 9L), ids(database, MediaScope.RECENTLY_ADDED, off));
+
+            assertEquals(List.of(9L, 6L, 3L, 2L, 1L), ids(database, MediaScope.LIBRARY, on));
+            assertEquals(List.of(3L), ids(database, MediaScope.FAVORITES, on));
+            assertEquals(List.of(7L, 4L), ids(database, MediaScope.HIDDEN, on), "4 is hidden in Prismo too");
+            assertEquals(List.of(3L, 2L, 1L), ids(database, MediaScope.folder(PHOTOS, true), on));
+            assertEquals(List.of(1L, 2L, 3L, 6L, 9L), ids(database, MediaScope.RECENTLY_ADDED, on));
+
+            assertEquals(List.of(10L, 8L, 5L), ids(database, MediaScope.TRASH, off), "Trash: the switch changes nothing");
+            assertEquals(List.of(10L, 8L, 5L), ids(database, MediaScope.TRASH, on));
+            assertTrue(MediaScope.LIBRARY.sqlCondition(false).contains("os_hidden = 0"));
+            assertFalse(MediaScope.LIBRARY.sqlCondition(true).contains("os_hidden"));
+        }
+    }
+
     @Test
     void everyPageLeavesOutADisabledLibraryFolder() throws Exception {
         try (Database database = library()) {

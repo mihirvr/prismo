@@ -23,9 +23,9 @@ class SlideshowTest {
     @Test
     void stepsThroughPicturesSkippingVideosAndUnshowableFiles() {
         //                                  0      1      2      3      4      5      6
-        List<TimelineItem> items = items("jpg", "mp4", "mov", "heic", "gif", "png", "mkv");
+        List<TimelineItem> items = items("jpg", "mp4", "mov", "xyz", "gif", "png", "mkv");
 
-        assertEquals(4, Slideshow.next(items, 0)); // skips mp4, mov, heic
+        assertEquals(4, Slideshow.next(items, 0)); // skips mp4, mov, xyz (HEIC is shown since P7)
         assertEquals(5, Slideshow.next(items, 4));
         assertEquals(0, Slideshow.next(items, -1)); // starting before the first
     }

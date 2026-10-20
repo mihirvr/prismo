@@ -1,0 +1,42 @@
+/*
+ * The Dark look: loaded after prismo.css (see ui/Theme.java). It only redefines prismo.css's named colours and
+ * the logo, so every rule there applies unchanged. Text contrast on the page is about 15:1 (text), 7.7:1 (muted).
+ */
+
+.root {
+    -prismo-accent: #3366ff;
+    -prismo-accent-hover: #4a78ff;
+    -prismo-accent-tint: #1e2a4d;
+    -prismo-accent-text: #8eabff;
+    -prismo-on-accent: #ffffff;
+    -prismo-bg: #14161b;
+    -prismo-surface: #1c1f26;
+    -prismo-text: #e8eaf0;
+    -prismo-text-muted: #a3a9b7;
+    -prismo-text-faint: #6e7584;
+    -prismo-border: #2d313b;
+    -prismo-border-strong: #424857;
+    -prismo-hover: #262a33;
+    -prismo-pressed: #2f343f;
+    -prismo-tile: #242831;
+    -prismo-tile-failed: #3d2428;
+    -prismo-favorite: #ff4f7b;
+    -prismo-warning: #f0a35e;
+    -prismo-warning-tint: #33261b;
+    -prismo-icon: #c3c8d3;
+    -prismo-tab-hover: rgba(255, 255, 255, 0.06);
+    -prismo-scrollbar: rgba(255, 255, 255, 0.22);
+    -prismo-scrollbar-hover: rgba(255, 255, 255, 0.38);
+    -prismo-tooltip-bg: #2e3340;
+    -prismo-tooltip-text: #f2f3f6;
+    -prismo-card: #1c1f26;
+    -prismo-viewer-bg: #0e0f13;
+
+    /* Modena works out the colours of anything prismo.css doesn't style from this (dark, so its text is light). */
+    -fx-base: #2a2e37;
+}
+
+/* The logo with light lettering, made for dark backgrounds. */
+.empty-state-logo {
+    -fx-image: url("logo/prismo-text-dark.png");
+}

@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.index;
 
 import io.github.mihirvr.prismo.db.Database;
+import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.FileVisitResult;
@@ -11,7 +12,9 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +39,8 @@ import org.slf4j.LoggerFactory;
  * <ol>
  *   <li>Load what's already indexed under the folder (one query).</li>
  *   <li>Walk the folder tree on the calling thread. Media files whose size and modified time are
- *       unchanged are skipped without opening them.</li>
+ *       unchanged are skipped without opening them. If only their Hidden mark changed (Windows' Hidden
+ *       attribute, {@link OsHiddenMark}: it comes with the walk's attributes), just the mark is written.</li>
  *   <li>New or changed files are collected into chunks of {@code batchSize}. Each chunk's metadata is
  *       read in parallel on virtual threads (at most {@code MAX_PARALLEL_READS} files open at once).</li>
  *   <li>Each chunk is written in one transaction by the database's single writer thread. While chunk N
@@ -63,15 +68,26 @@ public final class Indexer {
     private final Database database;
     private final MetadataReader metadataReader;
     private final int batchSize;
+    /** The ignored folders, read at the start of each run (Settings can change them). */
+    private final Supplier<IgnoreRules> ignoreRules;
 
     public Indexer(Database database, MetadataReader metadataReader) {
-        this(database, metadataReader, DEFAULT_BATCH_SIZE);
+        this(database, metadataReader, () -> IgnoreRules.NONE);
+    }
+
+    public Indexer(Database database, MetadataReader metadataReader, Supplier<IgnoreRules> ignoreRules) {
+        this(database, metadataReader, DEFAULT_BATCH_SIZE, ignoreRules);
     }
 
     Indexer(Database database, MetadataReader metadataReader, int batchSize) {
+        this(database, metadataReader, batchSize, () -> IgnoreRules.NONE);
+    }
+
+    Indexer(Database database, MetadataReader metadataReader, int batchSize, Supplier<IgnoreRules> ignoreRules) {
         this.database = database;
         this.metadataReader = metadataReader;
         this.batchSize = batchSize;
+        this.ignoreRules = ignoreRules;
     }
 
     /**
@@ -108,7 +124,7 @@ public final class Indexer {
                     continue;
                 }
                 for (Path path : entry.getValue()) {
-                    run.indexPath(path, readers);
+                    run.indexPath(entry.getKey(), path, readers);
                 }
             }
             run.finish(readers);
@@ -120,6 +136,7 @@ public final class Indexer {
     private final class Run {
 
         private final Consumer<IndexProgress> progress;
+        private final IgnoreRules ignore = ignoreRules.get();
         private final long startNanos = System.nanoTime();
         private final Semaphore openFiles = new Semaphore(MAX_PARALLEL_READS);
         private final List<PendingFile> chunk = new ArrayList<>();
@@ -131,6 +148,8 @@ public final class Indexer {
         private final Map<String, MediaStore.Row> gone = new LinkedHashMap<>();
         /** Watcher paths that no longer exist; their rows are looked up together in {@link #finish}. */
         private final List<Path> missing = new ArrayList<>();
+        /** Unchanged files whose Hidden mark changed: media id → the mark now. Written in {@link #finish}. */
+        private final Map<Long, Boolean> markChanged = new LinkedHashMap<>();
         private CompletableFuture<Integer> pendingWrite = CompletableFuture.completedFuture(0);
         private long lastReportNanos;
         private int found;
@@ -154,14 +173,20 @@ public final class Indexer {
                 failed++;
                 return;
             }
-            indexFolder(realRoot, readers);
+            indexFolder(realRoot, realRoot, false, readers);
         }
 
-        /** A watcher path: a folder to walk, a file to index, or something gone. */
-        void indexPath(Path path, ExecutorService readers) throws InterruptedException, SQLException {
+        /**
+         * A watcher path under library folder {@code root}: a folder to walk, a file to index, or something gone.
+         * A path in an ignored folder is left alone.
+         */
+        void indexPath(Path root, Path path, ExecutorService readers) throws InterruptedException, SQLException {
+            if (ignore.ignores(root, path)) {
+                return;
+            }
             BasicFileAttributes attrs;
             try {
-                attrs = Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+                attrs = OsHiddenMark.read(path); // with the Hidden mark where there is one
             } catch (IOException e) {
                 if (Files.notExists(path, LinkOption.NOFOLLOW_LINKS)) {
                     missing.add(path);
@@ -170,19 +195,46 @@ public final class Indexer {
                 }
                 return;
             }
+            boolean inHiddenFolder = inHiddenFolder(root, path);
             if (attrs.isDirectory()) {
-                indexFolder(path, readers);
+                indexFolder(root, path, inHiddenFolder, readers);
             } else if (attrs.isRegularFile()) {
                 Optional<MediaStore.Row> row = database.read(c -> MediaStore.rowAt(c, path.toString()));
-                indexFile(path, attrs, row.orElse(null), readers);
+                indexFile(path, attrs, row.orElse(null), inHiddenFolder, readers);
             }
         }
 
-        /** Walks {@code folder}; afterwards, rows under it whose file wasn't seen are gone. */
-        private void indexFolder(Path folder, ExecutorService readers) throws InterruptedException, SQLException {
+        /**
+         * True if a folder between {@code root} and {@code path} (not the library folder itself, not the path)
+         * has the Hidden mark. Only for watcher paths: a whole walk learns it on the way down.
+         */
+        private static boolean inHiddenFolder(Path root, Path path) {
+            if (!OsHiddenMark.SUPPORTED) {
+                return false;
+            }
+            for (Path folder = path.getParent(); folder != null && folder.startsWith(root) && !folder.equals(root);
+                    folder = folder.getParent()) {
+                try {
+                    if (OsHiddenMark.isHidden(OsHiddenMark.read(folder))) {
+                        return true;
+                    }
+                } catch (IOException e) {
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Walks {@code folder} (in library folder {@code root}; {@code inHiddenFolder}: a folder above it is
+         * marked Hidden); afterwards, rows under it whose file wasn't seen are gone, including those in folders
+         * that are now ignored.
+         */
+        private void indexFolder(Path root, Path folder, boolean inHiddenFolder, ExecutorService readers)
+                throws InterruptedException, SQLException {
             Map<String, MediaStore.Row> known = database.read(c -> MediaStore.rowsUnder(c, folder));
             log.info("Indexing {} ({} files already known)", folder, known.size());
-            Visitor visitor = new Visitor(known, readers);
+            Visitor visitor = new Visitor(root, known, inHiddenFolder, readers);
             try {
                 Files.walkFileTree(folder, visitor);
             } catch (IOException e) {
@@ -203,8 +255,8 @@ public final class Indexer {
             }
         }
 
-        private void indexFile(Path file, BasicFileAttributes attrs, MediaStore.Row row, ExecutorService readers)
-                throws InterruptedException {
+        private void indexFile(Path file, BasicFileAttributes attrs, MediaStore.Row row, boolean inHiddenFolder,
+                ExecutorService readers) throws InterruptedException {
             MediaType type = MediaType.fromExtension(MediaType.extensionOf(file.getFileName().toString())).orElse(null);
             if (type == null || !handled.add(file.toString())) {
                 return;
@@ -212,15 +264,22 @@ public final class Indexer {
             found++;
             long size = attrs.size();
             long modified = attrs.lastModifiedTime().toMillis();
+            // Hidden in File Explorer: the file's own mark, or a folder above it marked Hidden.
+            boolean osHidden = OsHiddenMark.isHidden(attrs) || inHiddenFolder;
             if (row != null && row.sizeBytes() == size && row.dateModified() == modified) {
-                unchanged++;
+                if (row.osHidden() == osHidden) {
+                    unchanged++;
+                } else {
+                    markChanged.put(row.id(), osHidden); // hidden or shown in Explorer: the file itself is the same
+                    indexed++;
+                }
                 report();
                 return;
             }
             if (row == null) {
                 added.add(new MoveMatcher.Found(file.toString(), size, modified));
             }
-            chunk.add(new PendingFile(file, type, size, modified));
+            chunk.add(new PendingFile(file, type, size, modified, osHidden));
             if (chunk.size() >= batchSize) {
                 flush(readers);
             }
@@ -256,7 +315,8 @@ public final class Indexer {
                 futures.add(readers.submit(() -> {
                     openFiles.acquire();
                     try {
-                        return metadataReader.read(file.path(), file.type(), file.size(), file.modified());
+                        return metadataReader.read(file.path(), file.type(), file.size(), file.modified())
+                                .withOsHidden(file.osHidden());
                     } finally {
                         openFiles.release();
                     }
@@ -284,10 +344,21 @@ public final class Indexer {
             report();
         }
 
-        /** Writes the last chunk, then turns gone rows into moves or removals (one transaction). */
+        /**
+         * Writes the last chunk and the changed Hidden marks, then turns gone rows into moves or removals (one
+         * transaction).
+         */
         void finish(ExecutorService readers) throws InterruptedException, SQLException {
             flush(readers);
             awaitPendingWrite();
+            if (!markChanged.isEmpty()) {
+                Map<Long, Boolean> marks = Map.copyOf(markChanged);
+                pendingWrite = database.write(connection -> {
+                    MediaStore.setOsHidden(connection, marks);
+                    return marks.size();
+                });
+                awaitPendingWrite();
+            }
             collectMissing();
             if (gone.isEmpty()) {
                 return;
@@ -335,21 +406,37 @@ public final class Indexer {
 
         private final class Visitor extends SimpleFileVisitor<Path> {
 
+            private final Path root;
             private final Map<String, MediaStore.Row> known;
+            private final boolean startsInHiddenFolder;
             private final ExecutorService readers;
+            /** The folders marked Hidden that the walk is inside of, innermost first. */
+            private final Deque<Path> hiddenFolders = new ArrayDeque<>();
             /** Every media file seen on this walk. */
             final Set<String> seen = new HashSet<>();
             /** Folders (and files) that couldn't be read: rows under them are not "gone", just not visible. */
             private final List<String> unreadable = new ArrayList<>();
 
-            Visitor(Map<String, MediaStore.Row> known, ExecutorService readers) {
+            Visitor(Path root, Map<String, MediaStore.Row> known, boolean startsInHiddenFolder,
+                    ExecutorService readers) {
+                this.root = root;
                 this.known = known;
+                this.startsInHiddenFolder = startsInHiddenFolder;
                 this.readers = readers;
             }
 
             @Override
             public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
-                return Thread.currentThread().isInterrupted() ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+                if (Thread.currentThread().isInterrupted()) {
+                    return FileVisitResult.TERMINATE;
+                }
+                if (ignore.ignores(root, dir)) {
+                    return FileVisitResult.SKIP_SUBTREE; // its rows aren't seen, so they leave the library
+                }
+                if (!dir.equals(root) && OsHiddenMark.isHidden(attrs)) {
+                    hiddenFolders.push(dir); // the library folder itself was picked on purpose: it doesn't count
+                }
+                return FileVisitResult.CONTINUE;
             }
 
             @Override
@@ -359,7 +446,8 @@ public final class Indexer {
                 }
                 seen.add(file.toString());
                 try {
-                    indexFile(file, attrs, known.get(file.toString()), readers);
+                    indexFile(file, attrs, known.get(file.toString()), startsInHiddenFolder || !hiddenFolders.isEmpty(),
+                            readers);
                 } catch (InterruptedException e) {
                     // FileVisitor methods can't throw checked InterruptedException; tunnel it out.
                     throw new UncheckedInterrupt(e);
@@ -378,6 +466,9 @@ public final class Indexer {
 
             @Override
             public FileVisitResult postVisitDirectory(Path dir, IOException e) {
+                if (dir.equals(hiddenFolders.peek())) {
+                    hiddenFolders.pop();
+                }
                 if (e != null) {
                     // Listing the folder broke off part-way: what wasn't listed isn't known to be gone.
                     log.debug("Could not finish reading {}: {}", dir, e.toString());
@@ -398,7 +489,7 @@ public final class Indexer {
         }
     }
 
-    private record PendingFile(Path path, MediaType type, long size, long modified) {
+    private record PendingFile(Path path, MediaType type, long size, long modified, boolean osHidden) {
     }
 
     /** Carries an InterruptedException through FileVisitor, whose methods may only throw IOException. */

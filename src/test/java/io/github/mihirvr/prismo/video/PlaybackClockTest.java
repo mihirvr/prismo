@@ -32,6 +32,30 @@ class PlaybackClockTest {
     }
 
     @Test
+    void atASpeedMediaTimeRunsThatMuchFasterOnTheWallClock() {
+        clock.play();
+        nanos += 1_000_000_000L;
+        clock.setSpeed(2);
+        assertEquals(1_000_000, clock.now(), "the time so far is kept");
+        nanos += 1_000_000_000L;
+        assertEquals(3_000_000, clock.now(), "one real second = two media seconds");
+        clock.setSpeed(0.5);
+        nanos += 1_000_000_000L;
+        assertEquals(3_500_000, clock.now());
+        assertEquals(0.5, clock.speed());
+    }
+
+    @Test
+    void atASpeedEachPlayedSampleCountsForThatMuchMediaTime() {
+        clock.useSound(() -> frames, 48_000);
+        clock.setSpeed(1.5);
+        clock.play();
+        clock.soundStarts(0, 0);
+        frames += 48_000; // one second of (sped-up) sound played
+        assertEquals(1_500_000, clock.now());
+    }
+
+    @Test
     void seekJumpsAndRunsOnFromThere() {
         clock.play();
         nanos += 2_000_000_000L;

@@ -15,6 +15,11 @@ final class PlaybackTime {
         return clock(currentSeconds, hours) + " / " + clock(totalSeconds, hours);
     }
 
+    /** One time on its own ("1:23", or "1:02:03" from an hour on), e.g. "Resumed at 1:23". */
+    static String clock(double seconds) {
+        return clock(seconds, Double.isFinite(seconds) && seconds >= 3600);
+    }
+
     private static String clock(double seconds, boolean hours) {
         long s = Double.isFinite(seconds) && seconds > 0 ? (long) seconds : 0; // unknown / NaN → 0:00
         return hours

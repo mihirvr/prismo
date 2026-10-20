@@ -85,7 +85,7 @@ public final class SearchSql {
 
     static Built build(SearchQuery query, ViewOptions options) {
         StringBuilder sql = new StringBuilder("SELECT ").append(TimelineQuery.columns(options))
-                .append(" FROM media WHERE ").append(MediaScope.LIBRARY.sqlCondition());
+                .append(" FROM media WHERE ").append(MediaScope.LIBRARY.sqlCondition(options.osHiddenShown()));
         if (options.sqlCondition() != null) {
             sql.append(" AND ").append(options.sqlCondition());
         }

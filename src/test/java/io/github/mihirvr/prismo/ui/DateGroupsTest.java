@@ -48,6 +48,37 @@ class DateGroupsTest {
                 DateGroups.groupOf(LocalDate.of(2026, 8, 31).toEpochDay(), today));
     }
 
+    @Test
+    void theOtherGroupings() {
+        long today = LocalDate.of(2026, 10, 20).toEpochDay(); // a Tuesday
+
+        assertEquals("Today", label(LocalDate.of(2026, 10, 20), today, Grouping.DAY));
+        assertEquals("Yesterday", label(LocalDate.of(2026, 10, 19), today, Grouping.DAY));
+        assertEquals("Sunday, 18 October 2026", label(LocalDate.of(2026, 10, 18), today, Grouping.DAY));
+        assertEquals("Week of 19 October 2026", label(LocalDate.of(2026, 10, 20), today, Grouping.WEEK),
+                "no Today in weeks: the week starts on Monday the 19th");
+        assertEquals("Week of 12 October 2026", label(LocalDate.of(2026, 10, 18), today, Grouping.WEEK),
+                "a Sunday belongs to the week before");
+        assertEquals("October 2026", label(LocalDate.of(2026, 10, 20), today, Grouping.MONTH), "no Today in months");
+        assertEquals("2026", label(LocalDate.of(2026, 1, 1), today, Grouping.YEAR));
+        assertEquals("1969", label(LocalDate.of(1969, 12, 31), today, Grouping.YEAR));
+        assertEquals("Wednesday, 31 December 1969", label(LocalDate.of(1969, 12, 31), today, Grouping.DAY),
+                "a day before 1970 isn't mistaken for Today or Yesterday");
+    }
+
+    @Test
+    void savedGroupingReadsBack() {
+        for (Grouping grouping : Grouping.values()) {
+            assertEquals(grouping, Grouping.fromSetting(grouping.settingValue()));
+        }
+        assertEquals(Grouping.SMART, Grouping.fromSetting(null));
+        assertEquals(Grouping.SMART, Grouping.fromSetting("fortnight"));
+    }
+
+    private static String label(LocalDate day, long today, Grouping grouping) {
+        return DateGroups.labelOf(DateGroups.groupOf(day.toEpochDay(), today, grouping), grouping);
+    }
+
     private static String label(LocalDate day, long today) {
         return DateGroups.labelOf(DateGroups.groupOf(day.toEpochDay(), today));
     }

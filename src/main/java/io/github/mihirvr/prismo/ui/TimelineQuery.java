@@ -24,13 +24,14 @@ public final class TimelineQuery {
     /**
      * The columns {@link #items} reads, in this order. Other queries that return Timeline items (search)
      * select them too. The fifth is the date the view groups by: {@code sort_date}, or the sort's own date
-     * column for "Date modified" / "Date added". Then width, height, favorite / hidden / Trash state, and a
-     * video's length.
+     * column for "Date modified" / "Date added". Then width, height, favorite / hidden / Trash state, a video's
+     * length, where it was left (watch progress) and the operating system's Hidden mark.
      */
     public static String columns(ViewOptions options) {
         String date = options.sort().dates() == MediaSort.Dates.INSTANT ? options.sort().expression() : "sort_date";
         return "id, path, extension, date_modified, " + date
-                + ", width, height, favorite, hidden, trashed_at IS NOT NULL, duration_seconds";
+                + ", width, height, favorite, hidden, trashed_at IS NOT NULL, duration_seconds,"
+                + " playback_position_seconds, os_hidden";
     }
 
     /**
@@ -76,7 +77,7 @@ public final class TimelineQuery {
 
     static String sql(MediaScope scope, ViewOptions options) {
         StringBuilder sql = new StringBuilder("SELECT ").append(columns(options))
-                .append(" FROM media WHERE ").append(scope.sqlCondition());
+                .append(" FROM media WHERE ").append(scope.sqlCondition(options.osHiddenShown()));
         if (options.sqlCondition() != null) {
             sql.append(" AND ").append(options.sqlCondition());
         }
@@ -101,7 +102,8 @@ public final class TimelineQuery {
             }
             // getInt / getDouble return 0 for NULL (size or length unknown), which is what TimelineItem expects.
             items.add(new TimelineItem(ref, date, rows.getInt(6), rows.getInt(7), rows.getBoolean(8),
-                    rows.getBoolean(9), rows.getBoolean(10), rows.getDouble(11)));
+                    rows.getBoolean(9), rows.getBoolean(10), rows.getDouble(11), rows.getDouble(12),
+                    rows.getBoolean(13)));
         }
         return items;
     }

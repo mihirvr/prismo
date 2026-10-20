@@ -99,13 +99,14 @@ class ThumbnailGeneratorTest {
     }
 
     @Test
-    void videosGetThumbnailsTooButNotHeicOrRaw() {
+    void videosHeicAndRawGetThumbnailsTooButNotUnknownTypes() {
         assertTrue(ThumbnailGenerator.canMake("jpg"));
         assertTrue(ThumbnailGenerator.canMake("mp4"));
         assertTrue(ThumbnailGenerator.canMake("MOV"));
         assertTrue(ThumbnailGenerator.canMake("mkv"));
-        assertFalse(ThumbnailGenerator.canMake("heic"));
-        assertFalse(ThumbnailGenerator.canMake("nef"));
+        assertTrue(ThumbnailGenerator.canMake("heic"), "through ffmpeg since P7");
+        assertTrue(ThumbnailGenerator.canMake("nef"), "its JPEG preview since P7");
+        assertFalse(ThumbnailGenerator.canMake("xyz"));
     }
 
     @Test

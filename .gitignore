@@ -30,3 +30,5 @@ replay_pid*
 
 # Personal build journal (local only)
 /BUILD_JOURNAL.md
+# Test data from run-locally.bat --test
+/test-data/

@@ -10,7 +10,10 @@ import java.util.List;
  * different condition (PROJECT.md "Database"): nothing is copied.
  *
  * <p>Hidden items are only on the Hidden page and items in Trash only on the Trash page; everywhere else
- * leaves both out. Every scope leaves out the rows of disabled library folders (#9 step 2).
+ * leaves both out. "Hidden" is Prismo's own Hide ({@code hidden}) and, unless the Settings switch "Show files
+ * hidden in File Explorer" is on, the operating system's Hidden attribute on the file too ({@code os_hidden}, P6).
+ * With the switch on, those files are like any other: everywhere, and on Hidden only if Prismo hid them too. Every
+ * scope leaves out the rows of disabled library folders (#9 step 2).
  *
  * @param folder    the folder's path as stored in {@code media.folder}, for {@link Kind#FOLDER}; else null
  * @param recursive for a folder: also everything in the folders below it (Recursive View)
@@ -19,8 +22,10 @@ public record MediaScope(Kind kind, String folder, boolean recursive) {
 
     public enum Kind { LIBRARY, FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH, FOLDER }
 
-    /** Not in Trash, not hidden: what every normal view shows. */
+    /** Not in Trash, not hidden by Prismo: what every normal view shows (when File Explorer's Hidden mark is shown). */
     static final String VISIBLE = "trashed_at IS NULL AND hidden = 0";
+    /** The same, also without files hidden in File Explorer: the default. */
+    static final String VISIBLE_NO_OS_HIDDEN = VISIBLE + " AND os_hidden = 0";
 
     public static final MediaScope LIBRARY = new MediaScope(Kind.LIBRARY, null, false);
     public static final MediaScope FAVORITES = new MediaScope(Kind.FAVORITES, null, false);
@@ -53,22 +58,25 @@ public record MediaScope(Kind kind, String folder, boolean recursive) {
      * same reason as {@code +sort_date} ({@link ViewOptions#sqlOrderBy}). Measured (synthetic 100,000 rows, this
      * machine): the whole library through its top folder 340–353 ms against 785–794 ms for the walk.
      */
-    public String sqlCondition() {
-        return own() + " AND " + LibraryRootStore.NOT_IN_DISABLED_FOLDER;
+    public String sqlCondition(boolean osHiddenShown) {
+        return own(osHiddenShown) + " AND " + LibraryRootStore.NOT_IN_DISABLED_FOLDER;
     }
 
-    private String own() {
+    /** @param osHiddenShown the Settings switch: files hidden in File Explorer show like other files */
+    private String own(boolean osHiddenShown) {
+        String visible = osHiddenShown ? VISIBLE : VISIBLE_NO_OS_HIDDEN;
         return switch (kind) {
-            case LIBRARY, RECENTLY_ADDED -> VISIBLE;
-            case FAVORITES -> VISIBLE + " AND favorite = 1";
-            case HIDDEN -> "trashed_at IS NULL AND hidden = 1";
+            case LIBRARY, RECENTLY_ADDED -> visible;
+            case FAVORITES -> visible + " AND favorite = 1";
+            case HIDDEN -> osHiddenShown ? "trashed_at IS NULL AND hidden = 1"
+                    : "trashed_at IS NULL AND (hidden = 1 OR os_hidden = 1)";
             case TRASH -> "trashed_at IS NOT NULL";
-            case FOLDER -> VISIBLE
+            case FOLDER -> visible
                     + (recursive ? " AND (+folder = ? OR (+folder >= ? AND +folder < ?))" : " AND folder = ?");
         };
     }
 
-    /** The values for the {@code ?} in {@link #sqlCondition()}, in order. */
+    /** The values for the {@code ?} in {@link #sqlCondition}, in order. */
     public List<Object> params() {
         if (kind != Kind.FOLDER) {
             return List.of();

@@ -9,11 +9,15 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import javax.imageio.ImageIO;
 import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
 import org.bytedeco.javacv.Frame;
+import io.github.mihirvr.prismo.video.VideoNatives;
 
 /**
  * Builds small but real media files byte by byte, so metadata and thumbnail code is tested against
@@ -59,6 +63,163 @@ public final class TestMedia {
         out.write(exif);
         out.write(jpeg, 2, jpeg.length - 2);
         Files.write(file, out.toByteArray());
+        return file;
+    }
+
+    /**
+     * A JPEG with a camera's full EXIF block, as a phone writes it: Make "Apple", Model "iPhone 15 Pro",
+     * DateTimeOriginal 2024:03:09 17:45:12, exposure 1/250 s, f/1.8, ISO 200, focal length 6.9 mm (24 mm in
+     * 35 mm terms), lens "iPhone 15 Pro back camera", flash did not fire (16), and GPS 18°31'13.548" N,
+     * 73°51'24.276" E (= 18.520430, 73.856743).
+     */
+    public static Path jpegWithCameraExif(Path file, int width, int height) throws IOException {
+        return jpegWithCameraExif(file, new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB),
+                "2024:03:09 17:45:12");
+    }
+
+    /** Same, with given pixels and date taken ("yyyy:MM:dd HH:mm:ss"). */
+    public static Path jpegWithCameraExif(Path file, BufferedImage pixels, String dateTimeOriginal) throws IOException {
+        List<Tag> ifd0 = List.of(Tag.ascii(0x010F, "Apple"), Tag.ascii(0x0110, "iPhone 15 Pro"),
+                Tag.shortValue(0x0112, 1));
+        List<Tag> exif = List.of(
+                Tag.rationals(0x829A, 1, 250),           // ExposureTime
+                Tag.rationals(0x829D, 18, 10),           // FNumber
+                Tag.shortValue(0x8827, 200),             // ISO
+                Tag.ascii(0x9003, dateTimeOriginal),
+                Tag.shortValue(0x9209, 16),              // Flash: off, did not fire
+                Tag.rationals(0x920A, 69, 10),           // FocalLength
+                Tag.shortValue(0xA405, 24),              // FocalLengthIn35mmFilm
+                Tag.ascii(0xA433, "Apple"),              // LensMake
+                Tag.ascii(0xA434, "iPhone 15 Pro back camera"));
+        List<Tag> gps = List.of(
+                Tag.ascii(0x0001, "N"), Tag.rationals(0x0002, 18, 1, 31, 1, 13548, 1000),
+                Tag.ascii(0x0003, "E"), Tag.rationals(0x0004, 73, 1, 51, 1, 24276, 1000));
+        ByteArrayOutputStream plain = new ByteArrayOutputStream();
+        ImageIO.write(pixels, "jpg", plain);
+        byte[] jpeg = plain.toByteArray();
+        byte[] tiff = tiff(ifd0, exif, gps);
+        byte[] header = ascii("Exif\0\0");
+        int length = 2 + header.length + tiff.length;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(jpeg, 0, 2);
+        out.write(ByteBuffer.allocate(4).put((byte) 0xFF).put((byte) 0xE1).putShort((short) length).array());
+        out.write(header);
+        out.write(tiff);
+        out.write(jpeg, 2, jpeg.length - 2);
+        Files.write(file, out.toByteArray());
+        return file;
+    }
+
+    /** One TIFF / EXIF entry: its tag, type (1 byte, 2 ASCII, 3 short, 4 long, 5 rational), count and value bytes. */
+    private record Tag(int tag, int type, int count, byte[] value) {
+        static Tag ascii(int tag, String text) {
+            byte[] bytes = asciiZ(text);
+            return new Tag(tag, 2, bytes.length, bytes);
+        }
+
+        static Tag shortValue(int tag, int value) {
+            return new Tag(tag, 3, 1, ByteBuffer.allocate(2).putShort((short) value).array());
+        }
+
+        static Tag longValue(int tag, long value) {
+            return new Tag(tag, 4, 1, ByteBuffer.allocate(4).putInt((int) value).array());
+        }
+
+        /** Numerator, denominator pairs. */
+        static Tag rationals(int tag, long... parts) {
+            ByteBuffer bytes = ByteBuffer.allocate(parts.length * 4);
+            for (long part : parts) {
+                bytes.putInt((int) part);
+            }
+            return new Tag(tag, 5, parts.length / 2, bytes.array());
+        }
+    }
+
+    /**
+     * A big-endian TIFF block: IFD0 (with pointers to the Exif and GPS IFDs added), then the Exif IFD, then the GPS
+     * IFD, each followed by its values that don't fit in an entry's 4 bytes.
+     */
+    private static byte[] tiff(List<Tag> ifd0, List<Tag> exif, List<Tag> gps) {
+        List<Tag> first = new ArrayList<>(ifd0);
+        first.add(Tag.longValue(0x8769, 0));
+        first.add(Tag.longValue(0x8825, 0));
+        int firstAt = 8;
+        int exifAt = firstAt + ifdSize(first);
+        int gpsAt = exifAt + ifdSize(exif);
+        first.set(first.size() - 2, Tag.longValue(0x8769, exifAt));
+        first.set(first.size() - 1, Tag.longValue(0x8825, gpsAt));
+        ByteBuffer tiff = ByteBuffer.allocate(gpsAt + ifdSize(gps));
+        tiff.put(ascii("MM")).putShort((short) 42).putInt(firstAt);
+        writeIfd(tiff, first, firstAt);
+        writeIfd(tiff, exif, exifAt);
+        writeIfd(tiff, gps, gpsAt);
+        return tiff.array();
+    }
+
+    private static int ifdSize(List<Tag> tags) {
+        int size = 2 + tags.size() * 12 + 4;
+        for (Tag tag : tags) {
+            if (tag.value().length > 4) {
+                size += tag.value().length + tag.value().length % 2; // values start on an even offset
+            }
+        }
+        return size;
+    }
+
+    private static void writeIfd(ByteBuffer tiff, List<Tag> tags, int at) {
+        List<Tag> sorted = tags.stream().sorted(Comparator.comparingInt(Tag::tag)).toList(); // TIFF wants tag order
+        int data = at + 2 + sorted.size() * 12 + 4;
+        tiff.position(at);
+        tiff.putShort((short) sorted.size());
+        for (Tag tag : sorted) {
+            tiff.putShort((short) tag.tag()).putShort((short) tag.type()).putInt(tag.count());
+            if (tag.value().length <= 4) {
+                tiff.put(tag.value()).put(new byte[4 - tag.value().length]);
+            } else {
+                tiff.putInt(data);
+                tiff.put(data, tag.value());
+                data += tag.value().length + tag.value().length % 2;
+            }
+        }
+        tiff.putInt(0); // no next IFD
+    }
+
+    /** The subtitles inside {@link #withTracks}: two lines, at 0.5–1.5 s and 2.0–2.8 s. */
+    public static final String SUBTITLES_SRT = """
+            1
+            00:00:00,500 --> 00:00:01,500
+            Hello <i>world</i>
+
+            2
+            00:00:02,000 --> 00:00:02,800
+            Second line
+            """;
+
+    /**
+     * A 3-second MKV with one picture, two sound tracks and one SRT subtitle track, made by the bundled
+     * {@code ffmpeg} program: sound 1 = 440 Hz, English; sound 2 = 1000 Hz, Hindi, titled "Commentary" and
+     * marked as the default track; subtitles {@link #SUBTITLES_SRT}, English.
+     */
+    public static Path withTracks(Path file) throws IOException, InterruptedException {
+        Path srt = file.resolveSibling(file.getFileName() + ".input.srt");
+        Files.writeString(srt, SUBTITLES_SRT, StandardCharsets.UTF_8);
+        Process ffmpeg = new ProcessBuilder(VideoNatives.ffmpegExecutable().toString(), "-v", "error", "-y",
+                "-f", "lavfi", "-i", "testsrc2=s=320x240:r=25:d=3",
+                "-f", "lavfi", "-i", "sine=f=440:d=3",
+                "-f", "lavfi", "-i", "sine=f=1000:d=3",
+                "-i", srt.toString(),
+                "-map", "0", "-map", "1", "-map", "2", "-map", "3",
+                "-c:v", "mpeg4", "-c:a", "aac", "-c:s", "srt",
+                "-metadata:s:a:0", "language=eng",
+                "-metadata:s:a:1", "language=hin", "-metadata:s:a:1", "title=Commentary",
+                "-metadata:s:s:0", "language=eng",
+                "-disposition:a:0", "0", "-disposition:a:1", "default",
+                file.toString()).redirectErrorStream(true).start();
+        String output = new String(ffmpeg.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        if (ffmpeg.waitFor() != 0) {
+            throw new IOException("ffmpeg failed: " + output);
+        }
+        Files.delete(srt);
         return file;
     }
 

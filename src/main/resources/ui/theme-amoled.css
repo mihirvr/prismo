@@ -1,0 +1,22 @@
+/*
+ * The AMOLED black look: loaded after prismo.css and theme-dark.css (see ui/Theme.java), so it is the Dark look
+ * with pure black backgrounds. On OLED screens a black pixel is switched off, which saves power. Areas are told
+ * apart by thin borders instead of shades of grey.
+ */
+
+.root {
+    -prismo-bg: #000000;
+    -prismo-surface: #000000;
+    -prismo-card: #0b0c0f;
+    -prismo-border: #24272e;
+    -prismo-border-strong: #3a3e48;
+    -prismo-hover: #15171c;
+    -prismo-pressed: #1e2128;
+    -prismo-tile: #15171b;
+    -prismo-accent-tint: #172347;
+    -prismo-tab-hover: rgba(255, 255, 255, 0.07);
+    -prismo-tooltip-bg: #23262e;
+    -prismo-viewer-bg: #000000;
+
+    -fx-base: #1a1c21;
+}

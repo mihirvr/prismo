@@ -1,17 +1,11 @@
 package io.github.mihirvr.prismo.thumbs;
 
+import io.github.mihirvr.prismo.platform.ExternalProgram;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * One frame of a video as a small JPEG, made by the bundled {@code ffmpeg} program in a separate process.
@@ -74,33 +68,6 @@ final class VideoThumbnailer {
 
     /** Runs {@code command}; returns what it printed (its errors). Gives up after a minute. */
     static String run(List<String> command) throws IOException {
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
-        // Read its output on another thread while it runs: a full pipe would block it, and reading here
-        // would wait for it to end, so a stuck ffmpeg would never reach the time limit below.
-        CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> read(process.getInputStream()),
-                Thread.ofVirtual()::start);
-        try {
-            if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                process.destroyForcibly();
-                throw new IOException("ffmpeg took longer than " + TIMEOUT_SECONDS + " s");
-            }
-            return output.get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            process.destroyForcibly();
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while making a video thumbnail", e);
-        } catch (ExecutionException | TimeoutException e) {
-            return "";
-        }
-    }
-
-    private static String read(InputStream stream) {
-        try (stream) {
-            byte[] text = stream.readNBytes(64 * 1024); // with -loglevel error it's a line or two
-            stream.transferTo(OutputStream.nullOutputStream());
-            return new String(text, StandardCharsets.UTF_8).strip();
-        } catch (IOException e) {
-            return "";
-        }
+        return ExternalProgram.run(command, TIMEOUT_SECONDS);
     }
 }

@@ -3,8 +3,11 @@
  * property, whatever Modena's selector is (origin wins before specificity in JavaFX CSS).
  *
  * Every colour comes from the names defined on .root below ("looked-up colours"). Modena's own names
- * (-fx-background, -fx-accent …) are pointed at them too, so standard controls follow. A theme only has to
- * redefine these names.
+ * (-fx-background, -fx-accent …) are pointed at them too, so standard controls follow. This file is the Light
+ * look; theme-dark.css (and theme-amoled.css on top of it) only redefine these names and the logo.
+ *
+ * Icons are SVG paths (ui/Icon.java) drawn with -fx-stroke (line icons) or -fx-fill (.icon-filled), so their
+ * colour is set here per place, like text.
  */
 
 .root {
@@ -12,6 +15,8 @@
     -prismo-accent: #3366ff;
     -prismo-accent-hover: #2952d9;
     -prismo-accent-tint: #e3eaff;
+    -prismo-accent-text: #2b5cf0; /* the accent as text or an icon on the page or on -prismo-accent-tint */
+    -prismo-on-accent: #ffffff;  /* text and icons on an accent fill */
     -prismo-bg: #f5f6f8;
     -prismo-surface: #ffffff;
     -prismo-text: #171b29;
@@ -24,6 +29,16 @@
     -prismo-tile: #e3e5eb;
     -prismo-tile-failed: #f1dede;
     -prismo-favorite: #ff3d6e;
+    -prismo-warning: #b4541f;
+    -prismo-warning-tint: #fbefe4; /* behind a warning banner */
+    -prismo-icon: #4a5163;       /* icons next to text: a little softer than the text */
+    -prismo-tab-hover: rgba(0, 0, 0, 0.05);
+    -prismo-scrollbar: rgba(0, 0, 0, 0.22);
+    -prismo-scrollbar-hover: rgba(0, 0, 0, 0.38);
+    -prismo-tooltip-bg: #1f2433;
+    -prismo-tooltip-text: #ffffff;
+    -prismo-card: #ffffff;       /* rows and cards inside dialogs */
+    -prismo-viewer-bg: #0e0f13;  /* the viewer is dark in every theme, so photos stand out */
 
     /* Modena's names, so standard controls (lists, menus, text fields, check boxes) use the same colours. */
     -fx-background: -prismo-bg;
@@ -37,6 +52,44 @@
     -fx-text-inner-color: -prismo-text;
     -fx-prompt-text-fill: -prismo-text-faint;
     -fx-background-color: -prismo-bg;
+}
+
+/* --- Icons --- */
+
+.icon-path {
+    -fx-fill: transparent;
+    -fx-stroke: -prismo-icon;
+    -fx-stroke-width: 1.8;
+    -fx-stroke-line-cap: round;
+    -fx-stroke-line-join: round;
+}
+
+/* Solid icons get a thin stroke in the same colour: it softens their corners. */
+.icon-path.icon-filled {
+    -fx-fill: -prismo-icon;
+    -fx-stroke: -prismo-icon;
+    -fx-stroke-width: 1.2;
+}
+
+/* A button that is only an icon: square, no border until the mouse is over it. */
+.icon-button {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 7;
+    -fx-padding: 6;
+}
+
+.icon-button:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.icon-button:pressed {
+    -fx-background-color: -prismo-pressed;
+}
+
+.icon-button:focus-visible {
+    -fx-background-color: -prismo-accent, -prismo-surface;
+    -fx-background-insets: 0, 2;
 }
 
 /* --- Buttons, toggles, drop-downs, text fields: flat, rounded, with hover and pressed states --- */
@@ -89,14 +142,23 @@
     -fx-background-color: -prismo-accent;
     -fx-background-insets: 0;
     -fx-background-radius: 7;
-    -fx-text-fill: #ffffff;
+    -fx-text-fill: -prismo-on-accent;
     -fx-font-weight: bold;
     -fx-padding: 7 16 7 16;
+}
+
+.accent-button .icon-path {
+    -fx-stroke: -prismo-on-accent;
 }
 
 .accent-button:hover,
 .accent-button:focus-visible {
     -fx-background-color: -prismo-accent-hover;
+}
+
+/* Hint text in an empty box: Modena's own rule (a darker shade of the box) disappears on a dark box. */
+.text-input {
+    -fx-prompt-text-fill: -prismo-text-faint;
 }
 
 .text-field {
@@ -122,7 +184,7 @@
 }
 
 .check-box:selected > .box > .mark {
-    -fx-background-color: #ffffff;
+    -fx-background-color: -prismo-on-accent;
 }
 
 .slider > .track {
@@ -164,10 +226,51 @@
     -fx-text-fill: -prismo-text;
 }
 
+.context-menu > .menu-item > .left-container {
+    -fx-padding: 0 8 0 0;
+}
+
+/* The key next to an entry ("Ctrl+C"), quieter than its name. */
+.context-menu > .menu-item > .right-container {
+    -fx-padding: 0 0 0 24;
+}
+
+.context-menu > .menu-item > .right-container > .accelerator-text {
+    -fx-text-fill: -prismo-text-faint;
+}
+
+.context-menu > .menu-item:focused > .right-container > .accelerator-text {
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.context-menu > .menu-item:disabled > .label {
+    -fx-text-fill: -prismo-text-faint;
+    -fx-opacity: 1;
+}
+
+.context-menu > .menu > .right-container > .arrow,
+.context-menu > .radio-menu-item:checked > .left-container > .radio,
+.context-menu > .check-menu-item:checked > .left-container > .check {
+    -fx-background-color: -prismo-text-muted;
+}
+
+.context-menu > .separator > .line {
+    -fx-border-color: -prismo-border transparent transparent transparent;
+    -fx-border-insets: 2 4 2 4;
+}
+
+.context-menu > .menu-item:focused .icon-path {
+    -fx-stroke: -prismo-accent-text;
+}
+
+.context-menu > .menu-item:focused .icon-path.icon-filled {
+    -fx-fill: -prismo-accent-text;
+}
+
 .tooltip {
-    -fx-background-color: #1f2433;
+    -fx-background-color: -prismo-tooltip-bg;
     -fx-background-radius: 6;
-    -fx-text-fill: #ffffff;
+    -fx-text-fill: -prismo-tooltip-text;
     -fx-font-size: 12px;
     -fx-padding: 5 9 5 9;
 }
@@ -186,14 +289,14 @@
 }
 
 .scroll-bar > .thumb {
-    -fx-background-color: rgba(0, 0, 0, 0.22);
+    -fx-background-color: -prismo-scrollbar;
     -fx-background-insets: 2;
     -fx-background-radius: 5;
 }
 
 .scroll-bar > .thumb:hover,
 .scroll-bar > .thumb:pressed {
-    -fx-background-color: rgba(0, 0, 0, 0.38);
+    -fx-background-color: -prismo-scrollbar-hover;
 }
 
 .scroll-bar > .increment-button,
@@ -212,6 +315,57 @@
     -fx-background-color: transparent;
 }
 
+/* Lines between areas, and the bar between the folder tree and the grid. */
+.separator:horizontal > .line {
+    -fx-border-color: -prismo-border transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+
+.separator:vertical > .line {
+    -fx-border-color: transparent transparent transparent -prismo-border;
+    -fx-border-width: 0 0 0 1;
+}
+
+.split-pane {
+    -fx-background-color: -prismo-bg;
+    -fx-padding: 0;
+}
+
+.split-pane > .split-pane-divider {
+    -fx-background-color: -prismo-border;
+    -fx-padding: 0 0.5 0 0.5;
+}
+
+.tree-cell > .tree-disclosure-node > .arrow {
+    -fx-background-color: -prismo-text-muted;
+}
+
+/* Confirmation dialogs (Delete permanently, Remove library folder). */
+.dialog-pane {
+    -fx-background-color: -prismo-bg;
+}
+
+.dialog-pane > .header-panel {
+    -fx-background-color: -prismo-border, -prismo-surface;
+    -fx-background-insets: 0, 0 0 1 0;
+    -fx-padding: 14 16 14 16;
+}
+
+.dialog-pane > .header-panel > .label {
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.dialog-pane > .content.label {
+    -fx-text-fill: -prismo-text;
+    -fx-padding: 16;
+}
+
+.dialog-pane > .button-bar > .container {
+    -fx-padding: 0 16 16 16;
+}
+
 /* --- The top of the window: title, tabs, search, Library folders; then Filters + Sort --- */
 
 .top-bar {
@@ -225,6 +379,10 @@
     -fx-font-size: 17px;
     -fx-font-weight: bold;
     -fx-text-fill: -prismo-text;
+}
+
+.top-bar .button {
+    -fx-graphic-text-gap: 7;
 }
 
 /* The two tabs, Timeline | Collections: a segmented switch, the open one raised. */
@@ -245,12 +403,12 @@
 }
 
 .tabs .toggle-button:hover {
-    -fx-background-color: rgba(0, 0, 0, 0.05);
+    -fx-background-color: -prismo-tab-hover;
 }
 
 .tabs .toggle-button:selected {
     -fx-background-color: -prismo-surface;
-    -fx-text-fill: -prismo-accent;
+    -fx-text-fill: -prismo-accent-text;
     -fx-font-weight: bold;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.16), 4, 0, 0, 1);
 }
@@ -281,7 +439,16 @@
 .search-field {
     -fx-pref-width: 320;
     -fx-background-radius: 16, 15;
-    -fx-padding: 5 14 5 14;
+    -fx-padding: 5 32 5 36; /* room for the magnifier (left) and the clear button (right) */
+}
+
+.search-icon .icon-path {
+    -fx-stroke: -prismo-text-faint;
+}
+
+.search-clear {
+    -fx-background-radius: 12;
+    -fx-padding: 4;
 }
 
 .search-count {
@@ -301,6 +468,11 @@
 .empty-state {
     -fx-spacing: 10;
     -fx-padding: 24;
+}
+
+/* The logo for light backgrounds; theme-dark.css swaps it. */
+.empty-state-logo {
+    -fx-image: url("logo/prismo-text-light.png");
 }
 
 .empty-state-title {
@@ -371,6 +543,11 @@
     -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-text-alignment: center;
+    -fx-graphic-text-gap: 6;
+}
+
+.thumb-failed .thumb-placeholder .icon-path {
+    -fx-stroke: -prismo-warning;
 }
 
 .thumb-tile.thumb-failed {
@@ -384,12 +561,15 @@
     -fx-border-radius: 6;
 }
 
-/* A favorite's heart, bottom left of its tile. */
+/* A favorite's heart, bottom left of its tile, with a soft shadow so it shows on any photo. */
 .thumb-favorite {
-    -fx-text-fill: -prismo-favorite;
-    -fx-font-size: 17px;
-    -fx-padding: 2 7 3 7;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 4, 0.3, 0, 0);
+}
+
+.thumb-favorite .icon-path.icon-filled {
+    -fx-fill: -prismo-favorite;
+    -fx-stroke: #ffffff;
+    -fx-stroke-width: 1.4;
 }
 
 /* "▶ 0:12" on a video, bottom right. */
@@ -399,7 +579,166 @@
     -fx-text-fill: #ffffff;
     -fx-font-size: 11px;
     -fx-font-weight: bold;
-    -fx-padding: 1 6 1 6;
+    -fx-padding: 2 6 2 5;
+    -fx-graphic-text-gap: 4;
+}
+
+.thumb-video-badge .icon-path.icon-filled {
+    -fx-fill: #ffffff;
+    -fx-stroke: #ffffff;
+}
+
+/* Watch progress along a video's bottom edge: a dark track, the watched part in the accent colour. */
+.thumb-progress {
+    -fx-background-color: rgba(0, 0, 0, 0.5);
+    -fx-background-radius: 0 0 6 6;
+}
+
+.thumb-progress-fill {
+    -fx-background-color: -prismo-accent;
+    -fx-background-radius: 0 0 0 6;
+}
+
+/* Watched to the end: the whole bar, light grey ("seen", not "in progress"). */
+.thumb-progress:watched .thumb-progress-fill {
+    -fx-background-color: rgba(255, 255, 255, 0.78);
+    -fx-background-radius: 0 0 6 6;
+}
+
+/* --- Offline library folders (P7): greyed tiles with a mark, a banner over the grids --- */
+
+.thumb-tile .thumb-offline-shade {
+    -fx-background-color: transparent;
+}
+
+.thumb-tile:offline .thumb-offline-shade {
+    -fx-background-color: rgba(128, 128, 128, 0.62);
+}
+
+.thumb-offline-mark {
+    -fx-background-color: rgba(0, 0, 0, 0.62);
+    -fx-background-radius: 5;
+    -fx-padding: 3;
+    visibility: hidden;
+}
+
+.thumb-tile:offline .thumb-offline-mark {
+    visibility: visible;
+}
+
+.thumb-offline-mark .icon-path {
+    -fx-stroke: #ffffff;
+}
+
+.offline-banner {
+    -fx-background-color: -prismo-warning-tint;
+    -fx-border-color: -prismo-border transparent -prismo-border transparent;
+    -fx-padding: 8 14 8 14;
+    -fx-alignment: center-left;
+}
+
+.offline-banner .icon-path {
+    -fx-stroke: -prismo-warning;
+}
+
+.offline-text {
+    -fx-text-fill: -prismo-text;
+}
+
+/* --- Selection Mode (P7): check circles, the selected look, the floating bar --- */
+
+/* The round check box, top left: only under the mouse, or on every tile while something is selected. */
+.thumb-check {
+    -fx-pref-width: 22;
+    -fx-pref-height: 22;
+    -fx-background-color: rgba(255, 255, 255, 0.92), rgba(0, 0, 0, 0.28);
+    -fx-background-insets: 0, 2;
+    -fx-background-radius: 11, 9;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 3, 0, 0, 0);
+    -fx-opacity: 0;
+    -fx-cursor: hand;
+}
+
+.thumb-check .icon-path {
+    -fx-stroke: transparent;
+    -fx-stroke-width: 2.4;
+}
+
+.thumb-tile:hover .thumb-check,
+.timeline:selecting .thumb-check {
+    -fx-opacity: 1;
+}
+
+.thumb-tile:hover .thumb-check:hover .icon-path {
+    -fx-stroke: rgba(255, 255, 255, 0.85);
+}
+
+.thumb-tile:selected .thumb-check {
+    -fx-opacity: 1;
+    -fx-background-color: #ffffff, -prismo-accent;
+}
+
+.thumb-tile:selected .thumb-check .icon-path {
+    -fx-stroke: -prismo-on-accent;
+}
+
+/* A selected tile: an accent ring inside the edge and a light tint, so it reads on any photo. */
+.thumb-tile .thumb-selected {
+    -fx-background-color: transparent;
+}
+
+.thumb-tile:selected .thumb-selected {
+    -fx-background-color: rgba(51, 102, 255, 0.2); /* -prismo-accent, see through */
+    -fx-background-radius: 6;
+    -fx-border-color: -prismo-accent;
+    -fx-border-width: 3;
+    -fx-border-radius: 6;
+}
+
+/* Room under the last row, so the floating bar never covers it. */
+.timeline:selecting .timeline-list {
+    -fx-padding: 0 10 64 10;
+}
+
+.selection-bar {
+    -fx-background-color: -prismo-border, -prismo-surface;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 12, 11;
+    -fx-padding: 6 10 6 6;
+    -fx-spacing: 2;
+    -fx-alignment: center-left;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.22), 16, 0, 0, 4);
+}
+
+.selection-count {
+    -fx-font-size: 13px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+    -fx-padding: 0 4 0 4;
+}
+
+.selection-gap {
+    -fx-min-width: 14;
+}
+
+.selection-bar .selection-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 7;
+    -fx-text-fill: -prismo-text;
+    -fx-padding: 6 8 6 8;
+    -fx-graphic-text-gap: 6;
+}
+
+.selection-bar .selection-button.icon-button {
+    -fx-padding: 6;
+}
+
+.selection-bar .selection-button:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.selection-bar .selection-button:pressed {
+    -fx-background-color: -prismo-pressed;
 }
 
 /* --- Collections: the page list on the left, a header row over each page --- */
@@ -422,6 +761,30 @@
     -fx-background-radius: 6;
     -fx-padding: 6 10 6 10;
     -fx-text-fill: -prismo-text;
+    -fx-graphic-text-gap: 10;
+}
+
+.folder-name {
+    -fx-text-fill: -prismo-text;
+}
+
+.folder-count {
+    -fx-text-fill: -prismo-text-faint;
+}
+
+.collections .tree-view .tree-cell:selected .folder-name {
+    -fx-text-fill: -prismo-accent-text;
+    -fx-font-weight: bold;
+}
+
+.collections-pages .list-cell:selected .icon-path,
+.collections .tree-view .tree-cell:selected .icon-path {
+    -fx-stroke: -prismo-accent-text;
+}
+
+.back-button {
+    -fx-graphic-text-gap: 4;
+    -fx-padding: 4 12 4 6;
 }
 
 .collections-pages .list-cell:hover,
@@ -432,7 +795,7 @@
 .collections-pages .list-cell:selected,
 .collections .tree-view .tree-cell:selected {
     -fx-background-color: -prismo-accent-tint;
-    -fx-text-fill: -prismo-accent;
+    -fx-text-fill: -prismo-accent-text;
     -fx-font-weight: bold;
 }
 
@@ -472,7 +835,49 @@
 /* --- The viewer: an overlay over the whole window. Dark, so the photo stands out --- */
 
 .viewer {
-    -fx-background-color: #0e0f13;
+    -fx-background-color: -prismo-viewer-bg;
+}
+
+.viewer .icon-path {
+    -fx-stroke: #f0f1f4;
+}
+
+.viewer .icon-path.icon-filled {
+    -fx-fill: #f0f1f4;
+    -fx-stroke: #f0f1f4;
+}
+
+.viewer .icon-button {
+    -fx-padding: 7;
+}
+
+/* The slideshow button while the slideshow runs. */
+.viewer .button:on {
+    -fx-background-color: -prismo-accent;
+}
+
+.viewer .button:on:hover {
+    -fx-background-color: -prismo-accent-hover;
+}
+
+.viewer-divider > .line {
+    -fx-border-color: transparent transparent transparent rgba(255, 255, 255, 0.22);
+}
+
+/* Previous / next: round, see-through buttons at the sides, over the photo. */
+.viewer .viewer-step {
+    -fx-background-color: rgba(20, 21, 26, 0.55);
+    -fx-background-radius: 30;
+    -fx-padding: 10;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 8, 0, 0, 1);
+}
+
+.viewer .viewer-step:hover {
+    -fx-background-color: rgba(40, 42, 50, 0.85);
+}
+
+.viewer .viewer-step:pressed {
+    -fx-background-color: rgba(60, 63, 74, 0.95);
 }
 
 .viewer-top-bar {
@@ -513,8 +918,84 @@
     -fx-background-color: #ffffff;
 }
 
-.viewer .viewer-favorite-on {
-    -fx-text-fill: -prismo-favorite;
+/* The video bar's drop-downs (subtitles, sound track, speed): like its icon buttons, no arrow. */
+.viewer .menu-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 7;
+    -fx-padding: 7;
+    -fx-text-fill: #f0f1f4;
+}
+
+.viewer .menu-button:hover,
+.viewer .menu-button:showing {
+    -fx-background-color: rgba(255, 255, 255, 0.18);
+}
+
+.viewer .menu-button > .arrow-button {
+    -fx-padding: 0;
+}
+
+.viewer .menu-button > .arrow-button > .arrow {
+    -fx-padding: 0;
+}
+
+.viewer .menu-button > .label {
+    -fx-text-fill: #f0f1f4;
+}
+
+/* "1.5×": the speed as text, a fixed width so the bar doesn't shift when it changes. */
+.viewer .viewer-speed {
+    -fx-padding: 7 9 7 9;
+    -fx-min-width: 50;
+    -fx-font-weight: bold;
+    -fx-font-size: 12px;
+}
+
+.viewer .viewer-video-controls .toggle-button {
+    -fx-background-color: transparent;
+    -fx-background-radius: 7;
+    -fx-padding: 7;
+}
+
+.viewer .viewer-video-controls .toggle-button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Loop on: lit like a switch. */
+.viewer .viewer-video-controls .toggle-button:selected {
+    -fx-background-color: -prismo-accent;
+}
+
+.viewer .viewer-video-controls .toggle-button:selected:hover {
+    -fx-background-color: -prismo-accent-hover;
+}
+
+.viewer .viewer-video-controls .label {
+    -fx-font-size: 12px;
+}
+
+/* The subtitle line: white on a soft dark box, readable on any picture. Size set in VideoPane. */
+.viewer .viewer-subtitle {
+    -fx-text-fill: #ffffff;
+    -fx-background-color: rgba(0, 0, 0, 0.62);
+    -fx-background-radius: 6;
+    -fx-padding: 3 12 4 12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 3, 0.4, 0, 1);
+}
+
+/* "Speed 1.5×", "Volume 80%": a short note, top centre. */
+.viewer .viewer-note {
+    -fx-text-fill: #ffffff;
+    -fx-background-color: rgba(20, 21, 26, 0.82);
+    -fx-background-radius: 18;
+    -fx-padding: 7 16 7 16;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+}
+
+.viewer .viewer-favorite-on .icon-path.icon-filled {
+    -fx-fill: -prismo-favorite;
+    -fx-stroke: -prismo-favorite;
 }
 
 .viewer-file-name {
@@ -545,3 +1026,403 @@
 .viewer .viewer-message-box .button:hover {
     -fx-background-color: -prismo-accent-hover;
 }
+
+/* --- Library folders dialog: one card per folder --- */
+
+.library-dialog .scroll-pane,
+.library-dialog .scroll-pane > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.library-intro {
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.library-rows {
+    -fx-padding: 2 6 2 0;
+}
+
+.library-row {
+    -fx-background-color: -prismo-border, -prismo-card;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 9, 8;
+    -fx-padding: 10 12 10 12;
+}
+
+.library-row-off .library-name,
+.library-row-off .library-path,
+.library-row-off .icon {
+    -fx-opacity: 0.55;
+}
+
+.library-name {
+    -fx-font-weight: bold;
+    -fx-font-size: 13px;
+    -fx-text-fill: -prismo-text;
+}
+
+.library-path,
+.library-info,
+.library-message {
+    -fx-text-fill: -prismo-text-muted;
+    -fx-font-size: 12px;
+}
+
+.library-info.library-unreachable {
+    -fx-text-fill: -prismo-warning;
+}
+
+/* --- Settings --- */
+
+.settings-heading {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.settings-note {
+    -fx-text-fill: -prismo-text-muted;
+    -fx-font-size: 12px;
+}
+
+/* The list of Settings pages on the left: flat rows, the open page tinted in the accent. */
+.settings-nav {
+    -fx-min-width: 168;
+    -fx-pref-width: 168;
+}
+
+.settings-nav-item {
+    -fx-background-color: transparent;
+    -fx-background-radius: 8;
+    -fx-padding: 8 12 8 10;
+    -fx-graphic-text-gap: 10;
+    -fx-text-fill: -prismo-text;
+    -fx-cursor: hand;
+}
+
+.settings-nav-item .icon-path {
+    -fx-stroke: -prismo-text-muted;
+}
+
+.settings-nav-item:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.settings-nav-item:selected,
+.settings-nav-item:selected:hover {
+    -fx-background-color: -prismo-accent-tint;
+    -fx-text-fill: -prismo-accent-text;
+    -fx-font-weight: bold;
+}
+
+.settings-nav-item:selected .icon-path {
+    -fx-stroke: -prismo-accent-text;
+}
+
+.settings-nav-item:focus-visible {
+    -fx-border-color: -prismo-accent;
+    -fx-border-radius: 8;
+}
+
+/* A value next to a label ("Thumbnails on disk: 84.2 MB", "Version 0.1.0"). */
+.settings-value {
+    -fx-text-fill: -prismo-text;
+    -fx-font-weight: bold;
+}
+
+.settings-link {
+    -fx-text-fill: -prismo-accent-text;
+    -fx-padding: 0;
+    -fx-border-color: transparent;
+    -fx-graphic-text-gap: 6;
+}
+
+.settings-link .icon-path {
+    -fx-stroke: -prismo-accent-text;
+}
+
+.settings-link-disabled {
+    -fx-text-fill: -prismo-text-faint;
+    -fx-graphic-text-gap: 6;
+}
+
+.settings-link-disabled .icon-path {
+    -fx-stroke: -prismo-text-faint;
+}
+
+/* Why a typed name can't be used (the Rename dialog). */
+.dialog-problem {
+    -fx-text-fill: -prismo-warning;
+}
+
+/* Settings › Library › Ignored folders: one row per rule, with a remove button. */
+.ignored-row {
+    -fx-background-color: -prismo-border, -prismo-card;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 8, 7;
+    -fx-padding: 4 6 4 12;
+}
+
+.ignored-row .icon-path {
+    -fx-stroke: -prismo-text-muted;
+}
+
+.ignored-rule {
+    -fx-text-fill: -prismo-text;
+}
+
+/* Settings › Keyboard shortcuts: rows of key caps and what they do. */
+.shortcut-row {
+    -fx-padding: 3 0 3 0;
+}
+
+.shortcut-keys {
+    -fx-min-width: 190;
+    -fx-pref-width: 190;
+}
+
+.shortcut-key {
+    -fx-background-color: -prismo-border-strong, -prismo-card;
+    -fx-background-insets: 0, 1 1 2 1; /* a slightly thicker lower edge, like a key */
+    -fx-background-radius: 5, 4;
+    -fx-padding: 2 7 3 7;
+    -fx-font-size: 12px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.shortcut-or {
+    -fx-text-fill: -prismo-text-faint;
+}
+
+.shortcut-does {
+    -fx-text-fill: -prismo-text;
+}
+
+/* "When you hide an item in Prismo": a smaller heading inside a section. */
+.settings-subheading {
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+/* Settings' content scrolls only on a screen too small for it: no frame of its own. */
+.settings-scroll,
+.settings-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+/* A look to pick: its picture above its name; the chosen one has an accent ring. */
+.theme-card {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 12;
+    -fx-border-color: transparent;
+    -fx-border-width: 2;
+    -fx-border-radius: 12;
+    -fx-padding: 8 8 7 8;
+    -fx-graphic-text-gap: 8;
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.theme-card:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.theme-card:selected,
+.theme-card:selected:hover {
+    -fx-background-color: -prismo-accent-tint;
+    -fx-border-color: -prismo-accent;
+    -fx-text-fill: -prismo-accent-text;
+    -fx-font-weight: bold;
+}
+
+.theme-card:focus-visible {
+    -fx-border-color: -prismo-accent;
+    -fx-background-color: -prismo-hover;
+}
+
+/* A choice with a name and a line about what it does (Settings › Hidden items). */
+.choice-card {
+    -fx-background-color: -prismo-border, -prismo-card;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 10, 9;
+    -fx-padding: 10 14 10 14;
+    -fx-alignment: center-left;
+}
+
+.choice-card:hover {
+    -fx-background-color: -prismo-border-strong, -prismo-hover;
+}
+
+.choice-card:selected,
+.choice-card:selected:hover {
+    -fx-background-color: -prismo-accent, -prismo-accent-tint;
+    -fx-background-insets: 0, 2;
+}
+
+.choice-card {
+    -fx-cursor: hand;
+}
+
+.choice-card .radio-button > .radio {
+    -fx-background-color: -prismo-border-strong, -prismo-surface;
+    -fx-background-insets: 0, 1.5;
+    -fx-background-radius: 1em;
+    -fx-padding: 4;
+}
+
+.choice-card .radio-button:selected > .radio {
+    -fx-background-color: -prismo-accent, -prismo-surface;
+}
+
+.choice-card .radio-button > .radio > .dot {
+    -fx-background-color: transparent;
+    -fx-background-radius: 1em;
+    -fx-padding: 3.5;
+}
+
+.choice-card .radio-button:selected > .radio > .dot {
+    -fx-background-color: -prismo-accent;
+}
+
+.choice-card .radio-button:focus-visible > .radio {
+    -fx-background-color: -prismo-accent, -prismo-accent-tint;
+}
+
+/* A switch on a card ("Show files hidden in File Explorer"): a square box, filled with the accent when on. */
+.choice-card .check-box > .box {
+    -fx-background-color: -prismo-border-strong, -prismo-surface;
+    -fx-background-insets: 0, 1.5;
+    -fx-background-radius: 4, 3;
+}
+
+.choice-card .check-box:selected > .box {
+    -fx-background-color: -prismo-accent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 4;
+}
+
+.choice-card .check-box > .box > .mark {
+    -fx-background-color: transparent;
+}
+
+.choice-card .check-box:selected > .box > .mark {
+    -fx-background-color: -prismo-on-accent;
+}
+
+.choice-card .check-box:focus-visible > .box {
+    -fx-background-color: -prismo-accent, -prismo-accent-tint;
+    -fx-background-insets: 0, 2;
+}
+
+.choice-card .check-box:selected:focus-visible > .box {
+    -fx-background-color: -prismo-accent-hover;
+}
+
+.choice-name {
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.choice-card:selected .choice-name {
+    -fx-text-fill: -prismo-accent-text;
+}
+
+.choice-description {
+    -fx-text-fill: -prismo-text-muted;
+    -fx-font-size: 12px;
+}
+
+/* --- The viewer's Info panel: in the app's look (light or dark), beside the dark viewer --- */
+
+.viewer .info-panel {
+    -fx-background-color: -prismo-surface;
+    -fx-border-color: transparent transparent transparent -prismo-border;
+}
+
+.viewer .info-header {
+    -fx-padding: 12 12 10 20;
+}
+
+.viewer .info-title {
+    -fx-font-size: 16px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+/* The viewer's buttons and icons are light for its dark background; here they follow the look. */
+.viewer .info-panel .icon-path {
+    -fx-stroke: -prismo-icon;
+}
+
+.viewer .info-panel .button {
+    -fx-background-color: transparent;
+    -fx-padding: 6;
+}
+
+.viewer .info-panel .button:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.viewer .info-panel .button:pressed {
+    -fx-background-color: -prismo-pressed;
+}
+
+.info-scroll,
+.info-scroll > .viewport {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+}
+
+.info-content {
+    -fx-padding: 4 20 24 20;
+}
+
+.viewer .info-name {
+    -fx-font-size: 15px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.viewer .info-folder,
+.viewer .info-label {
+    -fx-text-fill: -prismo-text-muted;
+}
+
+/* A section's name, small and quiet, above its lines. */
+.viewer .info-heading {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text-faint;
+}
+
+.viewer .info-value,
+.viewer .info-message {
+    -fx-text-fill: -prismo-text;
+}
+
+.viewer .info-path {
+    -fx-font-size: 12px;
+}
+
+/* The pictures always show their own look, whatever look is on now. */
+.theme-preview {
+    -fx-border-color: rgba(128, 128, 128, 0.35);
+    -fx-border-radius: 6;
+}
+
+.theme-preview-light { -fx-background-color: #f5f6f8; }
+.theme-preview-light .preview-bar { -fx-background-color: #ffffff; }
+.theme-preview-light .preview-tile { -fx-background-color: #dfe2e9; -fx-background-radius: 3; }
+.theme-preview-dark { -fx-background-color: #15171c; }
+.theme-preview-dark .preview-bar { -fx-background-color: #1d2027; }
+.theme-preview-dark .preview-tile { -fx-background-color: #2c303a; -fx-background-radius: 3; }
+.theme-preview-amoled { -fx-background-color: #000000; }
+.theme-preview-amoled .preview-bar { -fx-background-color: #000000; -fx-border-color: transparent transparent #22252c transparent; }
+.theme-preview-amoled .preview-tile { -fx-background-color: #1b1d22; -fx-background-radius: 3; }
+.preview-accent { -fx-background-color: #3366ff; -fx-background-radius: 3; }

@@ -4,13 +4,15 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.VBox;
 
 /**
  * What a page shows when it has nothing to show: optionally the Prismo logo, a title, a line of text and one
  * button. Used as a list's placeholder; the parts that are switched off take no space.
+ *
+ * <p>The logo image comes from the stylesheet ({@code .empty-state-logo}, {@code -fx-image}), so each theme shows
+ * the version made for its background: dark lettering on light, light lettering on dark.
  */
 public final class EmptyState extends VBox {
 
@@ -25,6 +27,7 @@ public final class EmptyState extends VBox {
         getStyleClass().add("empty-state");
         setAlignment(Pos.CENTER);
         setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+        logo.getStyleClass().add("empty-state-logo");
         logo.setFitWidth(LOGO_WIDTH);
         logo.setPreserveRatio(true);
         logo.setSmooth(true);
@@ -34,17 +37,16 @@ public final class EmptyState extends VBox {
         text.setMaxWidth(440);
         action.getStyleClass().add("accent-button");
         getChildren().addAll(logo, title, text, action);
-        show(null, "", "", null, null);
+        show(false, "", "", null, null);
     }
 
     /**
-     * @param logoImage  shown above the title, or null for none
+     * @param withLogo   the Prismo logo above the title
      * @param actionText the button's text, or null for no button
      * @param onAction   what the button does
      */
-    public void show(Image logoImage, String titleText, String bodyText, String actionText, Runnable onAction) {
-        logo.setImage(logoImage);
-        showIf(logo, logoImage != null);
+    public void show(boolean withLogo, String titleText, String bodyText, String actionText, Runnable onAction) {
+        showIf(logo, withLogo);
         title.setText(titleText);
         showIf(title, !titleText.isEmpty());
         text.setText(bodyText);
@@ -66,5 +68,9 @@ public final class EmptyState extends VBox {
 
     Label title() {
         return title;
+    }
+
+    ImageView logo() {
+        return logo;
     }
 }

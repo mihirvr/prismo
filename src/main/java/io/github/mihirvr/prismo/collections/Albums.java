@@ -62,7 +62,7 @@ public final class Albums {
     }
 
     private static String where(ViewOptions options) {
-        return " FROM media WHERE " + MediaScope.LIBRARY.sqlCondition()
+        return " FROM media WHERE " + MediaScope.LIBRARY.sqlCondition(options.osHiddenShown())
                 + (options.sqlCondition() == null ? "" : " AND " + options.sqlCondition());
     }
 }

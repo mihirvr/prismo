@@ -31,7 +31,8 @@ final class Migrations {
     static final List<String> SCRIPTS = List.of(
             "V1__initial_schema.sql",
             "V2__library_roots.sql",
-            "V3__search.sql");
+            "V3__search.sql",
+            "V4__os_hidden.sql");
 
     private final List<String> scripts;
 

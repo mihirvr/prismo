@@ -1,11 +1,17 @@
 package io.github.mihirvr.prismo.collections;
 
 import io.github.mihirvr.prismo.db.LibraryRootStore;
+import io.github.mihirvr.prismo.platform.NetworkDrives;
+import io.github.mihirvr.prismo.platform.Reachability;
+import io.github.mihirvr.prismo.ui.Appearance;
+import io.github.mihirvr.prismo.ui.DialogTexts;
+import io.github.mihirvr.prismo.ui.Icon;
 import java.io.File;
-import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Function;
@@ -45,6 +51,8 @@ import org.slf4j.LoggerFactory;
 public final class LibraryFoldersDialog {
 
     private static final Logger log = LoggerFactory.getLogger(LibraryFoldersDialog.class);
+    /** How long a library folder may take to answer "are you there?" before it counts as unreachable. */
+    private static final Duration REACHABLE_LIMIT = Duration.ofSeconds(5);
 
     /** What the dialog asks the app to do. Each completes when done (on any thread). */
     public interface Operations {
@@ -60,7 +68,7 @@ public final class LibraryFoldersDialog {
     }
 
     /** One row of the list, read off the UI thread. */
-    record Row(LibraryRootStore.Root root, int count, boolean reachable) {
+    record Row(LibraryRootStore.Root root, int count, boolean reachable, boolean network) {
     }
 
     private final LibraryRootStore store;
@@ -68,7 +76,7 @@ public final class LibraryFoldersDialog {
     private final Stage stage = new Stage();
     private final VBox rows = new VBox(6);
     private final Label message = new Label();
-    private final Button add = new Button("Add folder…");
+    private final Button add = new Button("Add folder…", Icon.PLUS.node(16));
     private List<Row> shown = List.of();
 
     public LibraryFoldersDialog(Window owner, LibraryRootStore store, Operations operations) {
@@ -82,6 +90,7 @@ public final class LibraryFoldersDialog {
                 + " It only reads them: your files are never changed.");
         intro.setWrapText(true);
         rows.getStyleClass().add("library-rows");
+        intro.getStyleClass().add("library-intro");
         ScrollPane scroll = new ScrollPane(rows);
         scroll.setFitToWidth(true);
         scroll.setPrefViewportHeight(220);
@@ -101,10 +110,8 @@ public final class LibraryFoldersDialog {
         BorderPane.setMargin(bottom, new Insets(10, 0, 0, 0));
         root.setPadding(new Insets(14));
         root.getStyleClass().add("library-dialog");
-        Scene scene = new Scene(root, 640, 380);
-        if (owner != null && owner.getScene() != null) {
-            scene.getStylesheets().setAll(owner.getScene().getStylesheets());
-        }
+        Scene scene = new Scene(root, 640, 400);
+        Appearance.matchOwner(scene, owner);
         stage.setScene(scene);
         stage.getProperties().put(LibraryFoldersDialog.class, this); // lets tools find the dialog from its window
     }
@@ -122,9 +129,13 @@ public final class LibraryFoldersDialog {
             try {
                 List<LibraryRootStore.Root> roots = store.all();
                 List<Integer> counts = store.counts(roots);
+                List<Path> paths = roots.stream().map(LibraryRootStore.Root::path).toList();
+                // With a time limit: a network drive whose computer is off can take 20 s to say so.
+                Set<Path> gone = Reachability.unreachable(paths, REACHABLE_LIMIT);
                 List<Row> read = new ArrayList<>();
                 for (int i = 0; i < roots.size(); i++) {
-                    read.add(new Row(roots.get(i), counts.get(i), Files.isDirectory(roots.get(i).path())));
+                    read.add(new Row(roots.get(i), counts.get(i), !gone.contains(paths.get(i)),
+                            NetworkDrives.isNetwork(paths.get(i))));
                 }
                 Platform.runLater(() -> showRows(read));
             } catch (Exception e) {
@@ -154,23 +165,36 @@ public final class LibraryFoldersDialog {
                 + " watched; nothing is forgotten (favorites, Trash…), and turning it on again brings it all back."));
         enabled.setOnAction(_ -> run(operations.setEnabled(path, enabled.isSelected()),
                 _ -> (enabled.isSelected() ? "Turned on " : "Turned off ") + path + "."));
-        Label name = new Label(path.toString());
-        name.getStyleClass().add("library-path");
+        // The folder's own name first, then where it is and what's in it.
+        Path last = path.getFileName();
+        Label name = new Label(last == null ? path.toString() : last.toString());
+        name.getStyleClass().add("library-name");
         name.setMinWidth(0);
-        name.setTextOverrun(OverrunStyle.LEADING_ELLIPSIS); // the end of a path is what tells folders apart
-        name.setTooltip(new Tooltip(path.toString()));
+        Label where = new Label(path.toString());
+        where.getStyleClass().add("library-path");
+        where.setMinWidth(0);
+        where.setTextOverrun(OverrunStyle.LEADING_ELLIPSIS); // the end of a path is what tells folders apart
+        where.setTooltip(new Tooltip(path.toString()));
         String info = "%,d items".formatted(row.count()) + (row.root().enabled() ? "" : " · off")
-                + (row.reachable() ? "" : " · can't be reached right now (unplugged?)");
+                + (row.network() ? " · network folder: no live updates, checked every %d minutes"
+                        .formatted(NetworkDrives.RESCAN_MINUTES) : "")
+                + (row.reachable() ? "" : " · can't be reached right now (unplugged, or its network is off)");
         Label details = new Label(info);
         details.getStyleClass().add("library-info");
-        VBox text = new VBox(2, name, details);
+        if (!row.reachable()) {
+            details.getStyleClass().add("library-unreachable");
+        }
+        VBox text = new VBox(2, name, where, details);
         HBox.setHgrow(text, Priority.ALWAYS);
         Button remove = new Button("Remove…");
         remove.setMinWidth(Region.USE_PREF_SIZE);
         remove.setOnAction(_ -> askToRemove(row.root()));
-        HBox node = new HBox(10, enabled, text, remove);
+        HBox node = new HBox(12, enabled, Icon.FOLDER.node(22), text, remove);
         node.setAlignment(Pos.CENTER_LEFT);
         node.getStyleClass().add("library-row");
+        if (!row.root().enabled()) {
+            node.getStyleClass().add("library-row-off"); // dimmed: not shown anywhere while off
+        }
         return node;
     }
 
@@ -221,12 +245,14 @@ public final class LibraryFoldersDialog {
     /** Asks before forgetting a folder's items. Cancel is the default button. */
     private boolean confirmRemove(Path root, int count) {
         ButtonType remove = new ButtonType("Remove", ButtonBar.ButtonData.OK_DONE);
-        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, ("Prismo forgets its %,d items, including favorites,"
-                + " hidden items and Trash. The files on disk are not touched.\n\nTo hide the folder for now and"
-                + " keep all that, untick it instead.").formatted(count), remove, ButtonType.CANCEL);
+        Alert alert = new Alert(Alert.AlertType.CONFIRMATION, ("%s\n\nPrismo forgets its %,d items, including"
+                + " favorites, hidden items and Trash. The files on disk are not touched.\n\nTo hide the folder for"
+                + " now and keep all that, untick it instead.").formatted(root, count), remove, ButtonType.CANCEL);
         alert.initOwner(stage);
+        Appearance.matchOwner(alert);
+        alert.setGraphic(null); // no clip-art question mark: the header asks the question
         alert.setTitle("Remove library folder");
-        alert.setHeaderText("Remove " + root + " from Prismo?");
+        alert.setHeaderText("Remove " + DialogTexts.quoted(DialogTexts.folderName(root)) + " from Prismo?");
         ((Button) alert.getDialogPane().lookupButton(remove)).setDefaultButton(false);
         ((Button) alert.getDialogPane().lookupButton(ButtonType.CANCEL)).setDefaultButton(true);
         return alert.showAndWait().filter(remove::equals).isPresent();

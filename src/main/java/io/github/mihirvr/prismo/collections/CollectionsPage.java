@@ -1,8 +1,10 @@
 package io.github.mihirvr.prismo.collections;
 
 import io.github.mihirvr.prismo.db.Database;
+import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import io.github.mihirvr.prismo.ui.Album;
 import io.github.mihirvr.prismo.ui.AlbumGrid;
+import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
@@ -24,12 +26,15 @@ import javafx.application.Platform;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.geometry.Orientation;
+import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.SplitPane;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
@@ -55,16 +60,24 @@ import org.slf4j.LoggerFactory;
 public final class CollectionsPage extends BorderPane {
 
     private static final Logger log = LoggerFactory.getLogger(CollectionsPage.class);
+    private static final double PAGE_ICON_SIZE = 18;
+    private static final double FOLDER_ICON_SIZE = 16;
 
     /** The pages, in the order of the list on the left. */
     public enum Page {
-        FOLDERS("Folders"), ALBUMS("Albums"), FAVORITES("Favorites"), RECENTLY_ADDED("Recently Added"),
-        HIDDEN("Hidden"), TRASH("Trash");
+        FOLDERS("Folders", Icon.FOLDER), ALBUMS("Albums", Icon.ALBUMS), FAVORITES("Favorites", Icon.HEART),
+        RECENTLY_ADDED("Recently Added", Icon.CLOCK), HIDDEN("Hidden", Icon.EYE_OFF), TRASH("Trash", Icon.TRASH);
 
         private final String label;
+        private final Icon icon;
 
-        Page(String label) {
+        Page(String label, Icon icon) {
             this.label = label;
+            this.icon = icon;
+        }
+
+        public Icon icon() {
+            return icon;
         }
 
         @Override
@@ -84,7 +97,7 @@ public final class CollectionsPage extends BorderPane {
     private final CheckBox recursive = new CheckBox("Include subfolders");
     private final Label title = new Label();
     private final Label hint = new Label();
-    private final Button backToAlbums = new Button("← Albums");
+    private final Button backToAlbums = new Button("Albums", Icon.CHEVRON_LEFT.node(PAGE_ICON_SIZE));
     private final Label placeholder = new Label();
     private final SplitPane folderSplit = new SplitPane();
     private final StackPane gridHolder = new StackPane();
@@ -129,6 +142,7 @@ public final class CollectionsPage extends BorderPane {
 
         pages.getItems().setAll(Page.values());
         pages.getStyleClass().add("collections-pages");
+        pages.setCellFactory(_ -> new PageCell());
         pages.setPrefWidth(170);
         pages.getSelectionModel().select(Page.FOLDERS);
         pages.getSelectionModel().selectedItemProperty().addListener((_, _, page) -> {
@@ -150,6 +164,8 @@ public final class CollectionsPage extends BorderPane {
         recursive.setSelected(true);
         recursive.selectedProperty().addListener((_, _, _) -> refresh());
         folderSplit.setOrientation(Orientation.HORIZONTAL);
+        backToAlbums.getStyleClass().add("back-button");
+        backToAlbums.setTooltip(new Tooltip("Back to all albums"));
         backToAlbums.setOnAction(_ -> {
             openAlbum = null;
             refresh();
@@ -178,6 +194,11 @@ public final class CollectionsPage extends BorderPane {
         grid.setOnOpen(onOpen);
     }
 
+    /** The grid's Info item and I key: open with the viewer's Info panel. */
+    public void setOnInfo(BiConsumer<List<TimelineItem>, Integer> onInfo) {
+        grid.setOnInfo(onInfo);
+    }
+
     public void setOnAction(ItemAction.Handler onAction) {
         grid.setOnAction(onAction);
     }
@@ -200,7 +221,7 @@ public final class CollectionsPage extends BorderPane {
         pages.requestFocus();
     }
 
-    /** The shared Filters + Sort changed. */
+    /** The shared Filters + Sort (or the File Explorer switch) changed. */
     public void setOptions(ViewOptions newOptions) {
         options = newOptions;
         refresh();
@@ -316,7 +337,8 @@ public final class CollectionsPage extends BorderPane {
             title.setText("%s · %,d".formatted(request.page(), loaded.items().size()));
         }
         placeholder.setText(emptyText(request, loaded));
-        Object key = List.of(String.valueOf(loaded.scope()), loaded.options());
+        // The File Explorer switch changes which items are in, not the order: stay on the same photo.
+        Object key = List.of(String.valueOf(loaded.scope()), loaded.options().withOsHiddenShown(false));
         if (key.equals(shownKey)) {
             grid.setItems(loaded.items()); // same view, new data: stay on the same photo
         } else {
@@ -337,7 +359,9 @@ public final class CollectionsPage extends BorderPane {
             case ALBUMS -> "Nothing in this album" + filtered + ".";
             case FAVORITES -> "No favorites" + filtered + ". Press F on a photo, or right-click it › Add to Favorites.";
             case RECENTLY_ADDED -> "Nothing added yet" + filtered + ".";
-            case HIDDEN -> "Nothing hidden" + filtered + ". Press H on a photo to hide it from everywhere but here.";
+            case HIDDEN -> "Nothing hidden" + filtered + ". Press H on a photo to hide it from everywhere but here."
+                    + (OsHiddenMark.SUPPORTED && !request.options().osHiddenShown()
+                            ? " Files marked Hidden in File Explorer show here too." : "");
             case TRASH -> "Trash is empty" + filtered + ".";
         };
     }
@@ -347,7 +371,8 @@ public final class CollectionsPage extends BorderPane {
      * moving the grid to a new parent on every reload could lose its scroll position.
      */
     private void showLayout(Page page) {
-        Object layout = List.of(page, openAlbum == null);
+        // The Hidden page's hint follows the File Explorer switch.
+        Object layout = List.of(page, openAlbum == null, page == Page.HIDDEN && options.osHiddenShown());
         if (layout.equals(shownLayout)) {
             return;
         }
@@ -359,7 +384,10 @@ public final class CollectionsPage extends BorderPane {
         folderSplit.getItems().clear();
         hint.setTextOverrun(page == Page.FOLDERS ? OverrunStyle.LEADING_ELLIPSIS : OverrunStyle.ELLIPSIS);
         hint.setText(switch (page) {
-            case HIDDEN -> "Hidden items are shown only here: not on the Timeline, in search or in other pages.";
+            case HIDDEN -> "Hidden items are shown only here: not on the Timeline, in search or in other pages."
+                    + (!OsHiddenMark.SUPPORTED ? "" : options.osHiddenShown()
+                            ? " Files marked Hidden in File Explorer show everywhere (Settings)."
+                            : " That includes files marked Hidden in File Explorer.");
             case TRASH -> "Items in Trash are still on disk. Restore them, or delete them permanently"
                     + " (right-click, or Delete).";
             case RECENTLY_ADDED -> "Newest added to Prismo first.";
@@ -433,16 +461,45 @@ public final class CollectionsPage extends BorderPane {
         return item;
     }
 
-    /** "Goa  12": the count follows the Include subfolders box (everything below, or only its own). */
+    /** A page in the list on the left: its icon and name. */
+    private static final class PageCell extends ListCell<Page> {
+        @Override
+        protected void updateItem(Page page, boolean empty) {
+            super.updateItem(page, empty);
+            setText(empty || page == null ? null : page.toString());
+            setGraphic(empty || page == null ? null : page.icon().node(PAGE_ICON_SIZE));
+        }
+    }
+
+    /**
+     * A folder icon, the name and (muted) the count, which follows the Include subfolders box (everything below,
+     * or only its own). A library folder shows only its own name; the full path is in the tooltip.
+     */
     private final class FolderCell extends TreeCell<FolderTree.Node> {
+        private final Label name = new Label();
+        private final Label count = new Label();
+        private final HBox row = new HBox(8, Icon.FOLDER.node(FOLDER_ICON_SIZE), name, count);
+        private final Tooltip path = new Tooltip();
+
+        FolderCell() {
+            name.getStyleClass().add("folder-name");
+            count.getStyleClass().add("folder-count");
+            row.setAlignment(Pos.CENTER_LEFT);
+        }
+
         @Override
         protected void updateItem(FolderTree.Node node, boolean empty) {
             super.updateItem(node, empty);
+            setText(null);
             if (empty || node == null) {
-                setText(null);
+                setGraphic(null);
+                setTooltip(null);
             } else {
-                int count = recursive.isSelected() ? node.totalCount() : node.ownCount();
-                setText("%s   %,d".formatted(node.name(), count));
+                name.setText(node.shownName());
+                count.setText("%,d".formatted(recursive.isSelected() ? node.totalCount() : node.ownCount()));
+                path.setText(node.path());
+                setGraphic(row);
+                setTooltip(path);
             }
         }
     }

@@ -74,6 +74,8 @@ Video Watch Progress (thumbnail bar + resume playback)
 ```
 The v1.0 items without an issue number still need GitHub issues.
 
+**Built before #10 (pre-packaging work, no issues of their own):** Favorites, Hidden (Prismo's own + the Windows Hidden mark; Ignored Paths not yet) and Trash (with #9); Filters and Sort (with #7); Multiple Locations (library folders, with #9); Metadata Panel (the viewer's Info panel); Video Watch Progress; the looks (Light / Dark / AMOLED / Follow system) with a Settings window; the app icon; and more viewer and video features (see Viewer). Still to do in v1.0: Packaging (#10), Selection Mode, the remaining File Operations, Broken & Unavailable Media (partly), HEIC, RAW previews.
+
 ### Deferred to Post-MVP
 Gallery Lock (PIN), duplicate finder, AI/content search, face recognition, OCR, basic editing, plugins, Workspaces, cloud sync. (Full list at the bottom.)
 
@@ -84,6 +86,8 @@ Gallery Lock (PIN), duplicate finder, AI/content search, face recognition, OCR, 
 ```
 🏠 Timeline   📂 Collections   🔍 Search   ⚙ Settings
 ```
+
+Built: a top bar with the Timeline | Collections tabs, the search box, "Library folders…" and a Settings button (icons are the app's own line drawings, not emoji).
 
 ---
 
@@ -166,6 +170,18 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 
 **Metadata panel** (optional side panel): resolution, file size, camera, lens, ISO, aperture, GPS (if present), date taken, date modified, file path.
 
+**Built (pre-packaging work, decided with the owner):**
+
+- **Previous / next:** round buttons at the left and right edges (photos and videos; hidden at the ends of the list), Page Up / Page Down for both, Left / Right for photos. In a video Left / Right skip 5 s instead, and the video bar has its own previous / next buttons next to Play. Moving on saves the video's watch position first.
+- **Full screen** (F11, the button, or a double-click on a video): the top bar, the edge buttons, the video controls and the pointer fade out after 2.5 s without mouse movement (not while a menu is open or the pointer rests on a control) and come back when the mouse moves.
+- **Info panel** (the metadata panel above, built): the Info button in the viewer's top bar, the I key, or "Info" in the right-click menus (on a grid, I or Alt+Enter opens the viewer with the panel). Closed with the button, I or Esc. Shows name, folder, type, size, dimensions (photos), dates, camera, full path; for photos also exposure, ISO, aperture, focal length, lens, flash and GPS ("lat, long") from EXIF; for videos length, formats (codecs), resolution, frame rate, sound tracks and subtitle tracks. Values the file doesn't have are left out. It replaces a separate Properties window built earlier in this round.
+- **Right-click menus** (grids and viewer) show each item's shortcut: Open, favorite / hide / Hide in File Explorer / Trash, Show in folder, Open with default app, Copy, Info. On an open video also Play / Pause, skips, previous / next, Subtitles, Sound track, Speed, Loop, Mute, Full screen; on a photo Slideshow, Rotate, zoom, previous / next, Full screen. The viewer's "More" button has the file items.
+- **Video controls:** Space or a click = play / pause; J / L ±10 s; Left / Right ±5 s; Home = from the start; Up / Down volume; M mute; loop; `,` / `.` one picture back / on while paused.
+- **Speed:** 0.5× to 2× in steps (`[` / `]` and a menu); the sound keeps its pitch.
+- **Sound tracks:** when a video has more than one, a menu and the A key pick one (named from the file's language and title tags).
+- **Subtitles:** an `.srt` file next to the video (`Holiday.srt`, `Holiday.en.srt`…) is found and turned on by itself; any other `.srt` can be picked with "Choose subtitle file…" in the Subtitles menu (a file dialog that opens in the video's folder; added for this video until it closes); text subtitle tracks inside MKV / MP4 can be chosen (C cycles, or the menu); picture subtitles (DVD / Blu-ray) are listed but can't be shown; Off. ASS styling is shown as plain text. Delay ±0.1 s per Z / X press, shown on screen, with "Reset delay" in the menu.
+- **Remembered:** volume, mute and speed are kept after a restart. Loop stays on from video to video until Prismo closes; the subtitle choice and delay start fresh for each video.
+
 ---
 
 ## Video Watch Progress
@@ -173,12 +189,14 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 Two linked features, both video-only:
 
 1. **Thumbnail progress bar** — thin colored strip along the bottom edge of a video's thumbnail, width proportional to `playback_position_seconds / duration_seconds`. Rendered as a live UI overlay at display time, sourced from DB values — **not** baked into the cached thumbnail bitmap, since progress changes constantly and the thumbnail cache is meant to be generate-once. Once position crosses a "fully watched" threshold (e.g. ≥90-95% of duration, to account for trailing credits/black frames), the bar renders full-width in a distinct color.
-2. **Resume playback** — on opening a video, seek automatically to the saved position (silent resume, VLC-style). No confirmation prompt by default; flag if a "Resume from 12:34?" prompt is preferred instead.
+2. **Resume playback** — on opening a video, seek automatically to the saved position (silent resume, VLC-style). No confirmation prompt by default; flag if a "Resume from 12:34?" prompt is preferred instead. *(Settled before #10: silent resume, with a short "Resumed at 0:30" note on screen.)*
 
 **Data** (added to `Media`, video rows only): `duration_seconds`, `playback_position_seconds`.
 
 - `duration_seconds` read once during indexing from the file's MP4/QuickTime metadata (`metadata-extractor`) — not from JavaFX `MediaPlayer`, which would mean creating a player per file and only works for formats JavaFX can play
 - `playback_position_seconds` written periodically during playback (~every 5-10s) plus on pause/stop/app-close
+
+**Built (pre-packaging work), decisions:** silent resume (no prompt). "Watched" = at or past **95%** of the length: the bar is full in another colour and the video starts from the beginning again. Under 5 s in: starts from the beginning, no bar. The position is saved every 5 s while playing and on pause, at the end, when moving to another item, when the viewer closes and when the app closes.
 
 **Optional extension (not in v1 by default)**: a Watched / Unwatched / In Progress filter and sort option, same category as existing Favorites/Hidden filters — cheap to add later since the underlying data already exists.
 
@@ -194,6 +212,9 @@ Two linked features, both video-only:
 ## Hidden Content System
 
 1. **OS Hidden** — toggles: Hide Hidden Files / Hide Hidden Folders / Include Hidden Media
+   - **Built for files (Windows, pre-packaging work):** the indexer reads each file's Windows Hidden attribute (`media.os_hidden`, V4). A setting "**Show files hidden in File Explorer**", **off by default**: off, such files appear only on Collections › Hidden (not on the Timeline, search, Folders, Albums, Favorites or Recently Added); on, they show everywhere like other files. Changing it updates the views at once. A mark set or cleared in Explorer while Prismo runs is picked up by the watcher.
+   - **Hide modes** (a Settings choice): **Separate** (default): Prismo's Hide is Prismo-only and never touches the file; the right-click items "Hide in File Explorer" / "Unhide in File Explorer" set and clear the Windows mark. **Both ways**: Prismo's Hide also sets the Windows mark, and Unhide clears it. Setting the mark is a file change the user asks for, so it fits the non-destructive rule.
+   - Not built: hidden folders (a Hidden folder's files are not treated as hidden), Linux (a hidden file there is a name starting with a dot, which Prismo would have to rename, so it isn't supported).
 2. **Ignored Paths** — user-defined, can ignore folders, entire drives, extensions, or individual paths (e.g. `node_modules`, `.git`, `$RECYCLE.BIN`, `System Volume Information`, `Android/data`)
 3. **Gallery Lock** *(post-MVP)* — PIN-protected, app-level hiding from Timeline / Search / Collections / Folder Explorer until unlocked. Windows Hello / Linux auth support → further out. **Note**: this hides items from the index view — it does not encrypt files on disk.
 
@@ -252,6 +273,8 @@ Open · Open With · Reveal in Folder
 ```
 Batch Rename · Convert · Compress
 ```
+
+**Built so far:** Delete / Restore (#9: Prismo's Trash, and Delete permanently), Open (the viewer), **Open with default app**, **Show in folder** (Reveal in Folder: File Explorer opens with the file selected) and **Copy**: right-click "Copy" or Ctrl+C puts the *file* on the clipboard, to paste in File Explorer or another app. Decided: no Cut and no Paste in Prismo for now. Move and Rename are still to do.
 
 ---
 
@@ -316,6 +339,10 @@ This is deliberately *not* separate Workspaces/library profiles — that's a big
 - **Cache**: cache size, clear cache, rebuild cache
 - **Performance**: background indexing speed, CPU limit, memory limit
 
+**Built so far (pre-packaging work):** a Settings window (top-bar button, Ctrl+,) with **Appearance**: Light, Dark, AMOLED black (pure black for OLED screens) and Follow system (light or dark as Windows / the desktop is set, changing live); it applies at once, and on Windows the title bars follow it. On Windows also **Hidden items**: the "Show files hidden in File Explorer" switch and the hide mode (see Hidden Content System). The window fits the screen (scrolls inside if it would be taller).
+
+**Decided: every setting is kept after a restart.** Saved in the settings table: the look, the hide mode, the hidden-files switch, the thumbnail size, the main window's size and place (and whether it was maximised; a place that is no longer on any screen falls back to centred), and the video volume, mute and speed. Per-view choices (Filters, Sort, the open tab, "Include subfolders", the search text) are not settings and start fresh.
+
 ---
 
 ## UX Features
@@ -324,7 +351,7 @@ This is deliberately *not* separate Workspaces/library profiles — that's a big
 - Smooth zoom (Ctrl + scroll / trackpad pinch)
 - Thumbnail size slider (tiny → huge)
 - Drag & drop (move, copy, create albums)
-- Right-click menu: open, open with, open folder, rename, move, copy, delete, favorite, hide, properties
+- Right-click menu: open, open with, open folder, rename, move, copy, delete, favorite, hide, properties (built so far: open, favorite, hide, Hide in File Explorer, Trash, Show in folder, Open with default app, Copy and Info, each with its shortcut shown; "properties" became the viewer's Info panel)
 - Keyboard shortcuts: arrows, space, delete, Ctrl+A/C/V, F11, Esc
 
 ---
@@ -337,7 +364,8 @@ One `Media` table remains the core of the philosophy — every page is a filtere
 Media        → id, path, type, date_taken, date_modified, date_added,
                resolution, favorite (bool), hidden (bool), broken (bool),
                trashed_at (null = not in Trash; used for auto-purge),
-               duration_seconds (video only), playback_position_seconds (video only), ...
+               duration_seconds (video only), playback_position_seconds (video only),
+               os_hidden (bool: the Windows Hidden mark, V4), ...
 Folders      → structural entries for the Folder Explorer / Albums
 Drives       → tracks connect/disconnect state for Multiple Locations
 Tags         → post-MVP, user-defined
@@ -353,7 +381,7 @@ Folders    → everything, grouped by filesystem path
 Albums     → everything, grouped by folder
 Favorites  → favorite = true
 Videos     → type = video
-Hidden     → hidden = true
+Hidden     → hidden = true, or os_hidden = true while the "Show files hidden in File Explorer" switch is off
 Trash      → trashed_at is not null
 ```
 (Every view except Trash also filters out `trashed_at is not null`.)
@@ -448,7 +476,6 @@ Moved to **`TECH_STACK.md`**: libraries, versions, Java/JavaFX version, threadin
 - ~~Video thumbnails: confirm bundling an LGPL `ffmpeg` build (decide in #4)~~ Decided before #10: FFmpeg (LGPL v3 build, through JavaCV) is bundled; it plays videos and makes their thumbnails. See TECH_STACK.md, "Video"
 - HEIC: bundle `libheif` native libraries per OS, or rely on the Linux distro package?
 - Confirm the non-destructive-editing conflict resolution (before crop/rotate/flip get built, even as post-MVP)
-
 ---
 
 ## Resume Pitch (design-intent framing — keep in this tense until measured)
