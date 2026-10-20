@@ -14,9 +14,10 @@ class ViewModeTest {
             assertEquals(ViewMode.STILL, ViewMode.of(still), still);
         }
         assertEquals(ViewMode.ANIMATED, ViewMode.of("gif"));
-        assertEquals(ViewMode.VIDEO, ViewMode.of("mp4"));
-        assertEquals(ViewMode.VIDEO, ViewMode.of("M4V"));
-        for (String external : new String[] {"mov", "mkv", "webm", "avi", "heic", "nef", "cr2"}) {
+        for (String video : new String[] {"mp4", "M4V", "mov", "mkv", "webm", "avi"}) {
+            assertEquals(ViewMode.VIDEO, ViewMode.of(video), video); // all played in the app (FFmpeg)
+        }
+        for (String external : new String[] {"heic", "nef", "cr2"}) {
             assertEquals(ViewMode.EXTERNAL, ViewMode.of(external), external);
         }
     }

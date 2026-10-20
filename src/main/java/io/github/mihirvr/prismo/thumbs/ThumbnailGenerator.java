@@ -1,6 +1,8 @@
 package io.github.mihirvr.prismo.thumbs;
 
+import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.platform.FileReads;
+import io.github.mihirvr.prismo.video.VideoNatives;
 import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
@@ -29,6 +31,8 @@ import javax.imageio.stream.ImageOutputStream;
  *   <li><b>Encode:</b> JPEG at quality 0.85.</li>
  * </ol>
  *
+ * <p>Videos go to {@link VideoThumbnailer} instead (one frame, by the bundled {@code ffmpeg} program).
+ *
  * <p>Pure CPU + file work with no shared state, so it's safe to call from many threads at once.
  */
 public final class ThumbnailGenerator {
@@ -36,9 +40,16 @@ public final class ThumbnailGenerator {
     private static final float JPEG_QUALITY = 0.85f;
 
     private final int size;
+    private final VideoThumbnailer videos;
 
     public ThumbnailGenerator(int size) {
+        this(size, VideoNatives::ffmpegExecutable);
+    }
+
+    /** {@code ffmpeg} finds the program for video thumbnails (tests pass a missing one). */
+    ThumbnailGenerator(int size, VideoThumbnailer.Program ffmpeg) {
         this.size = size;
+        this.videos = new VideoThumbnailer(ffmpeg, size);
     }
 
     /** True if some installed ImageIO reader handles this extension (JDK readers + TwelveMonkeys plugins). */
@@ -46,7 +57,20 @@ public final class ThumbnailGenerator {
         return ImageIO.getImageReadersBySuffix(extension).hasNext();
     }
 
+    /** True if a thumbnail can be made for this extension: an image ImageIO decodes, or a video. */
+    public static boolean canMake(String extension) {
+        return isVideo(extension) || canDecode(extension);
+    }
+
+    private static boolean isVideo(String extension) {
+        return MediaType.fromExtension(extension).orElse(null) == MediaType.VIDEO;
+    }
+
     public void generate(Path source, Path target) throws IOException {
+        if (isVideo(MediaType.extensionOf(source.getFileName().toString()))) {
+            videos.generate(source, target);
+            return;
+        }
         BufferedImage decoded = decodeSubsampled(source);
         BufferedImage thumbnail = scaleAndOrient(decoded, ExifOrientation.read(source));
         writeJpeg(thumbnail, target);

@@ -206,11 +206,18 @@ public final class MediaViewer extends StackPane {
                 loadAnimated(ref);
             }
             case VIDEO -> {
+                showThumbnail(ref); // a poster while the video opens; stays behind the message if it can't play
                 video.setVisible(true);
                 video.play(ref.path(), reason -> {
                     if (isCurrent(ref)) {
                         video.setVisible(false);
                         showMessage("This video can't be played in Prismo: " + reason + ".", true);
+                    }
+                }, () -> {
+                    if (isCurrent(ref)) {
+                        fullShown = true; // a thumbnail arriving late must not come back
+                        imageView.setImage(null);
+                        applyTransform();
                     }
                 });
             }

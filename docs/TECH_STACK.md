@@ -25,8 +25,8 @@ Anything marked **(verify in #N)** is our current reading and has not been teste
 | Image decode (HEIC) | `libheif` (C library) via Java FFM | — | — | Native library, comes later in v1.0 |
 | RAW | Embedded JPEG preview (v1) | — | — | Full RAW decoding (`libraw`) is post-MVP |
 | Video metadata | `metadata-extractor` | — | — | `TAG_DURATION_SECONDS` on MP4/QuickTime directories |
-| Video playback | `javafx.media` | — | yes | Limited formats, see "Video" |
-| Video thumbnails | Bundled `ffmpeg` (LGPL build), run as a separate process | — | — | Proposal, decide in #4 |
+| Video playback | JavaCV `FFmpegFrameGrabber` + FFmpeg (LGPL v3 build) + `javax.sound` | javacv 1.5.14, ffmpeg 8.1.2-1.5.14 | **no** (automatic) | Our own small player, see "Video". Replaced `javafx.media` (pre-packaging work, 2026-10-20) |
+| Video thumbnails | The `ffmpeg` program from the same FFmpeg bundle, run as a separate process | — | — | See "Video" |
 | File watching | `java.nio.file.WatchService` behind our own interface | — | yes | See "File watching" |
 | Logging | SLF4J 2.0.x + Logback | slf4j 2.0.20 (stable), logback 1.6.5 | yes | Don't use the SLF4J 2.1 alpha |
 | Tests | JUnit Jupiter (JUnit 6) | 6.1.3 | yes | TestFX for UI tests, maybe later |
@@ -52,7 +52,7 @@ Why not stay on Java 21:
 
 Setup: install a JDK 25 build (e.g. Temurin 25) and let a Gradle toolchain pin it. JDK 21 can stay installed alongside it.
 
-**Native-access warnings.** Since JDK 24, the JVM prints warnings when code uses JNI or FFM unless native access is allowed at launch. sqlite-jdbc uses JNI, and JavaFX uses native code too. The run options (`build.gradle.kts`) use `--enable-native-access=javafx.graphics,javafx.media,ALL-UNNAMED`: `javafx.graphics` checked in #1, `ALL-UNNAMED` (sqlite-jdbc) in #2, `javafx.media` in #6 (without it, JDK 25 warns when the media module's native methods are bound). The installer launcher (#10) needs the same flag.
+**Native-access warnings.** Since JDK 24, the JVM prints warnings when code uses JNI or FFM unless native access is allowed at launch. sqlite-jdbc uses JNI, and JavaFX uses native code too. The run options (`build.gradle.kts`) use `--enable-native-access=javafx.graphics,ALL-UNNAMED`: `javafx.graphics` checked in #1, `ALL-UNNAMED` (sqlite-jdbc) in #2 and FFmpeg through JavaCPP (also a classpath jar) since the video player replaced `javafx.media` (which #6 had added to the flag). The installer launcher (#10) needs the same flag.
 
 ---
 
@@ -80,7 +80,7 @@ If Prismo were a module (`module-info.java`) and we ran `jlink` on the whole app
 1. **The app is a normal classpath app.** It has no `module-info.java`.
 2. **`jlink` builds only the runtime:** the JDK modules we need plus the JavaFX modules (from the JavaFX jmods, which are platform-specific). JavaFX then loads as proper named modules from the runtime, which is what JavaFX expects.
 3. **`jpackage` takes that runtime image (`--runtime-image`) plus our jars (`--input`)** and builds the installer.
-4. To find which JDK modules we need, run `jdeps --print-module-deps --ignore-missing-deps` on the app jars, then add JavaFX's modules (`javafx.controls`, `javafx.media`, `javafx.swing` if we use `SwingFXUtils`).
+4. To find which JDK modules we need, run `jdeps --print-module-deps --ignore-missing-deps` on the app jars, then add JavaFX's modules (`javafx.controls`; `javafx.media` is no longer used; `javafx.swing` if we use `SwingFXUtils`).
 5. During development, the `org.openjfx.javafxplugin` Gradle plugin puts JavaFX on the module path for `./gradlew run`.
 6. We write the `jlink` and `jpackage` steps as our own Gradle tasks in #10, so every flag is visible and understood. A third-party plugin (e.g. beryx `badass-runtime`) is a fallback if that gets painful. The beryx project's own page says it is looking for co-maintainers.
 
@@ -109,7 +109,7 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1), at below-normal thread priority. Its queue puts thumbnails on screen first and skips requests for rows that scrolled away. |
 | HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
 | Viewer: decoding full-size stills | CPU-bound | 2 platform threads at normal priority (someone is waiting for the result) |
-| Viewer: opening a video | Native | A short-lived platform thread per video |
+| Viewer: playing a video | Native (FFmpeg through JavaCPP) | Two platform threads per video while it plays: `prismo-video-picture` and `prismo-video-sound`, each with its own FFmpeg reader. Closed when the viewer moves on |
 | Collections pages (#9) | Native (JNI) | The same `prismo-timeline` thread as the Timeline, newest load wins |
 | "Delete permanently" (#9) | I/O | A short-lived virtual thread per file (Recycle Bin call or delete), then the row on the writer |
 | Updating the UI | — | `Platform.runLater`, batched (e.g. a few times per second, not once per file) |
@@ -185,12 +185,16 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 ## Video
 
 - **Duration:** from `metadata-extractor` during indexing (see "Metadata").
-- **Playback:** `javafx.media`. Per the JavaFX 25 docs, it plays **MP4 (`.mp4`, `.m4v`) with H.264 or H.265 video and AAC audio**, HLS streams, and MP3/WAV/AIFF audio. **MOV, MKV, WebM and AVI are not on the supported list.** Many phone videos are MOV, so this is a real gap.
-  - v1 (built in #6): the viewer plays MP4 / M4V. For anything else it shows the thumbnail (once video thumbnails exist) and an "Open with default app" button, which uses JavaFX's `HostServices.showDocument` (no `java.desktop` needed).
-  - **Measured in #6 on the development machine (Windows 11 build 26300, an Insider build):** H.265 (with the Microsoft HEVC extension installed) played every time. **AAC audio never played** (`ERROR_MEDIA_INVALID`), whichever encoder made it, in JavaFX 21, 24 and 25 alike, so most phone videos (H.264 + AAC) fail there. H.264 video without audio played about 6 times in 10; the other times it jumped to the end, never started, or failed. Not yet tried on another Windows build or on Linux. When playback fails, the viewer shows why and offers "Open with default app".
-  - The player is created off the UI thread, and must be kept referenced while it plays: an unreferenced `MediaPlayer` can be garbage-collected mid-play (seen in a test program).
-- **Watch progress:** the viewer saves `playback_position_seconds` from `MediaPlayer.currentTime` while playing (and on pause, stop and app close), through the DB writer queue.
-- **Thumbnails (proposal; not in #4, which reports videos as "unsupported"; needs its own issue):** JavaFX can't grab a frame from a video without playing it on the UI toolkit. The plan is to bundle an **LGPL-only build of `ffmpeg`** and run it as a separate process to grab one frame. As a separate program it doesn't affect Prismo's MIT license, but its license notice must ship with the app.
+- **Playback: our own small player on FFmpeg** (`video/VideoPlayer`), built before #10 because `javafx.media` couldn't play phone videos on the development machine (a normal Windows 11 build 26300, not an Insider build): AAC sound failed every time, in JavaFX 25.0.4, 27 and 28-ea+12 alike (72 of 72 opens: 3 files × 8 opens × 3 versions, 2026-10-20), and H.264 started unreliably. It plays every video type Prismo indexes (MP4, M4V, MOV, MKV, WebM, AVI) with the codecs FFmpeg decodes (H.264, H.265, VP9, AV1, MPEG-4, ProRes; AAC, MP3, Opus, Vorbis…).
+  - **Libraries:** JavaCV (`org.bytedeco:javacv`, only its FFmpeg classes: added with `isTransitive = false`, because its pom also pulls in OpenCV, Tesseract and camera drivers), JavaCPP (the loader) and `org.bytedeco:ffmpeg` with the native files for one OS (classifier `windows-x86_64` or `linux-x86_64`). Size: the Windows FFmpeg jar is 30.4 MB (76 MB unpacked), the Linux one 26.9 MB.
+  - **How it plays:** two platform threads, each with its own `FFmpegFrameGrabber` on the same file: one decodes only pictures (BGRA, scaled down to the screen's real pixel size), one only sound (16-bit stereo, converted by FFmpeg). Sound goes to a `javax.sound` `SourceDataLine` (200 ms buffer). The **sound card is the master clock** (`PlaybackClock`: samples played ÷ sample rate); pictures wait for it. Files without sound, or a computer without a sound device, run on the wall clock. Three pixel arrays go round between the picture thread and the UI, which draws the newest one into a `WritableImage` on each pulse.
+  - **Phone videos** store an upright video as a sideways picture plus a "display rotation" tag; the player reads it and turns the picture.
+  - When a file can't be played, the viewer shows why in plain words, with the thumbnail behind it, and offers "Open with default app" (JavaFX `HostServices.showDocument`).
+  - Measured (synthetic test videos, this machine, 8 threads): 1080p and 4K H.264 / H.265 at 30 fps delivered 30 of 30 pictures a second, at most 7 ms late; 4K used 14–17% of all cores; first picture after 110–217 ms (512 ms in one run for the first video after the app started).
+- **Watch progress:** the viewer saves `playback_position_seconds` from the player's position while playing (and on pause, stop and app close), through the DB writer queue.
+- **Thumbnails:** one frame at 1 s (the first frame for shorter videos), made by the `ffmpeg` **program** from the same bundle, run as a separate process (`thumbs/VideoThumbnailer`), single-threaded, with a 60 s limit. Why a process: a decoder crash on a damaged file ends only that `ffmpeg` run, not Prismo. `ffmpeg` turns phone videos upright by itself.
+- **Native files:** JavaCPP unpacks FFmpeg's DLLs / `.so` files on first use into Prismo's cache (`cache/native`, set in `Launcher`; tests use `build/javacpp-cache`). The first unpack took 2.2–3.1 s here (5 runs); afterwards they load from there. #10 decides whether the installer ships them already unpacked.
+- **License:** the default `org.bytedeco:ffmpeg` build is **LGPL v3 or later** (its `ffmpeg -L`; GPL parts like x264/x265 are only in the separate `-gpl` artifact, which Prismo doesn't use). JavaCV and JavaCPP are Apache 2.0 (or GPLv2 with Classpath exception, our choice: Apache). Prismo links to FFmpeg's shared libraries and doesn't change them, which LGPL allows from an MIT app; the license texts must ship with the installer (see "Third-party licenses to ship").
 
 ---
 
@@ -253,7 +257,7 @@ macOS isn't a target. If it ever becomes one, it would use `~/Library/Applicatio
 
 ## Third-party licenses to ship
 
-Bundled native code brings license duties: `libheif` and `libde265` (LGPL), `ffmpeg` (LGPL build only), and `libraw` (LGPL/CDDL) if added later. The installer must include a `THIRD_PARTY_NOTICES` file. Java libraries: TwelveMonkeys (BSD), metadata-extractor (Apache 2.0), sqlite-jdbc (Apache 2.0), SLF4J (MIT), Logback (EPL/LGPL). **(re-check each license when the dependency is added)**
+Bundled native code brings license duties: FFmpeg (**LGPL v3 or later**, the default `org.bytedeco:ffmpeg` build, checked 2026-10-20 from its own `ffmpeg -L` and the preset's build script), `libheif` and `libde265` (LGPL) when HEIC lands, and `libraw` (LGPL/CDDL) if added later. LGPL means: ship its license text and notices, link it as separate shared libraries the user could swap (the FFmpeg DLLs are separate files), and don't change it. The installer must include a `THIRD_PARTY_NOTICES` file. Java libraries: TwelveMonkeys (BSD), metadata-extractor (Apache 2.0), sqlite-jdbc (Apache 2.0), SLF4J (MIT), Logback (EPL/LGPL), JavaCV and JavaCPP (Apache 2.0, or GPLv2 with Classpath exception; we use them under Apache 2.0). **(re-check each license when the dependency is added)**
 
 ---
 
@@ -277,7 +281,7 @@ Bundled native code brings license duties: `libheif` and `libde265` (LGPL), `ffm
 - sqlite-jdbc and FTS5: [xerial/sqlite-jdbc](https://github.com/xerial/sqlite-jdbc)
 - FTS5 trigram tokenizer: [SQLite FTS5](https://www.sqlite.org/fts5.html)
 - metadata-extractor formats: [drewnoakes/metadata-extractor](https://github.com/drewnoakes/metadata-extractor)
-- JavaFX media formats: [javafx.scene.media](https://openjfx.io/javadoc/25/javafx.media/javafx/scene/media/package-summary.html)
+- JavaFX media formats (the old player, replaced): [javafx.scene.media](https://openjfx.io/javadoc/25/javafx.media/javafx/scene/media/package-summary.html)
 - JavaFX `Image`: [javafx.scene.image.Image](https://openjfx.io/javadoc/25/javafx.graphics/javafx/scene/image/Image.html)
 - Windows `fileKey()`: [nio-dev thread, 2023](https://mail.openjdk.org/pipermail/nio-dev/2023-April/013561.html)
 - beryx plugin: [badass-jlink-plugin](https://github.com/beryx/badass-jlink-plugin)

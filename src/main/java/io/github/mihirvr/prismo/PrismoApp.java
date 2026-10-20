@@ -163,7 +163,7 @@ public final class PrismoApp extends Application {
         timeline = new TimelineView(thumbnailLoader);
         timeline.setThumbnailSize(savedThumbnailSize);
         timeline.setPlaceholder(timelinePlaceholder);
-        // HostServices opens a file in the system's default app (MOV, MKV… aren't played in the app yet).
+        // HostServices opens a file in the system's default app (HEIC, RAW, and videos that can't be played).
         viewer = new MediaViewer(thumbnailLoader, getHostServices()::showDocument);
         timeline.setOnOpen(viewer::open);
 
@@ -481,8 +481,8 @@ public final class PrismoApp extends Application {
 
     /** Runs on the indexing thread after an index run: makes every missing thumbnail, newest first. */
     private void warmThumbnails(String indexSummary) throws SQLException, InterruptedException {
-        var images = database.read(c -> MediaRefs.newestImages(c));
-        thumbnails.warmUp(images, p -> Platform.runLater(() -> status.setText(indexSummary
+        var media = database.read(c -> MediaRefs.newestToThumbnail(c));
+        thumbnails.warmUp(media, p -> Platform.runLater(() -> status.setText(indexSummary
                 + "  ·  Thumbnails %s %,d / %,d (%,d unsupported, %,d failed)".formatted(
                         p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(), p.failed()))));
     }

@@ -17,7 +17,7 @@ class MediaRefsTest {
     Path tmp;
 
     @Test
-    void newestImagesFirstWithoutVideosOrTrash() throws Exception {
+    void newestFirstWithVideosWithoutTrash() throws Exception {
         try (Database database = Database.open(tmp.resolve("prismo.db"))) {
             database.write(c -> {
                 try (Statement s = c.createStatement()) {
@@ -37,13 +37,13 @@ class MediaRefsTest {
                 return null;
             }).get();
 
-            List<Long> ids = database.read(MediaRefs::newestImages).stream().map(MediaRef::id).toList();
+            List<Long> ids = database.read(MediaRefs::newestToThumbnail).stream().map(MediaRef::id).toList();
 
-            assertEquals(List.of(2L, 3L, 7L, 1L), ids, "7 and 1 share a date: the higher id first");
+            assertEquals(List.of(4L, 2L, 3L, 7L, 1L), ids, "7 and 1 share a date: the higher id first");
             String plan = database.read(c -> {
                 StringBuilder lines = new StringBuilder();
                 try (Statement s = c.createStatement();
-                        ResultSet rows = s.executeQuery("EXPLAIN QUERY PLAN " + MediaRefs.NEWEST_IMAGES)) {
+                        ResultSet rows = s.executeQuery("EXPLAIN QUERY PLAN " + MediaRefs.NEWEST_TO_THUMBNAIL)) {
                     while (rows.next()) {
                         lines.append(rows.getString("detail")).append('\n');
                     }

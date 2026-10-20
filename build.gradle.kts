@@ -22,8 +22,13 @@ repositories {
 // Fine on Gradle 9; before moving to Gradle 10, update the plugin or replace it with plain config.
 javafx {
     version = libs.versions.javafx.get()
-    modules = listOf("javafx.controls", "javafx.media")
+    modules = listOf("javafx.controls")
 }
+
+// JavaCPP's name for this OS, which picks the jar with FFmpeg's native files (DLLs / .so) for it.
+// The installer (#10) is built on each OS, so it bundles only its own.
+val nativePlatform =
+    if (System.getProperty("os.name").lowercase().startsWith("windows")) "windows-x86_64" else "linux-x86_64"
 
 dependencies {
     implementation(libs.slf4j.api)
@@ -32,15 +37,21 @@ dependencies {
     implementation(libs.metadata.extractor)
     runtimeOnly(libs.twelvemonkeys.jpeg)
     runtimeOnly(libs.twelvemonkeys.webp)
+    // Only the FFmpeg part of JavaCV: its pom also pulls in OpenCV, Tesseract, camera drivers and more.
+    implementation(libs.javacv) { isTransitive = false }
+    implementation(libs.javacpp)
+    implementation(libs.ffmpeg)
+    runtimeOnly(variantOf(libs.javacpp) { classifier(nativePlatform) })
+    runtimeOnly(variantOf(libs.ffmpeg) { classifier(nativePlatform) })
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly(libs.junit.platform.launcher)
 }
 
-// javafx.graphics = JavaFX's native rendering; javafx.media = its native video player (the viewer, #6);
-// ALL-UNNAMED = classpath jars, i.e. sqlite-jdbc's native SQLite.
-val nativeAccess = "--enable-native-access=javafx.graphics,javafx.media,ALL-UNNAMED"
+// javafx.graphics = JavaFX's native rendering; ALL-UNNAMED = classpath jars: sqlite-jdbc's native SQLite
+// and JavaCPP loading FFmpeg (the video player and video thumbnails).
+val nativeAccess = "--enable-native-access=javafx.graphics,ALL-UNNAMED"
 
 application {
     mainClass = "io.github.mihirvr.prismo.Launcher"
@@ -57,4 +68,6 @@ tasks.withType<JavaCompile>().configureEach {
 tasks.test {
     useJUnitPlatform()
     jvmArgs("--enable-native-access=ALL-UNNAMED")
+    // JavaCPP unpacks FFmpeg's native files here once (about 76 MB on Windows), not into ~/.javacpp.
+    systemProperty("org.bytedeco.javacpp.cachedir", layout.buildDirectory.dir("javacpp-cache").get().asFile.path)
 }

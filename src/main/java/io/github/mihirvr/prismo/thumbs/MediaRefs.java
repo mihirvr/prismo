@@ -15,14 +15,14 @@ public final class MediaRefs {
     private MediaRefs() {
     }
 
-    /** For the plan test: the query {@link #newestImages} runs. */
-    static final String NEWEST_IMAGES = """
+    /** For the plan test: the query {@link #newestToThumbnail} runs. */
+    static final String NEWEST_TO_THUMBNAIL = """
             SELECT id, path, extension, date_modified FROM media
-            WHERE media_type IN ('photo', 'gif') AND trashed_at IS NULL AND %s
+            WHERE media_type IN ('photo', 'gif', 'video') AND trashed_at IS NULL AND %s
             ORDER BY +sort_date DESC, id DESC""".formatted(LibraryRootStore.NOT_IN_DISABLED_FOLDER);
 
     /**
-     * Every photo and GIF not in Trash and not in a disabled library folder, newest first: the order the Timeline
+     * Every photo, GIF and video not in Trash and not in a disabled library folder, newest first: the order the Timeline
      * will show them in (for the thumbnail warm-up).
      *
      * <p>Measured in #9 (synthetic 100,000 rows, medians): this, with {@code +sort_date} and no {@code LIMIT},
@@ -30,9 +30,9 @@ public final class MediaRefs {
      * 856–862 ms: it walked {@code idx_media_sort_date} row by row (the #7 finding), and even with the walk turned
      * off, a {@code LIMIT} of 90,000 kept SQLite's "top N" sorted list (1,078–1,102 ms).
      */
-    public static List<MediaRef> newestImages(Connection connection) throws SQLException {
+    public static List<MediaRef> newestToThumbnail(Connection connection) throws SQLException {
         List<MediaRef> refs = new ArrayList<>();
-        try (PreparedStatement select = connection.prepareStatement(NEWEST_IMAGES)) {
+        try (PreparedStatement select = connection.prepareStatement(NEWEST_TO_THUMBNAIL)) {
             try (ResultSet rows = select.executeQuery()) {
                 while (rows.next()) {
                     refs.add(new MediaRef(rows.getLong(1), Path.of(rows.getString(2)), rows.getString(3), rows.getLong(4)));

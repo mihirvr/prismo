@@ -47,7 +47,7 @@ public final class ThumbnailService implements AutoCloseable {
     public record Ready(Path file) implements Result {
     }
 
-    /** No decoder for this format yet (video, HEIC, RAW until their issues land). */
+    /** No decoder for this format yet (HEIC, RAW until their issues land). */
     public record Unsupported(String extension) implements Result {
     }
 
@@ -185,7 +185,7 @@ public final class ThumbnailService implements AutoCloseable {
         if (ThumbnailCache.isFresh(marker, media.dateModified())) {
             return new Failed("failed before; waiting for the file to change");
         }
-        if (!ThumbnailGenerator.canDecode(media.extension())) {
+        if (!ThumbnailGenerator.canMake(media.extension())) {
             return new Unsupported(media.extension());
         }
 

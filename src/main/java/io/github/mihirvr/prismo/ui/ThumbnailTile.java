@@ -1,6 +1,5 @@
 package io.github.mihirvr.prismo.ui;
 
-import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
@@ -16,7 +15,7 @@ import javafx.scene.layout.StackPane;
 
 /**
  * One square thumbnail: the image cropped to a centred square (like a phone gallery), or a placeholder
- * while it loads, or for files without a thumbnail (video / HEIC / RAW for now, or unreadable files).
+ * while it loads, or for files without a thumbnail (HEIC / RAW for now, or unreadable files).
  *
  * <p>Tiles are reused as the list scrolls: {@link #show} switches a tile to another photo and cancels
  * the old one's load.
@@ -87,7 +86,7 @@ final class ThumbnailTile extends StackPane {
         }
         clear();
         shown = ref;
-        if (!ThumbnailGenerator.canDecode(ref.extension())) {
+        if (!ThumbnailGenerator.canMake(ref.extension())) {
             showPlaceholder(unsupportedText(ref.extension())); // known up front: no need to ask the service
             return;
         }
@@ -170,10 +169,8 @@ final class ThumbnailTile extends StackPane {
         placeholder.setVisible(true);
     }
 
-    /** "▶ MP4" for videos, "HEIC", "NEF" … for the rest. */
+    /** "HEIC", "NEF" …: a type Prismo can't make thumbnails for yet (videos have real ones). */
     static String unsupportedText(String extension) {
-        String name = extension.toUpperCase(Locale.ROOT);
-        boolean video = MediaType.fromExtension(extension).orElse(null) == MediaType.VIDEO;
-        return video ? "▶\n" + name : name;
+        return extension.toUpperCase(Locale.ROOT);
     }
 }

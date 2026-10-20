@@ -4,11 +4,16 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.ShortBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import javax.imageio.ImageIO;
+import org.bytedeco.ffmpeg.global.avcodec;
+import org.bytedeco.ffmpeg.global.avutil;
+import org.bytedeco.javacv.FFmpegFrameRecorder;
+import org.bytedeco.javacv.Frame;
 
 /**
  * Builds small but real media files byte by byte, so metadata and thumbnail code is tested against
@@ -18,6 +23,8 @@ public final class TestMedia {
 
     /** Seconds between the MP4 epoch (1904-01-01) and the Unix epoch (1970-01-01). */
     private static final long MP4_EPOCH_OFFSET = 2_082_844_800L;
+    /** Sound sample rate of {@link #video}. */
+    private static final int SAMPLE_RATE = 44_100;
 
     private TestMedia() {
     }
@@ -77,6 +84,73 @@ public final class TestMedia {
         out.putInt(8 + 108).put(ascii("moov")).put(mvhd.array());
         Files.write(file, out.array());
         return file;
+    }
+
+    /**
+     * A real, playable video made with FFmpeg (JavaCV's recorder): H.264 in the container the file name asks
+     * for (.mp4, .mov, .mkv), {@code frames} frames at {@code fps}, plus a 440 Hz AAC tone if {@code sound}.
+     *
+     * <p>Frame i is one flat colour with red = {@link #frameRed}(i), so a test can tell which frame it got
+     * (flat colours survive compression within a few levels), except the top-left quarter, which is white in
+     * every frame (to check which way a picture is turned). {@code clockwiseRotation} adds the "display
+     * rotation" tag phones write (0 for none).
+     */
+    public static Path video(Path file, int width, int height, int frames, int fps, boolean sound,
+            double clockwiseRotation) throws IOException {
+        String name = file.getFileName().toString();
+        avutil.av_log_set_level(avutil.AV_LOG_ERROR); // the encoders print their settings and warnings otherwise
+        try (FFmpegFrameRecorder recorder = new FFmpegFrameRecorder(file.toString(), width, height, sound ? 2 : 0)) {
+            recorder.setFormat(switch (name.substring(name.lastIndexOf('.') + 1)) {
+                case "mkv" -> "matroska";
+                case "mov" -> "mov";
+                default -> "mp4";
+            });
+            recorder.setVideoCodec(avcodec.AV_CODEC_ID_H264);
+            recorder.setPixelFormat(avutil.AV_PIX_FMT_YUV420P);
+            recorder.setFrameRate(fps);
+            recorder.setVideoBitrate(500_000);
+            if (clockwiseRotation != 0) {
+                // JavaCV's angle is counter-clockwise (it hands FFmpeg's clockwise av_display_rotation_set -angle);
+                // checked against the ffmpeg program's own auto-rotate in VideoThumbnailerTest.
+                recorder.setDisplayRotation(-clockwiseRotation);
+            }
+            if (sound) {
+                recorder.setAudioCodec(avcodec.AV_CODEC_ID_AAC);
+                recorder.setSampleRate(SAMPLE_RATE);
+                recorder.setAudioBitrate(96_000);
+            }
+            recorder.start();
+            Frame frame = new Frame(width, height, Frame.DEPTH_UBYTE, 3); // BGR, 3 bytes per pixel
+            ByteBuffer pixels = (ByteBuffer) frame.image[0];
+            int samplesPerFrame = SAMPLE_RATE / fps;
+            for (int i = 0; i < frames; i++) {
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x++) {
+                        boolean marker = x < width / 4 && y < height / 4;
+                        int at = y * frame.imageStride + x * 3;
+                        pixels.put(at, (byte) (marker ? 255 : 64));                 // blue
+                        pixels.put(at + 1, (byte) (marker ? 255 : 128));            // green
+                        pixels.put(at + 2, (byte) (marker ? 255 : frameRed(i)));    // red
+                    }
+                }
+                recorder.record(frame);
+                if (sound) {
+                    ShortBuffer tone = ShortBuffer.allocate(samplesPerFrame * 2);
+                    for (int s = 0; s < samplesPerFrame; s++) {
+                        short value = (short) (8000 * Math.sin(2 * Math.PI * 440 * (i * samplesPerFrame + s) / SAMPLE_RATE));
+                        tone.put(value).put(value);
+                    }
+                    recorder.recordSamples(SAMPLE_RATE, 2, tone.flip());
+                }
+            }
+            recorder.stop();
+        }
+        return file;
+    }
+
+    /** The red level of frame {@code index} in {@link #video}. */
+    public static int frameRed(int index) {
+        return index * 5 % 256;
     }
 
     /** APP1 segment: marker, length, "Exif\0\0", then a big-endian TIFF structure (IFD0 + Exif sub-IFD). */

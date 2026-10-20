@@ -98,6 +98,26 @@ class ThumbnailGeneratorTest {
         assertFalse(ThumbnailGenerator.canDecode("nef"));
     }
 
+    @Test
+    void videosGetThumbnailsTooButNotHeicOrRaw() {
+        assertTrue(ThumbnailGenerator.canMake("jpg"));
+        assertTrue(ThumbnailGenerator.canMake("mp4"));
+        assertTrue(ThumbnailGenerator.canMake("MOV"));
+        assertTrue(ThumbnailGenerator.canMake("mkv"));
+        assertFalse(ThumbnailGenerator.canMake("heic"));
+        assertFalse(ThumbnailGenerator.canMake("nef"));
+    }
+
+    @Test
+    void aVideoGoesToFfmpeg() throws Exception {
+        Path source = TestMedia.video(tmp.resolve("clip.mp4"), 640, 480, 25, 25, false, 0);
+
+        BufferedImage thumb = generate(source);
+
+        assertEquals(320, thumb.getWidth());
+        assertEquals(240, thumb.getHeight());
+    }
+
     private BufferedImage generate(Path source) throws Exception {
         Path target = tmp.resolve("thumb-" + source.getFileName() + ".jpg");
         generator.generate(source, target);
