@@ -88,6 +88,7 @@ public final class LibraryFoldersDialog {
         message.setWrapText(true);
         message.getStyleClass().add("library-message");
         add.setOnAction(_ -> chooseFolder());
+        add.getStyleClass().add("accent-button"); // the main action here
         Button close = new Button("Close");
         close.setCancelButton(true);
         close.setOnAction(_ -> stage.close());

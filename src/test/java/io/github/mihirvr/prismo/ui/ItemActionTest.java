@@ -28,6 +28,18 @@ class ItemActionTest {
     }
 
     @Test
+    void favoritingKeepsEverythingElseAboutTheItem() {
+        TimelineItem video = new TimelineItem(new MediaRef(2, Path.of("b.mp4"), "mp4", 0), 7, 1920, 1080,
+                false, false, false, 12.5);
+
+        TimelineItem favorite = ItemAction.FAVORITE.applyTo(video);
+
+        assertTrue(favorite.favorite());
+        assertEquals(new TimelineItem(video.ref(), 7, 1920, 1080, true, false, false, 12.5), favorite,
+                "same item, length kept for the tile badge");
+    }
+
+    @Test
     void keysToggleAndDeleteIsTrashThenDeletePermanently() {
         assertEquals(ItemAction.FAVORITE, ItemAction.forKey(KeyCode.F, item(false, false, false)));
         assertEquals(ItemAction.UNFAVORITE, ItemAction.forKey(KeyCode.F, item(true, false, false)));

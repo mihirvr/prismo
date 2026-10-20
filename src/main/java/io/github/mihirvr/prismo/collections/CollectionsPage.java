@@ -118,7 +118,9 @@ public final class CollectionsPage extends BorderPane {
         placeholder.setWrapText(true);
         albumGrid = new AlbumGrid(loader);
         albumGrid.thumbnailSizeProperty().bind(grid.thumbnailSizeProperty());
-        albumGrid.setPlaceholder(new Label("No albums yet. Albums are made from the folders that hold photos or videos."));
+        Label noAlbums = new Label("No albums yet. Albums are made from the folders that hold photos or videos.");
+        noAlbums.getStyleClass().add("collections-placeholder");
+        albumGrid.setPlaceholder(noAlbums);
         albumGrid.setOnOpen(album -> {
             openAlbum = album;
             refresh();
@@ -191,6 +193,11 @@ public final class CollectionsPage extends BorderPane {
 
     public void showPage(Page page) {
         pages.getSelectionModel().select(page);
+    }
+
+    /** Keyboard focus to the list of pages (Up / Down move between them). */
+    public void focusPageList() {
+        pages.requestFocus();
     }
 
     /** The shared Filters + Sort changed. */

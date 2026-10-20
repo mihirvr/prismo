@@ -1,10 +1,12 @@
 package io.github.mihirvr.prismo.ui;
 
+import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
 import java.util.Locale;
 import javafx.beans.value.ChangeListener;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Label;
@@ -12,6 +14,7 @@ import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.shape.Rectangle;
 
 /**
  * One square thumbnail: the image cropped to a centred square (like a phone gallery), or a placeholder
@@ -19,8 +22,14 @@ import javafx.scene.layout.StackPane;
  *
  * <p>Tiles are reused as the list scrolls: {@link #show} switches a tile to another photo and cancels
  * the old one's load.
+ *
+ * <p>Rounded corners come from a clip (CSS can round a background, not an image). A video gets a "▶ 0:12"
+ * badge in the bottom-right corner. Hover and focus looks are in the stylesheet.
  */
 final class ThumbnailTile extends StackPane {
+
+    /** Corner radius in layout units; the focus ring's CSS radius matches it. */
+    static final double CORNER_RADIUS = 6;
 
     private final ThumbnailLoader loader;
     private final ImageView view = new ImageView();
@@ -29,6 +38,10 @@ final class ThumbnailTile extends StackPane {
     private final Region focusRing = new Region();
     /** A small heart in the corner of a favorite. */
     private final Label favorite = new Label("♥");
+    /** Lightens the tile under the mouse (CSS: {@code .thumb-tile:hover .thumb-hover}). */
+    private final Region hover = new Region();
+    /** "▶" and the length, bottom right of a video. */
+    private final Label videoBadge = new Label();
     private MediaRef shown;
     private ThumbnailLoader.Load pending;
     private Image waitingFor;
@@ -53,7 +66,20 @@ final class ThumbnailTile extends StackPane {
         favorite.setVisible(false);
         favorite.setMouseTransparent(true);
         StackPane.setAlignment(favorite, Pos.BOTTOM_LEFT);
-        getChildren().addAll(view, placeholder, favorite, focusRing);
+        hover.getStyleClass().add("thumb-hover");
+        hover.setMouseTransparent(true);
+        videoBadge.getStyleClass().add("thumb-video-badge");
+        videoBadge.setVisible(false);
+        videoBadge.setMouseTransparent(true);
+        StackPane.setAlignment(videoBadge, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(videoBadge, new Insets(0, 6, 6, 0));
+        Rectangle clip = new Rectangle();
+        clip.widthProperty().bind(widthProperty());
+        clip.heightProperty().bind(heightProperty());
+        clip.setArcWidth(CORNER_RADIUS * 2);
+        clip.setArcHeight(CORNER_RADIUS * 2);
+        setClip(clip);
+        getChildren().addAll(view, placeholder, hover, favorite, videoBadge, focusRing);
     }
 
     /** The file this tile shows, or null if it's empty. */
@@ -67,6 +93,13 @@ final class ThumbnailTile extends StackPane {
 
     void setFavorite(boolean on) {
         favorite.setVisible(on);
+    }
+
+    /** A video's length for its badge (0 = unknown: just "▶"). Call after {@link #show}. */
+    void setVideoLength(double seconds) {
+        if (videoBadge.isVisible()) {
+            videoBadge.setText(seconds > 0 ? "▶ " + lengthText(seconds) : "▶");
+        }
     }
 
     /** Shows only {@code text} at {@code size} × {@code size} (an album with no photo to use as its cover). */
@@ -86,6 +119,10 @@ final class ThumbnailTile extends StackPane {
         }
         clear();
         shown = ref;
+        if (MediaType.fromExtension(ref.extension()).orElse(null) == MediaType.VIDEO) {
+            videoBadge.setText("▶");
+            videoBadge.setVisible(true);
+        }
         if (!ThumbnailGenerator.canMake(ref.extension())) {
             showPlaceholder(unsupportedText(ref.extension())); // known up front: no need to ask the service
             return;
@@ -108,6 +145,7 @@ final class ThumbnailTile extends StackPane {
         shown = null;
         focusRing.setVisible(false);
         favorite.setVisible(false);
+        videoBadge.setVisible(false);
         view.setImage(null);
         placeholder.setText("");
         placeholder.setVisible(false);
@@ -167,6 +205,15 @@ final class ThumbnailTile extends StackPane {
     private void showPlaceholder(String text) {
         placeholder.setText(text);
         placeholder.setVisible(true);
+    }
+
+    /** "0:07", "12:30", "1:02:03": a video's length, rounded to the second (at least "0:01", like phone galleries). */
+    static String lengthText(double seconds) {
+        long total = Math.max(1, Math.round(seconds));
+        long hours = total / 3600;
+        long minutes = total / 60 % 60;
+        long secs = total % 60;
+        return hours > 0 ? "%d:%02d:%02d".formatted(hours, minutes, secs) : "%d:%02d".formatted(minutes, secs);
     }
 
     /** "HEIC", "NEF" …: a type Prismo can't make thumbnails for yet (videos have real ones). */

@@ -18,6 +18,7 @@ import io.github.mihirvr.prismo.thumbs.MediaRefs;
 import io.github.mihirvr.prismo.thumbs.ThumbnailCache;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
+import io.github.mihirvr.prismo.ui.EmptyState;
 import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
@@ -58,6 +59,7 @@ import javafx.scene.control.Slider;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
+import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -118,7 +120,10 @@ public final class PrismoApp extends Application {
     private ViewOptions shownOptions;
 
     private final Label status = new Label("Starting…");
-    private final Label timelinePlaceholder = new Label();
+    private final EmptyState timelinePlaceholder = new EmptyState();
+    /** The "Library folders…" dialog; set in start(), also used by the empty Timeline's button. */
+    private Runnable openLibraryFolders = () -> { };
+    private Image logo;
     private ThumbnailLoader thumbnailLoader;
     private TimelineView timeline;
     private TimelineView searchResults;
@@ -206,12 +211,24 @@ public final class PrismoApp extends Application {
         collectionsTab.setToggleGroup(tabs);
         timelineTab.setTooltip(new Tooltip("Everything, by date (Ctrl+1)"));
         collectionsTab.setTooltip(new Tooltip("Folders, Albums, Favorites, Recently Added, Hidden, Trash (Ctrl+2)"));
+        // Mouse clicks don't move keyboard focus to a tab (Ctrl+1 / Ctrl+2 switch them), so no focus ring
+        // stays on the tab that isn't open.
+        timelineTab.setFocusTraversable(false);
+        collectionsTab.setFocusTraversable(false);
         timelineTab.setSelected(true);
         tabs.selectedToggleProperty().addListener((_, old, selected) -> {
             if (selected == null) {
                 old.setSelected(true); // clicking the open tab again keeps it open
             } else {
                 showCurrentView();
+                if (!searchBar.isActive()) {
+                    // Keys go to the page just opened (the old one is hidden; JavaFX would pick the search box).
+                    if (selected == timelineTab) {
+                        timeline.requestFocus();
+                    } else {
+                        collections.focusPageList();
+                    }
+                }
             }
         });
         HBox tabBar = new HBox(timelineTab, collectionsTab);
@@ -230,7 +247,8 @@ public final class PrismoApp extends Application {
         size.setTooltip(new Tooltip("Thumbnail size (or Ctrl + mouse wheel)"));
         Button libraryFolders = new Button("Library folders…");
         libraryFolders.setTooltip(new Tooltip("Add, turn off or remove the folders Prismo shows"));
-        libraryFolders.setOnAction(_ -> new LibraryFoldersDialog(stage, libraryRoots, libraryOperations()).show());
+        openLibraryFolders = () -> new LibraryFoldersDialog(stage, libraryRoots, libraryOperations()).show();
+        libraryFolders.setOnAction(_ -> openLibraryFolders.run());
         HBox topBar = new HBox(title, tabBar, searchBar, spacer, libraryFolders);
         topBar.getStyleClass().add("top-bar");
         Region viewSpacer = new Region();
@@ -474,9 +492,22 @@ public final class PrismoApp extends Application {
             timeline.showFromTop(items, options.grouped()); // a different filter or sort: start at the top
         }
         shownOptions = options;
-        timelinePlaceholder.setText(options.filter() == ViewOptions.DEFAULT.filter()
-                ? "No photos yet. Click \"Library folders…\" to choose a folder to show."
-                : "Nothing to show for \"" + options.filter() + "\".");
+        if (options.filter() == ViewOptions.DEFAULT.filter()) {
+            timelinePlaceholder.show(logo(), "No photos or videos yet",
+                    "Add the folders that hold your photos and videos. Prismo only reads them: your files are never changed.",
+                    "Add library folders…", openLibraryFolders);
+        } else {
+            timelinePlaceholder.show(null, "Nothing to show", "Nothing here matches \"" + options.filter() + "\".",
+                    null, null);
+        }
+    }
+
+    /** The Prismo logo with its name, for light backgrounds. Loaded once, on first use. */
+    private Image logo() {
+        if (logo == null) {
+            logo = new Image(PrismoApp.class.getResource("/ui/logo/prismo-text-light.png").toExternalForm());
+        }
+        return logo;
     }
 
     /** Runs on the indexing thread after an index run: makes every missing thumbnail, newest first. */

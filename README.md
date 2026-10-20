@@ -121,6 +121,7 @@ prismo/
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, video playback
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
+│   │       ├── ui/logo/            # The Prismo logo with its name, for light and dark backgrounds (in-app copies)
 │   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index)
 │   │       └── ui/prismo.css       # The app's stylesheet
 │   └── test/

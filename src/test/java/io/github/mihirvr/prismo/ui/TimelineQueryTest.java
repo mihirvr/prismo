@@ -36,6 +36,7 @@ class TimelineQueryTest {
                                    (6, '/d.png',   '/', 'd.png',   'png', 'photo', 1, 500, 0, NULL, 0, NULL),
                                    (7, '/e.gif',   '/', 'e.gif',   'gif', 'gif',   1, 0,   0, 300,  0, NULL)""");
                     s.executeUpdate("UPDATE media SET width = 4000, height = 3000 WHERE id = 1");
+                    s.executeUpdate("UPDATE media SET duration_seconds = 12.4 WHERE id = 2");
                 }
                 return null;
             }).get();
@@ -46,6 +47,8 @@ class TimelineQueryTest {
             assertEquals(List.of(6L, 7L, 2L, 3L, 1L), items.stream().map(item -> item.ref().id()).toList());
             assertEquals(500, items.getFirst().sortDate());
             assertEquals("mp4", items.get(2).ref().extension());
+            assertEquals(12.4, items.get(2).durationSeconds(), 1e-9, "a video's length, for its tile badge");
+            assertEquals(0, items.get(4).durationSeconds(), "a photo has none");
             // The viewer's size hint: known for id 1, 0 × 0 when the indexer couldn't read it (NULL).
             assertEquals(4000, items.get(4).width());
             assertEquals(3000, items.get(4).height());

@@ -22,7 +22,7 @@ public final class Albums {
 
     /**
      * Every album for the shared filter (Trash and hidden left out), the one with the newest media first, then
-     * by name. An album's cover is its newest photo or GIF: the kinds that have thumbnails.
+     * by name. An album's cover is its newest photo, GIF or video: the kinds that have thumbnails.
      *
      * <p>The cover query uses SQLite's documented "bare columns" rule: with a single {@code max()} in an
      * aggregate query, the other selected columns come from the row that has that maximum.
@@ -53,7 +53,7 @@ public final class Albums {
 
     static String coversSql(ViewOptions options) {
         return "SELECT folder, id, path, extension, date_modified, max(sort_date)" + where(options)
-                + " AND media_type IN ('photo', 'gif') GROUP BY +folder";
+                + " AND media_type IN ('photo', 'gif', 'video') GROUP BY +folder"; // videos have thumbnails (P1)
     }
 
     static String countsSql(ViewOptions options) {

@@ -24,12 +24,13 @@ public final class TimelineQuery {
     /**
      * The columns {@link #items} reads, in this order. Other queries that return Timeline items (search)
      * select them too. The fifth is the date the view groups by: {@code sort_date}, or the sort's own date
-     * column for "Date modified" / "Date added". The last three are the item's favorite / hidden / Trash state.
+     * column for "Date modified" / "Date added". Then width, height, favorite / hidden / Trash state, and a
+     * video's length.
      */
     public static String columns(ViewOptions options) {
         String date = options.sort().dates() == MediaSort.Dates.INSTANT ? options.sort().expression() : "sort_date";
         return "id, path, extension, date_modified, " + date
-                + ", width, height, favorite, hidden, trashed_at IS NOT NULL";
+                + ", width, height, favorite, hidden, trashed_at IS NOT NULL, duration_seconds";
     }
 
     /**
@@ -98,9 +99,9 @@ public final class TimelineQuery {
             if (instants) {
                 date += rules.getOffset(Instant.ofEpochMilli(date)).getTotalSeconds() * 1000L;
             }
-            // getInt returns 0 for NULL (size unknown), which is what TimelineItem expects.
+            // getInt / getDouble return 0 for NULL (size or length unknown), which is what TimelineItem expects.
             items.add(new TimelineItem(ref, date, rows.getInt(6), rows.getInt(7), rows.getBoolean(8),
-                    rows.getBoolean(9), rows.getBoolean(10)));
+                    rows.getBoolean(9), rows.getBoolean(10), rows.getDouble(11)));
         }
         return items;
     }

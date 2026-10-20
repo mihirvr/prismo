@@ -2,7 +2,6 @@ package io.github.mihirvr.prismo.collections;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.mihirvr.prismo.db.Database;
@@ -23,7 +22,7 @@ class AlbumsTest {
     Path tmp;
 
     @Test
-    void oneAlbumPerFolderWithItsNewestPhotoAsCoverNewestAlbumFirst() throws Exception {
+    void oneAlbumPerFolderWithItsNewestItemAsCoverNewestAlbumFirst() throws Exception {
         Path camera = tmp.resolve("Camera");
         Path clips = tmp.resolve("Clips");
         Path old = tmp.resolve("Old");
@@ -36,7 +35,7 @@ class AlbumsTest {
                     Object[][] rows = {
                             {1, camera, "a.jpg", "photo", 100, 0, null},
                             {2, camera, "b.jpg", "photo", 300, 0, null},
-                            {3, camera, "c.mp4", "video", 900, 0, null}, // newest, but a video: not the cover
+                            {3, camera, "c.mp4", "video", 900, 0, null}, // newest: the cover (videos have thumbnails)
                             {4, camera, "d.jpg", "photo", 950, 1, null}, // hidden: not counted, not the cover
                             {5, camera, "e.jpg", "photo", 990, 0, 1L},   // in Trash: the same
                             {6, clips, "f.mp4", "video", 500, 0, null},
@@ -63,15 +62,17 @@ class AlbumsTest {
 
             assertEquals(List.of("Camera", "Clips", "Old"), albums.stream().map(Album::name).toList());
             assertEquals(List.of(3, 1, 1), albums.stream().map(Album::count).toList());
-            assertEquals(2, albums.getFirst().cover().id());
+            assertEquals(3, albums.getFirst().cover().id(), "a video can be the cover");
             assertEquals(camera.toString(), albums.getFirst().folder());
-            assertNull(albums.get(1).cover(), "only a video: no cover");
+            assertEquals(6, albums.get(1).cover().id(), "only a video: it is the cover");
             assertEquals(7, albums.get(2).cover().id(), "a GIF can be a cover");
 
             List<Album> videos = database.read(c -> Albums.load(c, ViewOptions.DEFAULT.withFilter(MediaFilter.VIDEOS)));
             assertEquals(List.of("Camera", "Clips"), videos.stream().map(Album::name).toList());
             assertEquals(List.of(1, 1), videos.stream().map(Album::count).toList());
-            assertNull(videos.getFirst().cover(), "the filter applies to the cover too");
+            assertEquals(3, videos.getFirst().cover().id());
+            List<Album> photos = database.read(c -> Albums.load(c, ViewOptions.DEFAULT.withFilter(MediaFilter.PHOTOS)));
+            assertEquals(2, photos.getFirst().cover().id(), "the filter applies to the cover too");
         }
     }
 

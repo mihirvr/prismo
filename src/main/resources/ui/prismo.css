@@ -1,25 +1,271 @@
 /*
  * Prismo's look. Author stylesheet: these rules beat JavaFX's built-in Modena theme for the same
  * property, whatever Modena's selector is (origin wins before specificity in JavaFX CSS).
- * Themes (Light / Dark / AMOLED) come later as separate stylesheets.
+ *
+ * Every colour comes from the names defined on .root below ("looked-up colours"). Modena's own names
+ * (-fx-background, -fx-accent …) are pointed at them too, so standard controls follow. A theme only has to
+ * redefine these names.
  */
 
+.root {
+    /* Prismo's colours (light). The accent is the blue of the logo. */
+    -prismo-accent: #3366ff;
+    -prismo-accent-hover: #2952d9;
+    -prismo-accent-tint: #e3eaff;
+    -prismo-bg: #f5f6f8;
+    -prismo-surface: #ffffff;
+    -prismo-text: #171b29;
+    -prismo-text-muted: #636a7c;
+    -prismo-text-faint: #9aa0ad;
+    -prismo-border: #d8dbe3;
+    -prismo-border-strong: #b9bec9;
+    -prismo-hover: #eceef3;
+    -prismo-pressed: #e1e4eb;
+    -prismo-tile: #e3e5eb;
+    -prismo-tile-failed: #f1dede;
+    -prismo-favorite: #ff3d6e;
+
+    /* Modena's names, so standard controls (lists, menus, text fields, check boxes) use the same colours. */
+    -fx-background: -prismo-bg;
+    -fx-control-inner-background: -prismo-surface;
+    -fx-accent: -prismo-accent;
+    -fx-focus-color: -prismo-accent;
+    -fx-faint-focus-color: transparent;
+    -fx-selection-bar: -prismo-accent-tint;
+    -fx-selection-bar-non-focused: -prismo-accent-tint;
+    -fx-text-background-color: -prismo-text;
+    -fx-text-inner-color: -prismo-text;
+    -fx-prompt-text-fill: -prismo-text-faint;
+    -fx-background-color: -prismo-bg;
+}
+
+/* --- Buttons, toggles, drop-downs, text fields: flat, rounded, with hover and pressed states --- */
+
+.button,
+.toggle-button,
+.combo-box-base,
+.menu-button {
+    -fx-background-color: -prismo-border, -prismo-surface;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 7, 6;
+    -fx-padding: 5 12 5 12;
+    -fx-text-fill: -prismo-text;
+    -fx-cursor: hand;
+}
+
+.button:hover,
+.toggle-button:hover,
+.combo-box-base:hover,
+.menu-button:hover {
+    -fx-background-color: -prismo-border-strong, -prismo-hover;
+}
+
+.button:pressed,
+.toggle-button:pressed,
+.combo-box-base:pressed,
+.toggle-button:selected {
+    -fx-background-color: -prismo-border-strong, -prismo-pressed;
+}
+
+/* Keyboard focus only (not after a mouse click): an accent ring. */
+.button:focus-visible,
+.toggle-button:focus-visible,
+.combo-box-base:focus-visible {
+    -fx-background-color: -prismo-accent, -prismo-surface;
+    -fx-background-insets: 0, 2;
+}
+
+.combo-box-base > .arrow-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0 8 0 4;
+}
+
+.combo-box-base > .arrow-button > .arrow {
+    -fx-background-color: -prismo-text-muted;
+}
+
+/* The one main action on a page (e.g. "Add library folders…"). */
+.accent-button {
+    -fx-background-color: -prismo-accent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 7;
+    -fx-text-fill: #ffffff;
+    -fx-font-weight: bold;
+    -fx-padding: 7 16 7 16;
+}
+
+.accent-button:hover,
+.accent-button:focus-visible {
+    -fx-background-color: -prismo-accent-hover;
+}
+
+.text-field {
+    -fx-background-color: -prismo-border, -prismo-surface;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 7, 6;
+    -fx-padding: 5 10 5 10;
+}
+
+.text-field:focused {
+    -fx-background-color: -prismo-accent, -prismo-surface;
+    -fx-background-insets: 0, 2;
+}
+
+.check-box > .box {
+    -fx-background-color: -prismo-border-strong, -prismo-surface;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 4, 3;
+}
+
+.check-box:selected > .box {
+    -fx-background-color: -prismo-accent;
+}
+
+.check-box:selected > .box > .mark {
+    -fx-background-color: #ffffff;
+}
+
+.slider > .track {
+    -fx-background-color: -prismo-border;
+    -fx-background-insets: 0;
+    -fx-background-radius: 3;
+    -fx-padding: 2;
+}
+
+.slider > .thumb {
+    -fx-background-color: -prismo-accent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-padding: 7;
+}
+
+/* Menus, drop-down lists and tooltips: rounded cards. */
+.context-menu,
+.combo-box-popup > .list-view {
+    -fx-background-color: -prismo-border, -prismo-surface;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 8, 7;
+    -fx-padding: 4;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 12, 0, 0, 3);
+}
+
+.context-menu > .menu-item,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell {
+    -fx-background-radius: 5;
+    -fx-padding: 5 10 5 10;
+}
+
+.context-menu > .menu-item:focused,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:hover {
+    -fx-background-color: -prismo-accent-tint;
+}
+
+.context-menu > .menu-item:focused > .label {
+    -fx-text-fill: -prismo-text;
+}
+
+.tooltip {
+    -fx-background-color: #1f2433;
+    -fx-background-radius: 6;
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 12px;
+    -fx-padding: 5 9 5 9;
+}
+
+/* Thin scroll bars without arrow buttons. */
+.scroll-bar {
+    -fx-background-color: transparent;
+}
+
+.scroll-bar:vertical {
+    -fx-pref-width: 11;
+}
+
+.scroll-bar:horizontal {
+    -fx-pref-height: 11;
+}
+
+.scroll-bar > .thumb {
+    -fx-background-color: rgba(0, 0, 0, 0.22);
+    -fx-background-insets: 2;
+    -fx-background-radius: 5;
+}
+
+.scroll-bar > .thumb:hover,
+.scroll-bar > .thumb:pressed {
+    -fx-background-color: rgba(0, 0, 0, 0.38);
+}
+
+.scroll-bar > .increment-button,
+.scroll-bar > .decrement-button {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.scroll-bar > .increment-button > .increment-arrow,
+.scroll-bar > .decrement-button > .decrement-arrow {
+    -fx-shape: " ";
+    -fx-padding: 0;
+}
+
+.scroll-pane > .corner {
+    -fx-background-color: transparent;
+}
+
+/* --- The top of the window: title, tabs, search, Library folders; then Filters + Sort --- */
+
 .top-bar {
-    -fx-padding: 8 12 8 12;
-    -fx-spacing: 12;
+    -fx-padding: 10 14 8 14;
+    -fx-spacing: 14;
     -fx-alignment: center-left;
+    -fx-background-color: -prismo-surface;
 }
 
 .app-title {
-    -fx-font-size: 16px;
+    -fx-font-size: 17px;
     -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+/* The two tabs, Timeline | Collections: a segmented switch, the open one raised. */
+.tabs {
+    -fx-background-color: -prismo-hover;
+    -fx-background-radius: 8;
+    -fx-padding: 3;
+    -fx-spacing: 2;
+}
+
+.tabs .toggle-button {
+    -fx-min-width: 96;
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-background-radius: 6;
+    -fx-padding: 4 14 4 14;
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.tabs .toggle-button:hover {
+    -fx-background-color: rgba(0, 0, 0, 0.05);
+}
+
+.tabs .toggle-button:selected {
+    -fx-background-color: -prismo-surface;
+    -fx-text-fill: -prismo-accent;
+    -fx-font-weight: bold;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.16), 4, 0, 0, 1);
 }
 
 /* The second row: shared Filters + Sort, and the thumbnail size. */
 .view-options-bar {
-    -fx-padding: 0 12 8 12;
+    -fx-padding: 0 14 10 14;
     -fx-spacing: 8;
     -fx-alignment: center-left;
+    -fx-background-color: -prismo-surface;
+    -fx-border-color: transparent transparent -prismo-border transparent;
+}
+
+.view-options-bar > .label {
+    -fx-text-fill: -prismo-text-muted;
 }
 
 .view-direction {
@@ -34,24 +280,54 @@
 
 .search-field {
     -fx-pref-width: 320;
+    -fx-background-radius: 16, 15;
+    -fx-padding: 5 14 5 14;
 }
 
-.search-count,
-.search-no-matches {
-    -fx-text-fill: #666666;
+.search-count {
+    -fx-text-fill: -prismo-text-muted;
 }
 
 .status-bar {
-    -fx-padding: 4 12 4 12;
+    -fx-padding: 5 14 5 14;
     -fx-font-size: 11px;
-    -fx-text-fill: #666666;
+    -fx-text-fill: -prismo-text-muted;
+    -fx-background-color: -prismo-surface;
+    -fx-border-color: -prismo-border transparent transparent transparent;
 }
+
+/* --- Empty pages --- */
+
+.empty-state {
+    -fx-spacing: 10;
+    -fx-padding: 24;
+}
+
+.empty-state-title {
+    -fx-font-size: 18px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.empty-state-text,
+.search-no-matches,
+.collections-placeholder {
+    -fx-font-size: 13px;
+    -fx-text-fill: -prismo-text-muted;
+    -fx-text-alignment: center;
+}
+
+.empty-state .accent-button {
+    -fx-translate-y: 6;
+}
+
+/* --- The Timeline grid (also the search results, Collections pages and albums) --- */
 
 /* The list: no border, no focus ring, no alternating or selected row colours. */
 .timeline-list {
-    -fx-background-color: -fx-background;
+    -fx-background-color: -prismo-bg;
     -fx-background-insets: 0;
-    -fx-padding: 0 8 0 8;
+    -fx-padding: 0 10 0 10;
 }
 
 .timeline-list .timeline-cell {
@@ -60,110 +336,185 @@
 }
 
 .timeline-header {
-    -fx-padding: 16 2 6 2;
+    -fx-padding: 18 2 8 2;
     -fx-alignment: baseline-left;
 }
 
 .timeline-header-label {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
 }
 
 .timeline-header-count {
-    -fx-text-fill: #888888;
+    -fx-text-fill: -prismo-text-faint;
 }
 
+/* A tile: rounded (ThumbnailTile clips the image to ThumbnailTile.CORNER_RADIUS = 6). */
 .thumb-tile {
-    -fx-background-color: #e2e2e2;
+    -fx-background-color: -prismo-tile;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+}
+
+.thumb-tile .thumb-hover {
+    -fx-background-color: transparent;
+}
+
+/* Darkens a little: shows on light and dark pictures alike. */
+.thumb-tile:hover .thumb-hover {
+    -fx-background-color: rgba(0, 0, 0, 0.14);
 }
 
 .thumb-placeholder {
-    -fx-text-fill: #707070;
+    -fx-text-fill: -prismo-text-muted;
     -fx-font-size: 13px;
     -fx-font-weight: bold;
     -fx-text-alignment: center;
 }
 
 .thumb-tile.thumb-failed {
-    -fx-background-color: #ecdcdc;
+    -fx-background-color: -prismo-tile-failed;
 }
 
 /* Keyboard focus on the Timeline: a ring over the focused thumbnail. */
 .thumb-focus-ring {
-    -fx-border-color: #1a73e8;
+    -fx-border-color: -prismo-accent;
     -fx-border-width: 3;
+    -fx-border-radius: 6;
 }
 
 /* A favorite's heart, bottom left of its tile. */
 .thumb-favorite {
+    -fx-text-fill: -prismo-favorite;
+    -fx-font-size: 17px;
+    -fx-padding: 2 7 3 7;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 4, 0.3, 0, 0);
+}
+
+/* "▶ 0:12" on a video, bottom right. */
+.thumb-video-badge {
+    -fx-background-color: rgba(0, 0, 0, 0.62);
+    -fx-background-radius: 4;
     -fx-text-fill: #ffffff;
-    -fx-font-size: 15px;
-    -fx-padding: 2 6 2 6;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 3, 0.3, 0, 0);
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-padding: 1 6 1 6;
 }
 
-/* The two tabs in the top bar: Timeline | Collections. */
-.tabs .toggle-button {
-    -fx-min-width: 96;
-}
+/* --- Collections: the page list on the left, a header row over each page --- */
 
-/* Collections: the page list on the left, a header row over each page. */
-.collections-pages {
-    -fx-font-size: 13px;
+.collections-pages,
+.collections .tree-view {
+    -fx-background-color: -prismo-surface;
     -fx-background-insets: 0;
-    -fx-padding: 4 0 0 0;
+    -fx-padding: 8;
+    -fx-font-size: 13px;
 }
 
-/* No striped empty rows under the six pages. */
+.collections-pages {
+    -fx-border-color: transparent -prismo-border transparent transparent;
+}
+
+.collections-pages .list-cell,
+.collections .tree-view .tree-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-padding: 6 10 6 10;
+    -fx-text-fill: -prismo-text;
+}
+
+.collections-pages .list-cell:hover,
+.collections .tree-view .tree-cell:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.collections-pages .list-cell:selected,
+.collections .tree-view .tree-cell:selected {
+    -fx-background-color: -prismo-accent-tint;
+    -fx-text-fill: -prismo-accent;
+    -fx-font-weight: bold;
+}
+
+/* Empty rows under the pages or the folders: no stripes, no hover. */
 .collections-pages .list-cell:empty,
-.collections-pages .list-cell:odd:empty {
+.collections .tree-view .tree-cell:empty {
     -fx-background-color: transparent;
 }
 
 .collections-header {
-    -fx-padding: 8 12 8 12;
+    -fx-padding: 10 14 6 14;
     -fx-alignment: center-left;
 }
 
 .collections-title {
-    -fx-font-size: 15px;
+    -fx-font-size: 16px;
     -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
 }
 
 .collections-hint,
-.collections-placeholder,
 .album-count {
-    -fx-text-fill: #666666;
+    -fx-text-fill: -prismo-text-muted;
 }
 
 .album-card {
-    -fx-spacing: 2;
+    -fx-spacing: 3;
     -fx-cursor: hand;
 }
 
 .album-name {
     -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
     -fx-text-overrun: ellipsis;
 }
 
-/* The viewer: an overlay over the whole window. Dark, so the photo stands out. */
+/* --- The viewer: an overlay over the whole window. Dark, so the photo stands out --- */
+
 .viewer {
-    -fx-background-color: #111111;
+    -fx-background-color: #0e0f13;
 }
 
-.viewer-top-bar,
+.viewer-top-bar {
+    -fx-padding: 10 14 18 14;
+    -fx-background-color: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+}
+
 .viewer-video-controls {
-    -fx-padding: 8 12 8 12;
-    -fx-background-color: rgba(0, 0, 0, 0.55);
+    -fx-padding: 18 14 10 14;
+    -fx-background-color: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
 }
 
 .viewer-top-bar .label,
 .viewer-video-controls .label {
-    -fx-text-fill: #eeeeee;
+    -fx-text-fill: #f0f1f4;
 }
 
-.viewer-favorite-on {
-    -fx-text-fill: #e0245e;
+.viewer .button {
+    -fx-background-color: rgba(255, 255, 255, 0.12);
+    -fx-background-insets: 0;
+    -fx-background-radius: 6;
+    -fx-text-fill: #f0f1f4;
+}
+
+.viewer .button:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.24);
+}
+
+.viewer .button:pressed {
+    -fx-background-color: rgba(255, 255, 255, 0.32);
+}
+
+.viewer .slider > .track {
+    -fx-background-color: rgba(255, 255, 255, 0.28);
+}
+
+.viewer .slider > .thumb {
+    -fx-background-color: #ffffff;
+}
+
+.viewer .viewer-favorite-on {
+    -fx-text-fill: -prismo-favorite;
 }
 
 .viewer-file-name {
@@ -171,17 +522,26 @@
 }
 
 .viewer .viewer-counter {
-    -fx-text-fill: #aaaaaa;
+    -fx-text-fill: #a9adb8;
 }
 
 .viewer-message-box {
-    -fx-padding: 20 28 20 28;
-    -fx-background-color: rgba(0, 0, 0, 0.7);
-    -fx-background-radius: 6;
+    -fx-padding: 22 30 22 30;
+    -fx-background-color: rgba(10, 11, 15, 0.82);
+    -fx-background-radius: 10;
 }
 
 .viewer .viewer-message {
-    -fx-text-fill: #eeeeee;
+    -fx-text-fill: #f0f1f4;
     -fx-font-size: 15px;
     -fx-text-alignment: center;
+}
+
+/* The viewer's main action ("Open with default app") in the accent colour. */
+.viewer .viewer-message-box .button {
+    -fx-background-color: -prismo-accent;
+}
+
+.viewer .viewer-message-box .button:hover {
+    -fx-background-color: -prismo-accent-hover;
 }

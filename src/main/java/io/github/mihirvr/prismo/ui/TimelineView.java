@@ -487,6 +487,7 @@ public final class TimelineView extends StackPane {
                     for (int i = 0; i < rowItems.size(); i++) {
                         tiles.get(i).show(rowItems.get(i).ref(), layout.cellSize());
                         tiles.get(i).setFavorite(rowItems.get(i).favorite());
+                        tiles.get(i).setVideoLength(rowItems.get(i).durationSeconds());
                     }
                     setGraphic(thumbs);
                 }
