@@ -59,6 +59,24 @@ class StillDecoderTest {
     }
 
     @Test
+    void aBigRawPreviewIsDecodedSubsampledToo() throws Exception {
+        // P7: the RAW / HEIC path decoded its picture whole (a 60 MP ARW preview: ~580 MB); it now takes the same cap.
+        java.io.ByteArrayOutputStream raw = new java.io.ByteArrayOutputStream();
+        raw.write(new byte[] {'I', 'I', 42, 0, 8, 0, 0, 0});
+        raw.write(new byte[3000]);
+        ImageIO.write(new BufferedImage(400, 300, BufferedImage.TYPE_INT_RGB), "jpg", raw);
+        raw.write(new byte[3000]);
+        Path file = Files.write(tmp.resolve("DSC_0001.NEF"), raw.toByteArray());
+
+        StillDecoder.Pixels pixels = StillDecoder.decode(file, 40_000);
+
+        assertEquals(200, pixels.width());
+        assertEquals(150, pixels.height());
+        assertEquals(400, pixels.fullWidth());
+        assertEquals(300, pixels.fullHeight());
+    }
+
+    @Test
     void subsampleStepIsTheSmallestThatFitsTheCap() {
         assertEquals(1, StillDecoder.subsampleStep(4000, 3000, StillDecoder.MAX_PIXELS));  // 12 MP
         assertEquals(1, StillDecoder.subsampleStep(6000, 4000, StillDecoder.MAX_PIXELS));  // exactly 24 MP

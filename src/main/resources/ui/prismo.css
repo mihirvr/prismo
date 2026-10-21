@@ -847,6 +847,17 @@
     -fx-stroke: #f0f1f4;
 }
 
+/* The viewer's menus are ordinary popups in the look's colours, but they take the viewer's rules (their owner is inside
+   it): without these their icons were light on the Light look's white menu (P7). */
+.viewer .context-menu .icon-path {
+    -fx-stroke: -prismo-icon;
+}
+
+.viewer .context-menu .icon-path.icon-filled {
+    -fx-fill: -prismo-icon;
+    -fx-stroke: -prismo-icon;
+}
+
 .viewer .icon-button {
     -fx-padding: 7;
 }
@@ -893,6 +904,13 @@
 .viewer-top-bar .label,
 .viewer-video-controls .label {
     -fx-text-fill: #f0f1f4;
+}
+
+/* Menus opened from these bars (More, Subtitles, Sound track, Speed) are popups in the look's colours: their text
+   follows the look, or it was light on the Light look's white menu (P7). */
+.viewer-top-bar .context-menu .label,
+.viewer-video-controls .context-menu .label {
+    -fx-text-fill: -prismo-text;
 }
 
 .viewer .button {
@@ -943,10 +961,12 @@
     -fx-text-fill: #f0f1f4;
 }
 
-/* "1.5×": the speed as text, a fixed width so the bar doesn't shift when it changes. */
+/* "1.5×": the speed as text, a fixed width so the bar doesn't shift when it changes. Wide enough for the widest,
+   "1.75×" in bold: a stylesheet's min width beats the code's, so at 50 a narrow bar cut "1.5×" to "…" (P7). */
 .viewer .viewer-speed {
     -fx-padding: 7 9 7 9;
-    -fx-min-width: 50;
+    -fx-min-width: 62;
+    -fx-pref-width: 62;
     -fx-font-weight: bold;
     -fx-font-size: 12px;
 }

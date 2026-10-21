@@ -71,6 +71,30 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
     }
 
     /**
+     * The Filters + Sort as a setting, kept across restarts (P7): {@code "PHOTOS,NAME,asc"}. The File Explorer switch
+     * has its own setting, so it isn't part of this.
+     */
+    public String toSetting() {
+        return filter.name() + "," + sort.name() + "," + (descending ? "desc" : "asc");
+    }
+
+    /** The Filters + Sort saved by {@link #toSetting}; missing or unreadable (an older or edited value): the default. */
+    public static ViewOptions fromSetting(String value) {
+        if (value == null) {
+            return DEFAULT;
+        }
+        String[] parts = value.split(",");
+        if (parts.length != 3 || !(parts[2].equals("desc") || parts[2].equals("asc"))) {
+            return DEFAULT;
+        }
+        try {
+            return new ViewOptions(MediaFilter.valueOf(parts[0]), MediaSort.valueOf(parts[1]), parts[2].equals("desc"));
+        } catch (IllegalArgumentException e) {
+            return DEFAULT; // a filter or sort that no longer exists
+        }
+    }
+
+    /**
      * True if both show the same list in the same order, apart from the File Explorer switch: a view then stays
      * where it is on a reload (only which items are in it changed), instead of starting from the top.
      */

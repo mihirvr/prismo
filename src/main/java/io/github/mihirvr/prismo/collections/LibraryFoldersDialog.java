@@ -247,7 +247,8 @@ public final class LibraryFoldersDialog {
         ButtonType remove = new ButtonType("Remove", ButtonBar.ButtonData.OK_DONE);
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION, ("%s\n\nPrismo forgets its %,d items, including"
                 + " favorites, hidden items and Trash. The files on disk are not touched.\n\nTo hide the folder for"
-                + " now and keep all that, untick it instead.").formatted(root, count), remove, ButtonType.CANCEL);
+                + " now and keep all that, untick it instead.").formatted(DialogTexts.wrappablePath(root), count), remove,
+                ButtonType.CANCEL);
         alert.initOwner(stage);
         Appearance.matchOwner(alert);
         alert.setGraphic(null); // no clip-art question mark: the header asks the question

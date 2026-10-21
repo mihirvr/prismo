@@ -26,6 +26,7 @@ class AlbumsTest {
         Path camera = tmp.resolve("Camera");
         Path clips = tmp.resolve("Clips");
         Path old = tmp.resolve("Old");
+        Path raws = tmp.resolve("Raw");
         try (Database database = Database.open(tmp.resolve("albums.db"))) {
             database.write(c -> {
                 try (PreparedStatement insert = c.prepareStatement("""
@@ -39,7 +40,8 @@ class AlbumsTest {
                             {4, camera, "d.jpg", "photo", 950, 1, null}, // hidden: not counted, not the cover
                             {5, camera, "e.jpg", "photo", 990, 0, 1L},   // in Trash: the same
                             {6, clips, "f.mp4", "video", 500, 0, null},
-                            {7, old, "g.gif", "gif", 10, 0, null}};
+                            {7, old, "g.gif", "gif", 10, 0, null},
+                            {8, raws, "h.nef", "raw", 20, 0, null}};
                     for (Object[] row : rows) {
                         Path folder = (Path) row[1];
                         String name = (String) row[2];
@@ -60,12 +62,13 @@ class AlbumsTest {
 
             List<Album> albums = database.read(c -> Albums.load(c, ViewOptions.DEFAULT));
 
-            assertEquals(List.of("Camera", "Clips", "Old"), albums.stream().map(Album::name).toList());
-            assertEquals(List.of(3, 1, 1), albums.stream().map(Album::count).toList());
+            assertEquals(List.of("Camera", "Clips", "Raw", "Old"), albums.stream().map(Album::name).toList());
+            assertEquals(List.of(3, 1, 1, 1), albums.stream().map(Album::count).toList());
             assertEquals(3, albums.getFirst().cover().id(), "a video can be the cover");
             assertEquals(camera.toString(), albums.getFirst().folder());
             assertEquals(6, albums.get(1).cover().id(), "only a video: it is the cover");
-            assertEquals(7, albums.get(2).cover().id(), "a GIF can be a cover");
+            assertEquals(8, albums.get(2).cover().id(), "only a RAW: it is the cover (RAW has thumbnails since P7)");
+            assertEquals(7, albums.get(3).cover().id(), "a GIF can be a cover");
 
             List<Album> videos = database.read(c -> Albums.load(c, ViewOptions.DEFAULT.withFilter(MediaFilter.VIDEOS)));
             assertEquals(List.of("Camera", "Clips"), videos.stream().map(Album::name).toList());

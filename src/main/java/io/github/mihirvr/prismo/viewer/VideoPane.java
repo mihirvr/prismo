@@ -244,7 +244,7 @@ final class VideoPane extends StackPane {
         // A narrow video area (a small window, or the Info panel open): the time and speed keep their whole text,
         // and the least-needed controls make room instead (they stay on their keys and in the right-click menu).
         time.setMinWidth(USE_PREF_SIZE);
-        speedButton.setMinWidth(USE_PREF_SIZE);
+        speedButton.setMinWidth(USE_PREF_SIZE); // the stylesheet's fixed width wins over this (.viewer-speed)
         seek.setMinWidth(MIN_SEEK_WIDTH);
         widthProperty().addListener((_, _, width) -> fitControls(width.doubleValue()));
 

@@ -1,9 +1,10 @@
 package io.github.mihirvr.prismo.index;
 
+import com.drew.metadata.Metadata;
+import com.drew.metadata.exif.ExifDirectoryBase;
+import com.drew.metadata.exif.ExifIFD0Directory;
+import com.drew.metadata.exif.ExifSubIFDDirectory;
 import io.github.mihirvr.prismo.testing.TestMedia;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNull;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -12,6 +13,8 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 class MetadataReaderTest {
 
@@ -80,6 +83,65 @@ class MetadataReaderTest {
         assertEquals(5, record.sizeBytes());
         assertNull(record.dateTaken());
         assertNull(record.width());
+    }
+
+    @Test
+    void rawWithSeveralExifSubIfdsGetsTheDateAndSizeFromTheRightOne() {
+        // Like a Sony ARW / Nikon NEF (measured in P7): the first SubIFD is the raw sensor data, a later one has the
+        // photo's own tags. Orientation 8 (stored sideways): width and height swap.
+        Metadata metadata = new Metadata();
+        ExifIFD0Directory ifd0 = new ExifIFD0Directory();
+        ifd0.setString(ExifDirectoryBase.TAG_MAKE, "SONY");
+        ifd0.setInt(ExifDirectoryBase.TAG_ORIENTATION, 8);
+        metadata.addDirectory(ifd0);
+        ExifSubIFDDirectory sensor = new ExifSubIFDDirectory();
+        sensor.setInt(ExifDirectoryBase.TAG_IMAGE_WIDTH, 4928);
+        sensor.setInt(ExifDirectoryBase.TAG_IMAGE_HEIGHT, 3708);
+        metadata.addDirectory(sensor);
+        ExifSubIFDDirectory photo = new ExifSubIFDDirectory();
+        photo.setString(ExifDirectoryBase.TAG_DATETIME_ORIGINAL, "2021:09:25 09:28:10");
+        photo.setInt(ExifDirectoryBase.TAG_EXIF_IMAGE_WIDTH, 4896);
+        photo.setInt(ExifDirectoryBase.TAG_EXIF_IMAGE_HEIGHT, 2752);
+        metadata.addDirectory(photo);
+
+        MediaRecord record = reader.read(tmp.resolve("DSC00018.ARW"), MediaType.RAW, 1, 0, metadata);
+
+        assertEquals(floating("2021-09-25T09:28:10"), record.dateTaken());
+        assertEquals(2752, record.width());
+        assertEquals(4896, record.height());
+        assertEquals(photo, MetadataReader.photoExif(metadata));
+    }
+
+    @Test
+    void rawWithoutAnExifImageSizeTakesTheLargestSubIfdImage() {
+        // Like a Nikon 1 NEF: a small preview SubIFD and the raw image's, no EXIF image size.
+        Metadata metadata = new Metadata();
+        ExifSubIFDDirectory preview = new ExifSubIFDDirectory();
+        preview.setInt(ExifDirectoryBase.TAG_IMAGE_WIDTH, 640);
+        preview.setInt(ExifDirectoryBase.TAG_IMAGE_HEIGHT, 424);
+        metadata.addDirectory(preview);
+        ExifSubIFDDirectory sensor = new ExifSubIFDDirectory();
+        sensor.setInt(ExifDirectoryBase.TAG_IMAGE_WIDTH, 4620);
+        sensor.setInt(ExifDirectoryBase.TAG_IMAGE_HEIGHT, 3084);
+        metadata.addDirectory(sensor);
+
+        MediaRecord record = reader.read(tmp.resolve("DSC0521.NEF"), MediaType.RAW, 1, 0, metadata);
+
+        assertEquals(4620, record.width());
+        assertEquals(3084, record.height());
+        assertNull(record.dateTaken());
+        assertEquals(preview, MetadataReader.photoExif(metadata), "none has photo tags: the first");
+
+        // An Olympus ORF keeps the raw image's size in IFD0 (and a NEF a 160 x 120 thumbnail there).
+        Metadata orf = new Metadata();
+        ExifIFD0Directory ifd0 = new ExifIFD0Directory();
+        ifd0.setInt(ExifDirectoryBase.TAG_IMAGE_WIDTH, 3088);
+        ifd0.setInt(ExifDirectoryBase.TAG_IMAGE_HEIGHT, 2309);
+        orf.addDirectory(ifd0);
+        orf.addDirectory(new ExifSubIFDDirectory());
+        MediaRecord olympus = reader.read(tmp.resolve("PA030017.ORF"), MediaType.RAW, 1, 0, orf);
+        assertEquals(3088, olympus.width());
+        assertEquals(2309, olympus.height());
     }
 
     @Test

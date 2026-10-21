@@ -53,7 +53,7 @@ public final class Albums {
 
     static String coversSql(ViewOptions options) {
         return "SELECT folder, id, path, extension, date_modified, max(sort_date)" + where(options)
-                + " AND media_type IN ('photo', 'gif', 'video') GROUP BY +folder"; // videos have thumbnails (P1)
+                + " GROUP BY +folder"; // every type has a thumbnail: videos since P1, RAW since P7
     }
 
     static String countsSql(ViewOptions options) {

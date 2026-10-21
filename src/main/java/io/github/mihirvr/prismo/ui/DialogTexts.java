@@ -44,6 +44,32 @@ public final class DialogTexts {
         return text.toString();
     }
 
+    /** About as many characters as fit on one line of a dialog's body (a dialog is ~360 px wide at 13 px text). */
+    static final int PATH_LINE = 44;
+
+    /**
+     * A path for a dialog's body on lines that end after a folder separator, so a long path doesn't wrap in the middle
+     * of a name ("libra / ry", P7). JavaFX wraps only at spaces (a zero-width space after each separator was tried and
+     * ignored), so the lines are made here; a single name longer than a line keeps a line of its own.
+     */
+    public static String wrappablePath(Path path) {
+        String text = path.toString();
+        StringBuilder lines = new StringBuilder();
+        int lineStart = 0;
+        int lastBreak = -1; // just after the last separator on this line
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (i - lineStart >= PATH_LINE && lastBreak > lineStart) {
+                lines.append(text, lineStart, lastBreak).append('\n');
+                lineStart = lastBreak;
+            }
+            if (c == '\\' || c == '/') {
+                lastBreak = i + 1;
+            }
+        }
+        return lines.append(text.substring(lineStart)).toString();
+    }
+
     /** A folder's own name for a heading ("Holidays" for {@code D:\Photos\Holidays}); a drive keeps its root. */
     public static String folderName(Path folder) {
         Path last = folder.getFileName();

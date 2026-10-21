@@ -41,5 +41,7 @@ class NetworkDrivesTest {
         assertFalse(NetworkDrives.isNetworkMount(Path.of("/mnt/nasty"), mounts), "a name that only starts the same");
         assertFalse(NetworkDrives.isNetworkMount(Path.of("/home/me/Pictures"), mounts));
         assertFalse(NetworkDrives.isNetworkMount(Path.of("/home"), List.of()), "nothing known: local");
+        assertTrue(NetworkDrives.isNetworkMount(Path.of("/mnt/nas/2024"), List.of("//nas/photos /mnt/nas cifs rw 0 0",
+                "/dev/sda2 / ext4 rw 0 0")), "the longest mount point wins, whatever the order");
     }
 }

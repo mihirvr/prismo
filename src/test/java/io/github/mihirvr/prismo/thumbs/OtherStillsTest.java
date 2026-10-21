@@ -56,6 +56,50 @@ class OtherStillsTest {
     }
 
     @Test
+    void ffmpegWritesAnUncompressedBmpScaledOnlyWhenAskedTo() {
+        Path ffmpeg = Path.of("ffmpeg.exe");
+        Path in = Path.of("IMG_1.HEIC");
+        Path out = Path.of("out.bmp");
+
+        java.util.List<String> full = OtherStills.heifCommand(ffmpeg, in, 0, out);
+        java.util.List<String> thumb = OtherStills.heifCommand(ffmpeg, in, 640, out);
+
+        assertTrue(String.join(" ", full).contains("-c:v bmp"), "BMP: PNG compression was ~90% of the time");
+        assertFalse(full.contains("-vf"), "the viewer gets the full picture");
+        assertTrue(String.join(" ", thumb).contains("-vf scale=w=640:h=640:force_original_aspect_ratio=decrease"));
+        assertEquals(out.toString(), thumb.getLast());
+    }
+
+    @Test
+    void aBigLosslessJpegIsNeverTakenForThePreview() throws Exception {
+        // RAW sensor data stored as lossless JPEG (SOF3) says it is 4000 x 3000: ImageIO can't read it, so the small
+        // real preview must win even though it has fewer pixels.
+        ByteArrayOutputStream raw = new ByteArrayOutputStream();
+        raw.write(new byte[] {'I', 'I', 42, 0});
+        // A whole lossless JPEG: start, SOF3 frame (3000 x 4000), start of scan, a few bytes, end.
+        raw.write(new byte[] {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xC3, 0, 11, 8, 0x0B, (byte) 0xB8, 0x0F,
+                (byte) 0xA0, 1, 1, 0x11, 0, (byte) 0xFF, (byte) 0xDA, 0, 8, 1, 1, 0, 0, 0x3F, 0, 0x12, 0x34, 0x56,
+                (byte) 0xFF, (byte) 0xD9});
+        raw.write(new byte[2000]);
+        raw.write(jpeg(160, 120));
+        Path cr2 = Files.write(tmp.resolve("IMG_0001.CR2"), raw.toByteArray());
+
+        BufferedImage picture = OtherStills.decode(cr2, () -> null);
+
+        assertEquals(160, picture.getWidth());
+    }
+
+    @Test
+    void theRawPreviewBytesAreHandedOutForASubsampledRead() throws Exception {
+        Path nef = Files.write(tmp.resolve("DSC_0002.NEF"), fakeRaw());
+
+        byte[] picture = OtherStills.encoded(nef, () -> null, 0);
+
+        BufferedImage preview = ImageIO.read(new java.io.ByteArrayInputStream(picture));
+        assertEquals(1200, preview.getWidth(), "the big preview, still encoded");
+    }
+
+    @Test
     void aFileWithoutAPreviewIsAnError() throws Exception {
         byte[] noise = new byte[20_000];
         new Random(1).nextBytes(noise);

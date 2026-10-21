@@ -194,7 +194,7 @@ The core loop (index → thumbnails → browse → view → search → live upda
 
 - Collections (#9)
 - Packaging (#10)
-- The baseline gallery features listed under v1.0 in PROJECT.md (Favorites, Hidden, Trash, Filters, Sort, Metadata Panel, Selection Mode, File Operations, Multiple Locations, Broken & Unavailable Media, HEIC, RAW previews, Video Watch Progress). These still need GitHub issues.
+- The baseline gallery features listed under v1.0 in PROJECT.md (Favorites, Hidden, Trash, Filters, Sort, Metadata Panel, Selection Mode, File Operations, Multiple Locations, Broken & Unavailable Media, HEIC, RAW previews, Video Watch Progress). All built before #10, without issues of their own.
 - Polish
 
 Goal:

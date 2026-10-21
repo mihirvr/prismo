@@ -8,6 +8,7 @@ import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -19,6 +20,7 @@ import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
 import javax.imageio.ImageReader;
 import javax.imageio.stream.ImageInputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 
 /**
  * Decodes a full image for the viewer: ImageIO (so WEBP and CMYK JPEGs work through the TwelveMonkeys plugins,
@@ -57,18 +59,27 @@ final class StillDecoder {
         }
         String extension = MediaType.extensionOf(file.getFileName().toString());
         if (!ThumbnailGenerator.canDecode(extension) && OtherStills.handles(extension)) {
-            // HEIC through ffmpeg, RAW through its JPEG preview (P7): decoded whole, then the same steps as below.
-            BufferedImage picture = OtherStills.decode(file);
-            return toPixels(picture, picture.getWidth(), picture.getHeight(),
-                    OtherStills.needsExifRotation(extension) ? ExifOrientation.read(file) : 1);
+            // HEIC through ffmpeg, RAW through its JPEG preview (P7): the picture's bytes go through the same
+            // subsampled read, so a 60 MP preview is not decoded whole (that took ~580 MB).
+            byte[] picture = OtherStills.encoded(file, 0);
+            try (ImageInputStream in = new MemoryCacheImageInputStream(new ByteArrayInputStream(picture))) {
+                return read(in, maxPixels, OtherStills.needsExifRotation(extension) ? ExifOrientation.read(file) : 1);
+            }
         }
-        BufferedImage decoded;
-        int fullWidth;
-        int fullHeight;
         try (ImageInputStream in = FileReads.image(file)) {
             if (in == null) {
                 throw new IOException("Cannot open " + file);
             }
+            return read(in, maxPixels, ExifOrientation.read(file));
+        }
+    }
+
+    /** Reads the image in {@code in}, skipping pixels when it is over {@code maxPixels}, turned by {@code orientation}. */
+    private static Pixels read(ImageInputStream in, long maxPixels, int orientation) throws IOException {
+        BufferedImage decoded;
+        int fullWidth;
+        int fullHeight;
+        try {
             Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
             if (!readers.hasNext()) {
                 throw new IOException("Not an image format Prismo can read");
@@ -89,8 +100,7 @@ final class StillDecoder {
             // Some readers throw unchecked exceptions on corrupt data; for the viewer that's just "can't read".
             throw new IOException("Corrupt image data: " + e, e);
         }
-
-        return toPixels(decoded, fullWidth, fullHeight, ExifOrientation.read(file));
+        return toPixels(decoded, fullWidth, fullHeight, orientation);
     }
 
     /** Premultiplied ARGB, turned by {@code orientation}; full sizes are the image's real ones (after turning). */

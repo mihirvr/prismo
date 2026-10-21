@@ -50,7 +50,7 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 | Build | Gradle (Kotlin DSL) |
 | Database | SQLite + FTS5 (xerial sqlite-jdbc) |
 | Metadata | metadata-extractor (EXIF, HEIF, MP4/QuickTime) |
-| Image decoding | ImageIO (JPEG/PNG/BMP/GIF), TwelveMonkeys (WEBP), libheif via FFM (HEIC), embedded previews (RAW) |
+| Image decoding | ImageIO (JPEG/PNG/BMP/GIF), TwelveMonkeys (WEBP), the bundled FFmpeg (HEIC), embedded previews (RAW) |
 | Video | FFmpeg (LGPL build) through JavaCV: playback and thumbnails |
 | File monitoring | java.nio.file.WatchService (behind a pluggable abstraction) |
 | Logging | SLF4J + Logback |
@@ -74,9 +74,15 @@ The app runs (`./gradlew run`). What works today:
 - **Search and Filters:** the search box (Ctrl+F) finds files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results.
 - **Collections tab:** Folders (a folder tree, with or without subfolders), Albums (one per folder), Favorites, Recently Added, Hidden and Trash. F / H / Delete favorite, hide or move something to Trash; "Delete permanently" (from Trash, after asking) moves the file to the Recycle Bin (deletes it for good where there is none; the question says which).
 - **Hidden files:** files marked Hidden in Windows File Explorer show only on Collections › Hidden (a Settings switch shows them everywhere instead). The right-click menu can set or clear that Windows mark, and in Settings Prismo's own Hide can be set to set the mark too ("Both ways").
-- **Settings** (the Settings button in the top bar, or Ctrl+,): the look (Light, Dark, AMOLED black, or Follow system, which changes with Windows) and the hidden-items choices. The title bar follows the look on Windows. Every setting, the window's size and place, the thumbnail size and the video volume / mute / speed are kept after a restart.
+- **HEIC and RAW:** HEIC / HEIF photos (iPhones, many Android phones) through the bundled FFmpeg, and RAW files (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF and more) through the JPEG preview the camera stores inside: thumbnails, the viewer, the date taken and the camera settings.
+- **Selecting many:** Ctrl-click, Shift-click, Shift + arrow keys or Ctrl+A; a bar at the bottom then favorites, hides, trashes, copies or moves them all at once.
+- **File operations:** Rename (F2) and Move to folder… (with a question when a name is already taken: keep both or skip); Prismo follows the file, favorites and all.
+- **Offline and network folders:** when a library folder can't be reached (an unplugged drive, a network share that's off), a banner says so and its tiles are greyed out; nothing is lost and everything comes back with the drive. Network folders are checked every 10 minutes instead of watched live.
+- **Settings** (the Settings button in the top bar, or Ctrl+,): the look (Light, Dark, AMOLED black, or Follow system, which changes with Windows), hidden items, ignored folders (node_modules, .git and the like are skipped), Timeline date headers (smart, day, week, month or year), thumbnail CPU use and cache size (with Clear thumbnails), the keyboard shortcuts, and About. The title bar follows the look on Windows. Every setting, the window's size and place, the thumbnail size, Filters + Sort, "Include subfolders" and the video volume / mute / speed are kept after a restart.
 
-Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features). Next: Packaging. No installer yet.
+Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features, HEIC, RAW, selection, file operations, offline folders, more settings). Next: Packaging. No installer yet.
+
+To try it on Windows without touching your normal Prismo data: `.\run-locally.bat --test` ([docs/RUN_LOCALLY.md](docs/RUN_LOCALLY.md), with a checklist of things to try by hand).
 
 - [Project Outline](docs/PROJECT.md) — full design document
 - [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
@@ -105,7 +111,19 @@ Right-click menus and button tooltips show these too.
 | Enter | Open in the viewer |
 | F / H / Delete | Favorite / hide / move to Trash (on Hidden: unhide; on Trash: delete permanently, after asking) |
 | Ctrl+C | Copy the file (paste it in File Explorer or another app) |
+| F2 | Rename |
 | I or Alt+Enter | Open in the viewer with the Info panel |
+
+**Selecting (on a grid)**
+
+| Key | Does |
+|---|---|
+| Ctrl + click, or Space | Select or unselect one |
+| Shift + click | Select everything up to here |
+| Shift + arrow keys | Select while moving |
+| Ctrl+A | Select all |
+| F / H / Delete / Ctrl+C | Do it to every selected item |
+| Esc | Clear the selection |
 
 **Viewer (photos and videos)**
 
@@ -116,10 +134,11 @@ Right-click menus and button tooltips show these too.
 | Esc | Close the Info panel, leave full screen, then close the viewer |
 | F11, double-click a video | Full screen |
 | I | Info panel |
-| F / H / Delete, Ctrl+C | As on the grid |
+| F / H / Delete, Ctrl+C, F2 | As on the grid |
 | Space | Slideshow (photos) |
 | R | Rotate (view only, the file isn't changed) |
 | + / - / 0 | Zoom in / out / fit to window |
+| Double-click a photo | Zoom to 100 %, or back to fit |
 
 **Videos**
 
@@ -172,10 +191,13 @@ HEIC support · RAW previews · Video Watch Progress
 
 ```
 prismo/
+├── assets/
+│   └── branding/               # The original logo artwork (the app and this README use their own copies)
 ├── docs/
 │   ├── PROJECT.md              # What Prismo is: features, scope, roadmap
 │   ├── TECH_STACK.md           # Libraries, versions, and implementation approach
 │   ├── DEVELOPMENT.md          # Development workflow, rules, and conventions
+│   ├── RUN_LOCALLY.md          # Running Prismo from the source, with separate test data, and a hand-test checklist
 │   └── images/                 # The logo with its name, for this README (light and dark backgrounds)
 ├── gradle/
 │   ├── libs.versions.toml      # Every dependency version, in one place
@@ -185,20 +207,21 @@ prismo/
 │   │   ├── java/io/github/mihirvr/prismo/
 │   │   │   ├── Launcher.java       # Entry point (main)
 │   │   │   ├── PrismoApp.java      # JavaFX application: startup, main window, shutdown
-│   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders, file reads that never lock a file, dark title bar (Windows), the Windows Hidden mark, Show in folder, running ffmpeg as a separate program
+│   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders, file reads that never lock a file (+ CR3 EXIF), dark title bar (Windows), the Windows Hidden mark, Show in folder, network drives, can a folder be reached, running ffmpeg as a separate program
 │   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders, video watch positions
-│   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress; removes gone files, follows moves
-│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, video frames via ffmpeg, on-screen-first queue
-│   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement
+│   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress; removes gone files, follows moves; ignored folders; rename / move
+│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, video frames via ffmpeg, HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
+│   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; date grouping; selection; offline folders; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
 │   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, hide modes, Library folders dialog
-│   │   │   ├── settings/           # The Settings window: look, hidden items
+│   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, Timeline, performance, keyboard shortcuts, About
 │   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
 │   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, speed, sound and subtitle tracks, subtitles (.srt)
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, full screen, video controls, Info panel
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
-│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index, V4__os_hidden = the Windows Hidden mark)
+│   │       ├── app.properties      # Version (filled in by the build) and website, for Settings › About
+│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index, V4__os_hidden = the Windows Hidden mark, V5__reread_raw = read RAW metadata again)
 │   │       └── ui/
 │   │           ├── prismo.css      # The app's stylesheet (the Light look; every colour is a named colour)
 │   │           ├── theme-dark.css  # The Dark look: redefines the named colours
@@ -212,6 +235,7 @@ prismo/
 ├── settings.gradle.kts         # Project name + JDK auto-download plugin
 ├── gradlew / gradlew.bat       # Run Gradle without installing it (./gradlew build)
 ├── .gitattributes              # Line endings (keeps gradlew working on Linux)
+├── run-locally.bat           # Windows: build and start Prismo, with your normal data or a separate test folder
 ├── .gitignore
 ├── LICENSE
 └── README.md

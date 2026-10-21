@@ -58,4 +58,18 @@ class ViewOptionsTest {
             assertEquals(date, ViewOptions.DEFAULT.withSort(sort).grouped(), sort.name());
         }
     }
+
+    @Test
+    void filtersAndSortAreKeptAsASettingAndBadValuesGiveTheDefault() {
+        ViewOptions chosen = new ViewOptions(MediaFilter.PHOTOS, MediaSort.NAME, false, true);
+
+        assertEquals("PHOTOS,NAME,asc", chosen.toSetting(), "the File Explorer switch has its own setting");
+        assertEquals(chosen.withOsHiddenShown(false), ViewOptions.fromSetting(chosen.toSetting()));
+        assertEquals(new ViewOptions(MediaFilter.RAW, MediaSort.SIZE, true),
+                ViewOptions.fromSetting("RAW,SIZE,desc"));
+        for (String bad : new String[] {null, "", "PHOTOS", "PHOTOS,NAME", "PHOTOS,NAME,up", "GONE,NAME,asc",
+                "PHOTOS,GONE,desc", "PHOTOS,NAME,asc,extra"}) {
+            assertEquals(ViewOptions.DEFAULT, ViewOptions.fromSetting(bad), String.valueOf(bad));
+        }
+    }
 }

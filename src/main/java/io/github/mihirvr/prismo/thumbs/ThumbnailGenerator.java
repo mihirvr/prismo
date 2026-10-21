@@ -7,6 +7,7 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Iterator;
@@ -18,6 +19,7 @@ import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
+import javax.imageio.stream.MemoryCacheImageInputStream;
 
 /**
  * Turns one image file into a small JPEG: at most {@code size} pixels on the long edge, the right way up.
@@ -76,36 +78,43 @@ public final class ThumbnailGenerator {
             return;
         }
         if (!canDecode(extension) && OtherStills.handles(extension)) {
-            BufferedImage picture = OtherStills.decode(source, ffmpeg::path);
+            // HEIF scaled by ffmpeg, a RAW's JPEG preview subsampled like any JPEG: never decoded whole (P7).
+            byte[] picture = OtherStills.encoded(source, ffmpeg::path, size * 2);
+            BufferedImage decoded;
+            try (ImageInputStream in = new MemoryCacheImageInputStream(new ByteArrayInputStream(picture))) {
+                decoded = decodeSubsampled(in, source);
+            }
             int orientation = OtherStills.needsExifRotation(extension) ? ExifOrientation.read(source) : 1;
-            writeJpeg(scaleAndOrient(picture, orientation), target);
+            writeJpeg(scaleAndOrient(decoded, orientation), target);
             return;
         }
-        BufferedImage decoded = decodeSubsampled(source);
+        BufferedImage decoded;
+        try (ImageInputStream in = FileReads.image(source)) {
+            decoded = decodeSubsampled(in, source);
+        }
         BufferedImage thumbnail = scaleAndOrient(decoded, ExifOrientation.read(source));
         writeJpeg(thumbnail, target);
     }
 
-    private BufferedImage decodeSubsampled(Path source) throws IOException {
-        try (ImageInputStream in = FileReads.image(source)) {
-            if (in == null) {
-                throw new IOException("Cannot open " + source);
-            }
-            Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
-            if (!readers.hasNext()) {
-                throw new IOException("No image reader recognises " + source);
-            }
-            ImageReader reader = readers.next();
-            try {
-                reader.setInput(in, true, true); // forward-only, skip metadata: faster
-                int longEdge = Math.max(reader.getWidth(0), reader.getHeight(0));
-                int step = Math.max(1, longEdge / (size * 2));
-                ImageReadParam param = reader.getDefaultReadParam();
-                param.setSourceSubsampling(step, step, 0, 0);
-                return reader.read(0, param);
-            } finally {
-                reader.dispose();
-            }
+    /** Decodes {@code in} (the picture of {@code source}) at about twice the thumbnail size, skipping pixels. */
+    private BufferedImage decodeSubsampled(ImageInputStream in, Path source) throws IOException {
+        if (in == null) {
+            throw new IOException("Cannot open " + source);
+        }
+        Iterator<ImageReader> readers = ImageIO.getImageReaders(in);
+        if (!readers.hasNext()) {
+            throw new IOException("No image reader recognises " + source);
+        }
+        ImageReader reader = readers.next();
+        try {
+            reader.setInput(in, true, true); // forward-only, skip metadata: faster
+            int longEdge = Math.max(reader.getWidth(0), reader.getHeight(0));
+            int step = Math.max(1, longEdge / (size * 2));
+            ImageReadParam param = reader.getDefaultReadParam();
+            param.setSourceSubsampling(step, step, 0, 0);
+            return reader.read(0, param);
+        } finally {
+            reader.dispose();
         }
     }
 

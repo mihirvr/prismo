@@ -30,6 +30,7 @@ class AppInfoTest {
         assertEquals(Optional.empty(), info("javascript:alert(1)").website());
         assertEquals(Optional.empty(), info("file:///C:/Windows").website());
         assertEquals(Optional.empty(), info("https://").website(), "no host");
+        assertEquals(Optional.empty(), info("ftp://prismo.example").website(), "a host, but not http(s)");
     }
 
     @Test

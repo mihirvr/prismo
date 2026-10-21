@@ -66,16 +66,30 @@ public final class OtherStills {
     }
 
     static BufferedImage decode(Path file, Program ffmpeg) throws IOException {
-        if (!Files.isRegularFile(file)) {
-            throw new NoSuchFileException(file.toString());
-        }
-        String ext = MediaType.extensionOf(file.getFileName().toString());
-        byte[] picture = isHeif(ext) ? heifAsPng(file, ffmpeg) : largestJpeg(file);
-        BufferedImage image = ImageIO.read(new ByteArrayInputStream(picture));
+        BufferedImage image = ImageIO.read(new ByteArrayInputStream(encoded(file, ffmpeg, 0)));
         if (image == null) {
             throw new IOException("Prismo can't read the picture inside " + file.getFileName());
         }
         return image;
+    }
+
+    /**
+     * The picture of {@code file} as an image file ImageIO reads (a BMP from ffmpeg for HEIF, the JPEG preview for RAW),
+     * so callers can decode it subsampled instead of whole: a 60 MP RAW preview decoded whole took ~580 MB (P7).
+     *
+     * @param maxEdge HEIF only: ffmpeg scales the picture to fit a square this size (0 = full size). Thumbnails use it,
+     *                which also saves writing and reading a full-size picture.
+     */
+    public static byte[] encoded(Path file, int maxEdge) throws IOException {
+        return encoded(file, VideoNatives::ffmpegExecutable, maxEdge);
+    }
+
+    static byte[] encoded(Path file, Program ffmpeg, int maxEdge) throws IOException {
+        if (!Files.isRegularFile(file)) {
+            throw new NoSuchFileException(file.toString());
+        }
+        String ext = MediaType.extensionOf(file.getFileName().toString());
+        return isHeif(ext) ? heifPicture(file, ffmpeg, maxEdge) : largestJpeg(file);
     }
 
     /** False for HEIF (ffmpeg already turned it upright); true for RAW previews (the RAW's EXIF says how). */
@@ -85,13 +99,26 @@ public final class OtherStills {
 
     // --- HEIF ---
 
-    /** {@code ffmpeg} writes the picture to a temporary PNG file, which is read back and deleted. */
-    private static byte[] heifAsPng(Path file, Program ffmpeg) throws IOException {
-        Path out = Files.createTempFile("prismo-heif-", ".png");
+    /**
+     * {@code ffmpeg} writes the picture to a temporary BMP file, which is read back and deleted. BMP, not PNG: it is
+     * not compressed, and compressing was most of the time. Measured in P7 on a 12 MP phone HEIC (bundled ffmpeg):
+     * PNG ~2.8 s, BMP ~0.22 s.
+     */
+    static List<String> heifCommand(Path ffmpeg, Path file, int maxEdge, Path out) {
+        List<String> command = new ArrayList<>(List.of(ffmpeg.toString(), "-nostdin", "-hide_banner",
+                "-loglevel", "error", "-threads", "1", "-i", file.toString(), "-frames:v", "1", "-an"));
+        if (maxEdge > 0) {
+            command.addAll(List.of("-vf", "scale=w=%d:h=%d:force_original_aspect_ratio=decrease".formatted(maxEdge,
+                    maxEdge)));
+        }
+        command.addAll(List.of("-f", "image2", "-c:v", "bmp", "-y", out.toString()));
+        return command;
+    }
+
+    private static byte[] heifPicture(Path file, Program ffmpeg, int maxEdge) throws IOException {
+        Path out = Files.createTempFile("prismo-heif-", ".bmp");
         try {
-            String error = ExternalProgram.run(List.of(ffmpeg.path().toString(), "-nostdin", "-hide_banner",
-                    "-loglevel", "error", "-threads", "1", "-i", file.toString(), "-frames:v", "1", "-an",
-                    "-f", "image2", "-c:v", "png", "-y", out.toString()), TIMEOUT_SECONDS);
+            String error = ExternalProgram.run(heifCommand(ffmpeg.path(), file, maxEdge, out), TIMEOUT_SECONDS);
             if (Files.size(out) == 0) {
                 throw new IOException("ffmpeg made no picture" + (error.isBlank() ? "" : ": " + error.strip()));
             }

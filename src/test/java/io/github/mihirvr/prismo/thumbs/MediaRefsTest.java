@@ -30,7 +30,8 @@ class MediaRefsTest {
                                    (4, '/clip.mp4',  '/', 'clip.mp4',  'mp4', 'video', 1, 0, 0, 400, NULL),
                                    (5, '/gone.jpg',  '/', 'gone.jpg',  'jpg', 'photo', 1, 0, 0, 500, 999),
                                    (6, '/off/x.jpg', '/off', 'x.jpg',  'jpg', 'photo', 1, 0, 0, 600, NULL),
-                                   (7, '/old2.jpg',  '/', 'old2.jpg',  'jpg', 'photo', 1, 0, 0, 100, NULL)""");
+                                   (7, '/old2.jpg',  '/', 'old2.jpg',  'jpg', 'photo', 1, 0, 0, 100, NULL),
+                                   (8, '/shot.nef',  '/', 'shot.nef',  'nef', 'raw',   1, 0, 0, 350, NULL)""");
                     // A disabled library folder: its photo needs no thumbnail now.
                     s.executeUpdate("INSERT INTO library_roots (path, enabled, added_at) VALUES ('/off', 0, 0)");
                 }
@@ -39,7 +40,7 @@ class MediaRefsTest {
 
             List<Long> ids = database.read(MediaRefs::newestToThumbnail).stream().map(MediaRef::id).toList();
 
-            assertEquals(List.of(4L, 2L, 3L, 7L, 1L), ids, "7 and 1 share a date: the higher id first");
+            assertEquals(List.of(4L, 8L, 2L, 3L, 7L, 1L), ids, "RAW is warmed up too; 7 and 1 share a date: higher id first");
             String plan = database.read(c -> {
                 StringBuilder lines = new StringBuilder();
                 try (Statement s = c.createStatement();

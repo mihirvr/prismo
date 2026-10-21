@@ -36,6 +36,9 @@ class IgnoreRulesTest {
         Path rootNamedLikeARule = Path.of("D:\\node_modules");
         assertFalse(rules.ignores(rootNamedLikeARule, rootNamedLikeARule.resolve("a.png")),
                 "only folders inside the library count");
+        Path old = Path.of("D:\\Photos\\Old");
+        assertFalse(new IgnoreRules(List.of("D:\\Photos\\Old")).ignores(old, old),
+                "a whole-folder rule never hides a library folder itself (turn it off instead)");
     }
 
     @Test

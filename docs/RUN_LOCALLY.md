@@ -8,13 +8,14 @@
 
 ## Start it
 
-From the repository folder:
+From the repository folder, in PowerShell, the VS Code terminal or Command Prompt (PowerShell needs the `.\`
+in front; Command Prompt works with or without it):
 
 | Command | Data it uses |
 |---|---|
-| `run-locally.bat` | your normal Prismo data: `%LOCALAPPDATA%\Prismo` (database, thumbnails, logs) |
-| `run-locally.bat --test` | a separate test folder, `test-data\Prismo` in the repository (ignored by git) |
-| `run-locally.bat --test D:\PrismoTest` | a test folder of your choice: `D:\PrismoTest\Prismo` |
+| `.\run-locally.bat` | your normal Prismo data: `%LOCALAPPDATA%\Prismo` (database, thumbnails, logs) |
+| `.\run-locally.bat --test` | a separate test folder, `test-data\Prismo` in the repository (ignored by git) |
+| `.\run-locally.bat --test D:\PrismoTest` | a test folder of your choice: `D:\PrismoTest\Prismo` |
 
 A test run never touches your normal library, settings or thumbnails. To start a test from scratch, close Prismo
 and delete the test folder. Prismo only reads your photo folders; it changes a file only when you ask it to

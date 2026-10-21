@@ -12,8 +12,8 @@ import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
 import io.github.mihirvr.prismo.ui.TimelineView;
 import io.github.mihirvr.prismo.ui.ViewOptions;
-import java.sql.Connection;
 import java.nio.file.Path;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.HashSet;
@@ -23,6 +23,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 import javafx.application.Platform;
+import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.geometry.Orientation;
@@ -201,6 +202,11 @@ public final class CollectionsPage extends BorderPane {
 
     public void setOnAction(ItemAction.Handler onAction) {
         grid.setOnAction(onAction);
+    }
+
+    /** Folders' "Include subfolders" box; kept across restarts (P7). */
+    public BooleanProperty includeSubfoldersProperty() {
+        return recursive.selectedProperty();
     }
 
     /** True while Recently Added is shown: its order is fixed, so the Sort controls are locked. */

@@ -74,7 +74,7 @@ Video Watch Progress (thumbnail bar + resume playback)
 ```
 The v1.0 items without an issue number still need GitHub issues.
 
-**Built before #10 (pre-packaging work, no issues of their own):** Favorites, Hidden (Prismo's own + the Windows Hidden mark; Ignored Paths not yet) and Trash (with #9); Filters and Sort (with #7); Multiple Locations (library folders, with #9); Metadata Panel (the viewer's Info panel); Video Watch Progress; the looks (Light / Dark / AMOLED / Follow system) with a Settings window; the app icon; and more viewer and video features (see Viewer). Still to do in v1.0: Packaging (#10), Selection Mode, the remaining File Operations, Broken & Unavailable Media (partly), HEIC, RAW previews.
+**Built before #10 (pre-packaging work, no issues of their own):** Favorites, Hidden (Prismo's own + the Windows Hidden mark + Ignored Paths) and Trash (with #9); Filters and Sort (with #7); Multiple Locations (library folders, with #9); Metadata Panel (the viewer's Info panel); Video Watch Progress; the looks (Light / Dark / AMOLED / Follow system) with a Settings window; the app icon; and more viewer and video features (see Viewer). Also built before #10 (P7): Selection Mode, File Operations (rename, move to folder), Broken & Unavailable Media (offline folders: banner, greyed tiles; network folders rescanned), HEIC, RAW previews, more Settings (ignored folders, date headers, thumbnail CPU use and cache, keyboard shortcuts, About). Still to do in v1.0: Packaging (#10).
 
 ### Deferred to Post-MVP
 Gallery Lock (PIN), duplicate finder, AI/content search, face recognition, OCR, basic editing, plugins, Workspaces, cloud sync. (Full list at the bottom.)
@@ -474,7 +474,7 @@ Moved to **`TECH_STACK.md`**: libraries, versions, Java/JavaFX version, threadin
 - Confirm target library size to design/test against
 - Confirm trash retention/auto-purge policy (auto-purge deletes real files)
 - ~~Video thumbnails: confirm bundling an LGPL `ffmpeg` build (decide in #4)~~ Decided before #10: FFmpeg (LGPL v3 build, through JavaCV) is bundled; it plays videos and makes their thumbnails. See TECH_STACK.md, "Video"
-- HEIC: bundle `libheif` native libraries per OS, or rely on the Linux distro package?
+- ~~HEIC: bundle `libheif` native libraries per OS, or rely on the Linux distro package?~~ Decided in P7: the bundled FFmpeg decodes HEIC, so nothing new is bundled
 - Confirm the non-destructive-editing conflict resolution (before crop/rotate/flip get built, even as post-MVP)
 ---
 

@@ -11,6 +11,7 @@ import java.nio.channels.SeekableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Locale;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageInputStreamImpl;
 
@@ -30,11 +31,24 @@ public final class FileReads {
     private FileReads() {
     }
 
-    /** metadata-extractor's {@code readMetadata(File)}, without locking the file. */
+    /** metadata-extractor's {@code readMetadata(File)}, without locking the file; for a CR3, plus its EXIF (P7). */
     public static Metadata metadata(Path file) throws IOException, ImageProcessingException {
-        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
-            return ImageMetadataReader.readMetadata(in, Files.size(file));
+        if (!file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".cr3")) {
+            try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
+                return ImageMetadataReader.readMetadata(in, Files.size(file));
+            }
         }
+        // A CR3: metadata-extractor knows only its file type; the EXIF comes from Canon's own boxes.
+        Metadata metadata;
+        try (InputStream in = new BufferedInputStream(Files.newInputStream(file))) {
+            metadata = ImageMetadataReader.readMetadata(in, Files.size(file));
+        } catch (ImageProcessingException e) {
+            metadata = new Metadata();
+        }
+        try (InputStream in = Files.newInputStream(file)) {
+            Cr3Metadata.addTo(metadata, in.readNBytes(Cr3Metadata.HEAD_BYTES));
+        }
+        return metadata;
     }
 
     /**

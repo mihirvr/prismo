@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.mihirvr.prismo.testing.TestMedia;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -84,6 +85,22 @@ class ThumbnailServiceTest {
         assertEquals(1, generated.get(), "the .fail marker stops a retry");
         try (Stream<Path> files = Files.list(cache.fileFor(7).getParent())) {
             assertTrue(files.noneMatch(p -> p.toString().endsWith(".tmp")), "no temp files left behind");
+        }
+    }
+
+    @Test
+    void aFileThatWentAwayDuringTheDecodeIsMissingNotFailed() throws Exception {
+        // The drive is unplugged mid-read: the decoder reports some other error, but the file is gone.
+        ThumbnailService failing = new ThumbnailService(cache, (source, target) -> {
+            throw new IOException("read error");
+        }, 1);
+        try {
+            MediaRef ref = new MediaRef(9, tmp.resolve("gone.png"), "png", 1_000);
+
+            assertInstanceOf(ThumbnailService.Missing.class, failing.request(ref).get());
+            assertFalse(Files.exists(cache.failMarkerFor(9)), "no fail marker: tried again once it is back");
+        } finally {
+            failing.close();
         }
     }
 

@@ -18,12 +18,13 @@ public final class MediaRefs {
     /** For the plan test: the query {@link #newestToThumbnail} runs. */
     static final String NEWEST_TO_THUMBNAIL = """
             SELECT id, path, extension, date_modified FROM media
-            WHERE media_type IN ('photo', 'gif', 'video') AND trashed_at IS NULL AND %s
+            WHERE trashed_at IS NULL AND %s
             ORDER BY +sort_date DESC, id DESC""".formatted(LibraryRootStore.NOT_IN_DISABLED_FOLDER);
 
     /**
-     * Every photo, GIF and video not in Trash and not in a disabled library folder, newest first: the order the Timeline
-     * will show them in (for the thumbnail warm-up).
+     * Every item not in Trash and not in a disabled library folder, newest first: the order the Timeline will show them
+     * in (for the thumbnail warm-up). Every media type has a thumbnail (RAW since P7: until then the query listed only
+     * photo, GIF and video, so RAW files were never warmed up and waited until they were scrolled to).
      *
      * <p>Measured in #9 (synthetic 100,000 rows, medians): this, with {@code +sort_date} and no {@code LIMIT},
      * 215–222 ms. The #4 version ({@code ORDER BY sort_date DESC LIMIT ?} with "all" as the limit) took

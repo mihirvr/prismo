@@ -127,6 +127,9 @@ public final class PrismoApp extends Application {
     private static final String VOLUME_SETTING = "video.volume";
     private static final String MUTED_SETTING = "video.muted";
     private static final String SPEED_SETTING = "video.speed";
+    /** Filters + Sort and Folders' "Include subfolders", kept across restarts (P7). */
+    private static final String VIEW_SETTING = "timeline.view";
+    private static final String INCLUDE_SUBFOLDERS_SETTING = "collections.include_subfolders";
     /** The app icon in these sizes; the system picks the one closest to what it needs (title bar, taskbar). */
     private static final int[] ICON_SIZES = {16, 20, 24, 32, 40, 48, 64, 128, 256};
     private static final double TOP_BAR_ICON_SIZE = 18;
@@ -172,6 +175,7 @@ public final class PrismoApp extends Application {
     private double savedVolume = 1;
     private boolean savedMuted;
     private double savedSpeed = 1;
+    private boolean savedIncludeSubfolders = true;
     /** Settings › Hidden items. UI thread. */
     private final ObjectProperty<HiddenMode> hiddenMode = new SimpleObjectProperty<>(HiddenMode.DEFAULT);
     /** Settings › Hidden items › "Show files hidden in File Explorer" (off by default). UI thread. */
@@ -251,7 +255,8 @@ public final class PrismoApp extends Application {
         savedPlacement = settings.get(WINDOW_SETTING).flatMap(WindowPlacement::parse);
         hiddenMode.set(HiddenMode.fromSetting(settings.get(HIDDEN_MODE_SETTING).orElse(null)));
         osHiddenShown.set(settings.get(OS_HIDDEN_SHOWN_SETTING).map(Boolean::parseBoolean).orElse(false));
-        viewOptions = ViewOptions.DEFAULT.withOsHiddenShown(osHiddenShown.get());
+        viewOptions = ViewOptions.fromSetting(settings.get(VIEW_SETTING).orElse(null)).withOsHiddenShown(osHiddenShown.get());
+        savedIncludeSubfolders = settings.get(INCLUDE_SUBFOLDERS_SETTING).map(Boolean::parseBoolean).orElse(true);
         savedVolume = number(VOLUME_SETTING, 0, 1, 1);
         savedSpeed = number(SPEED_SETTING, 0.5, 2, 1);
         savedMuted = settings.get(MUTED_SETTING).map(Boolean::parseBoolean).orElse(false);
@@ -357,6 +362,9 @@ public final class PrismoApp extends Application {
         collections.grid().setFileItems(fileItems);
         collections.setOnOpen(viewer::open);
         collections.setOnInfo(viewer::openWithInfo);
+        collections.includeSubfoldersProperty().set(savedIncludeSubfolders);
+        collections.includeSubfoldersProperty().addListener((_, _, on) ->
+                settings.put(INCLUDE_SUBFOLDERS_SETTING, Boolean.toString(on)));
         collections.setVisible(false);
 
         // Search results get their own grid, so the Timeline keeps its place while searching.
@@ -443,8 +451,9 @@ public final class PrismoApp extends Application {
         });
         HBox tabBar = new HBox(timelineTab, collectionsTab);
         tabBar.getStyleClass().add("tabs");
-        viewBar = new ViewOptionsBar();
+        viewBar = new ViewOptionsBar(viewOptions.withOsHiddenShown(false));
         viewBar.optionsProperty().addListener((_, _, options) -> {
+            settings.put(VIEW_SETTING, options.toSetting());
             viewOptions = options.withOsHiddenShown(osHiddenShown.get());
             searchBar.setOptions(viewOptions);
             collections.setOptions(viewOptions);
@@ -683,7 +692,7 @@ public final class PrismoApp extends Application {
                         + (one ? "it" : "them") + " back from the Recycle Bin. On drives that have no Recycle Bin"
                         + " (USB sticks, network drives), Windows may delete " + (one ? "it" : "them") + " for good."
                 : (one ? "The file is" : "The files are") + " deleted from disk for good. This can't be undone.";
-        String where = one ? items.getFirst().ref().path().toString()
+        String where = one ? DialogTexts.wrappablePath(items.getFirst().ref().path())
                 : DialogTexts.fileList(items.stream().map(item -> item.ref().path()).toList());
         Alert alert = new Alert(Alert.AlertType.CONFIRMATION, text + "\n\n" + where, delete, ButtonType.CANCEL);
         alert.initOwner(owner);

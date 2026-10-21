@@ -81,6 +81,34 @@ class MigrationsTest {
     }
 
     @Test
+    void theRawMigrationMakesTheNextIndexRunReadRawFilesAgain() throws Exception {
+        try (Connection connection = Database.connect(url("v5.db"), false)) {
+            new Migrations(List.of("V1__initial_schema.sql", "V2__library_roots.sql", "V3__search.sql",
+                    "V4__os_hidden.sql")).migrate(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO media (path, folder, file_name, extension, media_type, size_bytes,
+                                           date_modified, date_added, favorite)
+                        VALUES ('D:\\a.nef', 'D:\\', 'a.nef', 'nef', 'raw',   900, 77, 0, 1),
+                               ('D:\\b.jpg', 'D:\\', 'b.jpg', 'jpg', 'photo', 800, 77, 0, 0)""");
+            }
+
+            new Migrations().migrate(connection);
+
+            try (Statement statement = connection.createStatement();
+                    ResultSet rows = statement.executeQuery(
+                            "SELECT size_bytes, date_modified, favorite FROM media ORDER BY path")) {
+                assertTrue(rows.next());
+                assertEquals(0, rows.getLong(1), "RAW: a size the file can't have, so the indexer reads it again");
+                assertEquals(77, rows.getLong(2), "modified time kept: the thumbnail stays valid");
+                assertEquals(1, rows.getInt(3), "favorite kept");
+                assertTrue(rows.next());
+                assertEquals(800, rows.getLong(1), "other types untouched");
+            }
+        }
+    }
+
+    @Test
     void migratingTwiceChangesNothing() throws Exception {
         try (Connection connection = Database.connect(url("twice.db"), false)) {
             Migrations migrations = new Migrations();

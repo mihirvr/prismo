@@ -22,8 +22,8 @@ Anything marked **(verify in #N)** is our current reading and has not been teste
 | Image decode (JPEG/PNG/BMP/GIF) | `javax.imageio` (JDK) | — | yes | Built into the JDK |
 | Image decode (WEBP) | TwelveMonkeys `imageio-webp` | 3.15.3 | **no** (automatic) | Read-only WEBP plugin for ImageIO |
 | Image decode (JPEG, robust) | TwelveMonkeys `imageio-jpeg` | 3.15.3 | **no** (automatic) | Replaces the JDK JPEG reader; also reads CMYK/YCCK and slightly broken JPEGs |
-| Image decode (HEIC) | `libheif` (C library) via Java FFM | — | — | Native library, comes later in v1.0 |
-| RAW | Embedded JPEG preview (v1) | — | — | Full RAW decoding (`libraw`) is post-MVP |
+| Image decode (HEIC) | The bundled `ffmpeg` program (the same LGPL FFmpeg as for video) | — | — | A separate process per picture; chosen over `libheif` in P7: nothing new to bundle |
+| RAW | Embedded JPEG preview (P7) | — | — | Found by walking JPEG markers; CR3 EXIF from Canon's CMT boxes. Full RAW decoding (`libraw`) is post-MVP |
 | Video metadata | `metadata-extractor` | — | — | `TAG_DURATION_SECONDS` on MP4/QuickTime directories |
 | Video playback | JavaCV `FFmpegFrameGrabber` + FFmpeg (LGPL v3 build) + `javax.sound` | javacv 1.5.14, ffmpeg 8.1.2-1.5.14 | **no** (automatic) | Our own small player, see "Video". Replaced `javafx.media` (pre-packaging work, 2026-10-20) |
 | Video thumbnails | The `ffmpeg` program from the same FFmpeg bundle, run as a separate process | — | — | See "Video" |
@@ -107,7 +107,7 @@ The main rule: **never block the JavaFX Application Thread.** All disk, database
 | Writing to SQLite | Native (JNI) | **One dedicated platform thread** (the "writer") |
 | Reading from SQLite (UI queries, search) | Native (JNI) | Platform threads, a fresh read-only connection each time: the Timeline on one `prismo-timeline` thread, searches on one `prismo-search` thread. On both, only the newest request runs (built in #7) |
 | Decoding images / making thumbnails | CPU-bound | Fixed pool of platform threads, sized to the CPU limit setting (default: cores − 1), at below-normal thread priority. Its queue puts thumbnails on screen first and skips requests for rows that scrolled away. |
-| HEIC decode via FFM, ffmpeg | Native / separate process | The same thumbnail pool |
+| HEIC decode (ffmpeg) and video frames (ffmpeg) | Separate process | The same thumbnail pool (one ffmpeg run per picture, `-threads 1`) |
 | Viewer: decoding full-size stills | CPU-bound | 2 platform threads at normal priority (someone is waiting for the result) |
 | Viewer: playing a video | Native (FFmpeg through JavaCPP) | Two platform threads per video while it plays: `prismo-video-picture` and `prismo-video-sound`, each with its own FFmpeg reader. Closed when the viewer moves on |
 | Collections pages (#9) | Native (JNI) | The same `prismo-timeline` thread as the Timeline, newest load wins |
@@ -165,8 +165,8 @@ Video duration comes from here too: `Mp4Directory` and `QuickTimeDirectory` both
 |---|---|
 | JPEG, PNG, BMP, GIF | `ImageIO` (JDK). JavaFX's `Image` class also reads these four directly. |
 | WEBP | TwelveMonkeys `imageio-webp`, which plugs into `ImageIO` automatically once it's on the classpath |
-| HEIC | `libheif` through FFM. Needs native libraries per OS (libheif + an HEVC decoder such as libde265). Comes in v1.0, after the core loop works. |
-| RAW | v1: pull out the JPEG preview that cameras embed in the RAW file. Full RAW decoding with `libraw` is post-MVP. **(verify how preview offsets are read per format, in the RAW issue)** |
+| HEIC | The bundled `ffmpeg` program writes the picture as an uncompressed BMP (a PNG took ~2.8 s for a 12 MP phone photo, the BMP ~0.22 s), read back with `ImageIO`. It joins the tile grid phones use and turns the picture upright itself. For thumbnails ffmpeg also scales it down first. Built in P7 (instead of `libheif` through FFM: no new native libraries). |
+| RAW | The largest baseline / progressive JPEG preview inside the file, found by walking JPEG markers (the same for every maker's container), turned by the RAW's EXIF orientation. The viewer and thumbnails decode it subsampled like any JPEG (a 60 MP preview decoded whole took ~580 MB). Metadata: every Exif SubIFD is looked at (NEF, ARW and DNG keep the date in a later one); CR3's EXIF comes from Canon's CMT1/CMT2/CMT4 boxes, which metadata-extractor 2.21 doesn't read. Checked in P7 on 14 real samples from 8 makers. Full RAW decoding with `libraw` is post-MVP. |
 | Animated GIF | Thumbnail = first frame. The viewer uses JavaFX `Image`, which handles GIF. |
 
 **Making thumbnails fast:**
@@ -285,7 +285,7 @@ macOS isn't a target. If it ever becomes one, it would use `~/Library/Applicatio
 
 ## Third-party licenses to ship
 
-Bundled native code brings license duties: FFmpeg (**LGPL v3 or later**, the default `org.bytedeco:ffmpeg` build, checked 2026-10-20 from its own `ffmpeg -L` and the preset's build script), `libheif` and `libde265` (LGPL) when HEIC lands, and `libraw` (LGPL/CDDL) if added later. LGPL means: ship its license text and notices, link it as separate shared libraries the user could swap (the FFmpeg DLLs are separate files), and don't change it. The installer must include a `THIRD_PARTY_NOTICES` file. Java libraries: TwelveMonkeys (BSD), metadata-extractor (Apache 2.0), sqlite-jdbc (Apache 2.0), SLF4J (MIT), Logback (EPL/LGPL), JavaCV and JavaCPP (Apache 2.0, or GPLv2 with Classpath exception; we use them under Apache 2.0). **(re-check each license when the dependency is added)**
+Bundled native code brings license duties: FFmpeg (**LGPL v3 or later**, the default `org.bytedeco:ffmpeg` build, checked 2026-10-20 from its own `ffmpeg -L` and the preset's build script), nothing extra for HEIC (it uses the same FFmpeg), and `libraw` (LGPL/CDDL) if added later. LGPL means: ship its license text and notices, link it as separate shared libraries the user could swap (the FFmpeg DLLs are separate files), and don't change it. The installer must include a `THIRD_PARTY_NOTICES` file. Java libraries: TwelveMonkeys (BSD), metadata-extractor (Apache 2.0), sqlite-jdbc (Apache 2.0), SLF4J (MIT), Logback (EPL/LGPL), JavaCV and JavaCPP (Apache 2.0, or GPLv2 with Classpath exception; we use them under Apache 2.0). **(re-check each license when the dependency is added)**
 
 ---
 

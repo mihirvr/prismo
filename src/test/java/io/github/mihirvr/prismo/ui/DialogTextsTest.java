@@ -45,4 +45,29 @@ class DialogTextsTest {
         assertEquals("Holidays", DialogTexts.folderName(Path.of("D:\\Photos\\Holidays")));
         assertEquals(Path.of("D:\\").toString(), DialogTexts.folderName(Path.of("D:\\")));
     }
+
+    @Test
+    void aLongPathIsSplitIntoLinesAfterSeparatorsAndReadsTheSame() {
+        assertEquals(Path.of("D:\\Photos\\Holidays\\Goa").toString(),
+                DialogTexts.wrappablePath(Path.of("D:\\Photos\\Holidays\\Goa")), "short: one line");
+
+        String path = "E:\\Backups\\Phone 2024\\Camera\\Holidays 2026 with the family\\Day 3\\library";
+        String shown = DialogTexts.wrappablePath(Path.of(path));
+
+        assertEquals(path, shown.replace("\n", ""), "only line breaks added");
+        for (String line : shown.split("\n")) {
+            assertTrue(line.length() <= DialogTexts.PATH_LINE + 1 || !line.substring(0, line.length() - 1).contains("\\"),
+                    "a line is short, or one long name: " + line);
+        }
+        String[] lines = shown.split("\n");
+        for (int i = 0; i < lines.length - 1; i++) {
+            assertTrue(lines[i].endsWith("\\"), "breaks only after a separator: " + lines[i]);
+        }
+        assertEquals("library", lines[lines.length - 1].substring(lines[lines.length - 1].lastIndexOf('\\') + 1),
+                "the last name is whole");
+
+        String oneLongName = "D:\\" + "x".repeat(60) + "\\y";
+        assertEquals("D:\\\n" + "x".repeat(60) + "\\\ny", DialogTexts.wrappablePath(Path.of(oneLongName)),
+                "a name longer than a line keeps a line of its own");
+    }
 }

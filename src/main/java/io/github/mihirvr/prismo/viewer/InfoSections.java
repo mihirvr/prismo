@@ -6,6 +6,7 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifDirectoryBase;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.exif.GpsDirectory;
+import io.github.mihirvr.prismo.index.MetadataReader;
 import io.github.mihirvr.prismo.ui.MediaDetails;
 import io.github.mihirvr.prismo.ui.MediaDetails.Line;
 import io.github.mihirvr.prismo.video.Track;
@@ -78,7 +79,7 @@ final class InfoSections {
     /** Lens, exposure, aperture, ISO, focal length and flash, from the EXIF block. */
     static List<Line> photoLines(Metadata metadata) {
         List<Line> lines = new ArrayList<>();
-        ExifSubIFDDirectory exif = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        ExifSubIFDDirectory exif = MetadataReader.photoExif(metadata); // a RAW file can have several (P7)
         if (exif == null) {
             return lines;
         }

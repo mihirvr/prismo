@@ -28,18 +28,24 @@ public final class ViewOptionsBar extends HBox {
     private boolean quiet;
 
     public ViewOptionsBar() {
+        this(ViewOptions.DEFAULT);
+    }
+
+    /** Starting with {@code start}'s Filters + Sort (the ones saved last time, P7). */
+    public ViewOptionsBar(ViewOptions start) {
+        options.set(start);
         getStyleClass().add("view-options-bar");
         filter.getItems().setAll(MediaFilter.values());
-        filter.setValue(ViewOptions.DEFAULT.filter());
+        filter.setValue(start.filter());
         filter.setTooltip(new Tooltip("Show only some kinds of media"));
         filter.getStyleClass().add("view-filter");
         sort.getItems().setAll(MediaSort.values());
-        sort.setValue(ViewOptions.DEFAULT.sort());
+        sort.setValue(start.sort());
         sort.setTooltip(new Tooltip("Sort order"));
         sort.getStyleClass().add("view-sort");
         direction.setTooltip(new Tooltip("Reverse the order"));
         direction.getStyleClass().add("view-direction");
-        direction.setText(ViewOptions.DEFAULT.sort().directionLabel(ViewOptions.DEFAULT.descending()));
+        direction.setText(start.sort().directionLabel(start.descending()));
 
         filter.valueProperty().addListener((_, _, value) -> options.set(options.get().withFilter(value)));
         sort.valueProperty().addListener((_, _, value) -> {

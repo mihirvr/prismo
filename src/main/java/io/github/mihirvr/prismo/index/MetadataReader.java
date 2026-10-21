@@ -25,7 +25,9 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +57,11 @@ public final class MetadataReader {
     }
 
     public MediaRecord read(Path file, MediaType type, long sizeBytes, long dateModified) {
-        Metadata metadata = readMetadata(file);
+        return read(file, type, sizeBytes, dateModified, readMetadata(file));
+    }
+
+    /** The record for {@code file} from metadata already read ({@code null}: none could be read). */
+    MediaRecord read(Path file, MediaType type, long sizeBytes, long dateModified, Metadata metadata) {
         String fileName = file.getFileName().toString();
 
         Long dateTaken = null;
@@ -102,12 +108,51 @@ public final class MetadataReader {
     }
 
     private static Long exifDateTaken(Metadata metadata) {
-        ExifSubIFDDirectory exif = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        ExifSubIFDDirectory exif = photoExif(metadata);
         if (exif == null) {
             return null;
         }
         Long original = parseExifDate(exif.getString(ExifDirectoryBase.TAG_DATETIME_ORIGINAL));
         return original != null ? original : parseExifDate(exif.getString(ExifDirectoryBase.TAG_DATETIME_DIGITIZED));
+    }
+
+    /**
+     * The Exif SubIFD that holds the photo's own tags (date taken, exposure): the first one with any of them, else the
+     * first one. A JPEG has one; many RAW files (NEF, ARW, DNG) have several, and the first describes the raw sensor
+     * data or a preview, so taking the first lost their date and exposure (P7).
+     */
+    public static ExifSubIFDDirectory photoExif(Metadata metadata) {
+        ExifSubIFDDirectory first = null;
+        for (ExifSubIFDDirectory exif : metadata.getDirectoriesOfType(ExifSubIFDDirectory.class)) {
+            if (first == null) {
+                first = exif;
+            }
+            if (exif.containsTag(ExifDirectoryBase.TAG_DATETIME_ORIGINAL)
+                    || exif.containsTag(ExifDirectoryBase.TAG_DATETIME_DIGITIZED)
+                    || exif.containsTag(ExifDirectoryBase.TAG_EXPOSURE_TIME)) {
+                return exif;
+            }
+        }
+        return first;
+    }
+
+    /**
+     * The picture's size in a RAW (or TIFF) file without an EXIF image size: the largest image IFD0 or an Exif SubIFD
+     * describes (the others are previews; Olympus ORF keeps the raw image in IFD0). Null when none says.
+     */
+    private static int[] largestTiffImage(Metadata metadata) {
+        List<ExifDirectoryBase> directories = new ArrayList<>(metadata.getDirectoriesOfType(ExifIFD0Directory.class));
+        directories.addAll(metadata.getDirectoriesOfType(ExifSubIFDDirectory.class));
+        int[] largest = null;
+        for (ExifDirectoryBase exif : directories) {
+            Integer width = exif.getInteger(ExifDirectoryBase.TAG_IMAGE_WIDTH);
+            Integer height = exif.getInteger(ExifDirectoryBase.TAG_IMAGE_HEIGHT);
+            if (width != null && height != null && width > 0 && height > 0
+                    && (largest == null || (long) width * height > (long) largest[0] * largest[1])) {
+                largest = new int[] {width, height};
+            }
+        }
+        return largest;
     }
 
     /** "2023:07:14 18:30:05" → floating epoch millis. Blank, zeroed ("0000:00:00 …") or malformed → null. */
@@ -156,7 +201,8 @@ public final class MetadataReader {
                 pair(metadata, WebpDirectory.class, WebpDirectory.TAG_IMAGE_WIDTH, WebpDirectory.TAG_IMAGE_HEIGHT),
                 pair(metadata, HeifDirectory.class, HeifDirectory.TAG_IMAGE_WIDTH, HeifDirectory.TAG_IMAGE_HEIGHT),
                 pair(metadata, BmpHeaderDirectory.class, BmpHeaderDirectory.TAG_IMAGE_WIDTH, BmpHeaderDirectory.TAG_IMAGE_HEIGHT),
-                pair(metadata, ExifSubIFDDirectory.class, ExifDirectoryBase.TAG_EXIF_IMAGE_WIDTH, ExifDirectoryBase.TAG_EXIF_IMAGE_HEIGHT),
+                exifImageSize(photoExif(metadata)),
+                largestTiffImage(metadata),
         };
         for (int[] candidate : candidates) {
             if (candidate != null) {
@@ -164,6 +210,15 @@ public final class MetadataReader {
             }
         }
         return null;
+    }
+
+    private static int[] exifImageSize(ExifSubIFDDirectory exif) {
+        if (exif == null) {
+            return null;
+        }
+        Integer width = exif.getInteger(ExifDirectoryBase.TAG_EXIF_IMAGE_WIDTH);
+        Integer height = exif.getInteger(ExifDirectoryBase.TAG_EXIF_IMAGE_HEIGHT);
+        return width != null && height != null && width > 0 && height > 0 ? new int[] {width, height} : null;
     }
 
     /** EXIF orientations 5–8 mean the stored pixels must be turned 90° to display, so width/height swap. */
