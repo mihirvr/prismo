@@ -82,6 +82,8 @@ The app runs (`./gradlew run`). What works today:
 
 Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features, HEIC, RAW, selection, file operations, offline folders, more settings). Next: Packaging. No installer yet.
 
+**Windows first:** Prismo is built and tested on Windows. It is written to work on Linux too (the Windows-only parts, like the Hidden mark and the dark title bar, switch off there), but it has not been run on Linux yet, so it may not behave properly there.
+
 To try it on Windows without touching your normal Prismo data: `.\run-locally.bat --test` ([docs/RUN_LOCALLY.md](docs/RUN_LOCALLY.md), with a checklist of things to try by hand).
 
 - [Project Outline](docs/PROJECT.md) — full design document
