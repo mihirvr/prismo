@@ -72,6 +72,10 @@ public record MediaDetails(Path path, String extension, String mediaType, long s
         return "video".equals(mediaType);
     }
 
+    public boolean isRaw() {
+        return "raw".equals(mediaType);
+    }
+
     /**
      * The Details lines, in order; anything unknown is left out. A video's size and length are left to its own
      * section (what the player reads from the file). {@code zone}: this computer's time zone.
@@ -82,6 +86,10 @@ public record MediaDetails(Path path, String extension, String mediaType, long s
         lines.add(new Line("Size", size(sizeBytes)));
         if (width > 0 && height > 0 && !isVideo()) {
             lines.add(new Line("Dimensions", dimensions(width, height)));
+        }
+        if (isRaw()) {
+            // A RAW file is never developed: every size the viewer shows is the JPEG the camera stored inside it.
+            lines.add(new Line("Picture", "The preview stored inside the RAW file (the raw data is not developed)"));
         }
         if (dateTaken != null) {
             // Wall-clock time as the camera wrote it: shown as is, never shifted by a time zone.

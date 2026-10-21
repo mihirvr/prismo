@@ -11,6 +11,7 @@ import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.SimpleObjectProperty;
 import javafx.scene.Scene;
 import javafx.scene.control.Dialog;
+import javafx.scene.layout.Region;
 import javafx.stage.Stage;
 import javafx.stage.Window;
 import javafx.stage.WindowEvent;
@@ -125,8 +126,13 @@ public final class Appearance {
         });
     }
 
-    /** {@link #matchOwner(Scene, Window)} for a JavaFX dialog (an {@code Alert}); call after {@code initOwner}. */
+    /**
+     * {@link #matchOwner(Scene, Window)} for a JavaFX dialog (an {@code Alert}); call after {@code initOwner}.
+     * Also makes the dialog tall enough for all its text: an Alert's text is a wrapping label, and without a
+     * minimum height the window could be one line high and cut the text to "Skip: …".
+     */
     public static void matchOwner(Dialog<?> dialog) {
+        dialog.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
         dialog.getDialogPane().sceneProperty().subscribe(dialogScene -> {
             if (dialogScene != null) {
                 matchOwner(dialogScene, dialog.getOwner());

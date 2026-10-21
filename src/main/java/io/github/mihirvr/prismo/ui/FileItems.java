@@ -35,7 +35,6 @@ import javafx.scene.input.KeyCombination;
 import javafx.scene.input.KeyEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
 import javafx.stage.Window;
@@ -353,8 +352,6 @@ public final class FileItems {
         alert.initOwner(owner.get());
         Appearance.matchOwner(alert);
         alert.setGraphic(null);
-        // Tall enough for the whole explanation: without this the dialog was one line high and cut it to "Skip: …".
-        alert.getDialogPane().setMinHeight(Region.USE_PREF_SIZE);
         alert.setTitle("Same name");
         alert.setHeaderText((clashes == 1 ? "A file with the same name is" : "%,d files with the same names are"
                 .formatted(clashes)) + " already in " + DialogTexts.quoted(DialogTexts.folderName(folder)));

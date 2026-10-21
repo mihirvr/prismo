@@ -47,6 +47,18 @@ class MediaDetailsTest {
     }
 
     @Test
+    void aRawFileSaysItsPictureIsThePreviewInsideIt() {
+        MediaDetails raw = new MediaDetails(Path.of("DSC_0001.NEF"), "nef", "raw", 25_000_000, TAKEN, MODIFIED, ADDED,
+                6000, 4000, null, null, 0, false, false, false, false);
+
+        assertEquals(List.of("Type", "Size", "Dimensions", "Picture", "Date taken", "Date modified", "Added to Prismo"),
+                raw.lines(ZoneOffset.UTC).stream().map(MediaDetails.Line::label).toList());
+        assertTrue(raw.isRaw());
+        assertTrue(photo("", "").lines(ZoneOffset.UTC).stream().noneMatch(l -> l.label().equals("Picture")),
+                "only RAW files get the note");
+    }
+
+    @Test
     void dateTakenIsShownAsTheCameraWroteItInAnyTimeZone() {
         String taken = photo("", "").lines(ZoneId.of("America/New_York")).stream()
                 .filter(l -> l.label().equals("Date taken")).findFirst().orElseThrow().value();

@@ -171,6 +171,34 @@ class ThumbnailServiceTest {
         assertTrue(updates.get(updates.size() - 1).done());
     }
 
+    @Test
+    void warmUpKeepsReportingAfterEverythingIsQueued() throws Exception {
+        // Fewer files than the queue window: all are queued at once, so only finished jobs can report.
+        ThumbnailService slow = new ThumbnailService(cache, (source, target) -> {
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new java.io.InterruptedIOException("interrupted");
+            }
+            real.generate(source, target);
+        }, 1);
+        try {
+            List<MediaRef> refs = List.of(
+                    ref(1, TestMedia.png(tmp.resolve("1.png"), 50, 50)),
+                    ref(2, TestMedia.png(tmp.resolve("2.png"), 50, 50)),
+                    ref(3, TestMedia.png(tmp.resolve("3.png"), 50, 50)));
+            List<ThumbnailService.WarmUpProgress> updates = Collections.synchronizedList(new ArrayList<>());
+
+            slow.warmUp(refs, updates::add);
+
+            assertTrue(updates.stream().anyMatch(u -> !u.done() && u.ready() > 0),
+                    "a count above 0 was shown before the last job finished: " + updates);
+        } finally {
+            slow.close();
+        }
+    }
+
     // --- Priority and cancelling. One worker thread, held busy on a "blocker" job while the test queues
     // more requests, so the order they then run in is exactly the queue's order.
 

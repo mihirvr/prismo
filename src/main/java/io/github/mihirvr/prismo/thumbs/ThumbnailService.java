@@ -261,7 +261,17 @@ public final class ThumbnailService implements AutoCloseable {
         AtomicInteger unsupported = new AtomicInteger();
         AtomicInteger failed = new AtomicInteger();
         AtomicInteger missing = new AtomicInteger();
-        long lastReport = 0;
+        AtomicLong lastReport = new AtomicLong();
+        // Called from the loop below and from worker threads: once everything is queued the loop is
+        // waiting, so only the finished jobs can keep the count moving.
+        Runnable report = () -> {
+            long now = System.nanoTime();
+            long last = lastReport.get();
+            if (now - last >= PROGRESS_INTERVAL_NANOS && lastReport.compareAndSet(last, now)) {
+                progress.accept(new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(),
+                        missing.get(), false));
+            }
+        };
         for (MediaRef ref : media) {
             window.acquire(); // throws InterruptedException when the app shuts down
             request(ref).whenComplete((result, error) -> {
@@ -272,14 +282,10 @@ public final class ThumbnailService implements AutoCloseable {
                     case Missing _ -> missing.incrementAndGet();
                     case null -> failed.incrementAndGet(); // the job itself threw
                 }
+                report.run(); // before the release: the final report below comes after every callback
                 window.release();
             });
-            long now = System.nanoTime();
-            if (now - lastReport >= PROGRESS_INTERVAL_NANOS) {
-                lastReport = now;
-                progress.accept(new WarmUpProgress(media.size(), ready.get(), unsupported.get(), failed.get(),
-                        missing.get(), false));
-            }
+            report.run();
         }
         window.acquire(jobs); // wait for the last jobs
         window.release(jobs);

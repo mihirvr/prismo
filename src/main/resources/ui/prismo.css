@@ -222,6 +222,12 @@
     -fx-background-color: -prismo-accent-tint;
 }
 
+/* The chosen row of a drop-down list: the same soft tint as a hovered one (the default is the vivid selection blue). */
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected {
+    -fx-background-color: -prismo-accent-tint;
+    -fx-text-fill: -prismo-text;
+}
+
 .context-menu > .menu-item:focused > .label {
     -fx-text-fill: -prismo-text;
 }
