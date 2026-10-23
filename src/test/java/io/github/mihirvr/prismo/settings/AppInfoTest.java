@@ -12,12 +12,12 @@ import org.junit.jupiter.api.Test;
 class AppInfoTest {
 
     @Test
-    void theBuiltFileHasTheVersionAndNoWebsiteYet() {
+    void theBuiltFileHasTheVersionAndTheWebsite() {
         AppInfo info = AppInfo.load();
 
         assertFalse(info.version().contains("${"), "the build filled in the version: " + info.version());
         assertFalse(info.version().isBlank());
-        assertEquals(Optional.empty(), info.website(), "website= is still empty");
+        assertEquals(Optional.of(URI.create("https://prismo.mihirr.in")), info.website());
     }
 
     @Test

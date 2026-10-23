@@ -1,5 +1,7 @@
 # Prismo website
 
+Live at https://prismo.mihirr.in (Vercel).
+
 React + Vite. Separate from the app: it has its own `package.json` and is not part of the Gradle build.
 
 ```
@@ -9,7 +11,7 @@ npm run dev       # local preview, usually http://localhost:5173
 npm run build     # makes dist/
 ```
 
-Hosting on Vercel: set the project's Root Directory to `frontend`. Vercel finds Vite by itself (build `npm run build`, output `dist`).
+Hosting on Vercel: the project's Root Directory is `frontend`. Vercel finds Vite by itself (build `npm run build`, output `dist`). Each push to `main` deploys again.
 
 - The page follows the system light / dark setting; the toggle in the top bar overrides it and is remembered in the browser.
 - Background: one very slow gradient (`@shadergradient/react`) fixed behind the whole page, blurred, with a tinted veil and fine grain on top (the "frosted" look). Sections are frosted glass panels over it. Phones, reduced motion, data saver and no-WebGL visitors get the still picture `src/fallback.svg` instead.

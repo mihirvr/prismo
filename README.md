@@ -12,6 +12,8 @@
 
 > Browse your memories like a phone. Manage your files like a desktop.
 
+**Website:** https://prismo.mihirr.in
+
 Prismo is a local media browser inspired by modern mobile galleries — Samsung Gallery, Google Photos, Apple Photos — built for the desktop. It indexes your existing folders and gives you a beautiful, searchable, timeline-based view of your media without ever importing, duplicating, or uploading a single file.
 
 ---
@@ -201,7 +203,7 @@ prismo/
 │   ├── DEVELOPMENT.md          # Development workflow, rules, and conventions
 │   ├── RUN_LOCALLY.md          # Running Prismo from the source, with separate test data, and a hand-test checklist
 │   └── images/                 # The logo with its name, for this README (light and dark backgrounds)
-├── frontend/                   # The Prismo website (React + Vite, hosted on Vercel): its own package.json, separate from the app build; sample photos in public/photos with credits.json
+├── frontend/                   # The Prismo website (React + Vite), live at prismo.mihirr.in (Vercel): its own package.json, separate from the app build; sample photos in public/photos with credits.json
 ├── gradle/
 │   ├── libs.versions.toml      # Every dependency version, in one place
 │   └── wrapper/                # Gradle wrapper (pinned Gradle version + checksum)
