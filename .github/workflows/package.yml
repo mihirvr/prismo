@@ -62,6 +62,9 @@ jobs:
         run: |
           deb=$(ls build/packaging/installer/*.deb)
           dpkg-deb --field "$deb" Depends
+          # The package adds Prismo to the applications menu (xdg-desktop-menu), which needs the menu folder every
+          # desktop has; this server has no desktop.
+          sudo mkdir -p /etc/xdg/menus
           sudo apt-get install -y "./$deb"
           launcher=$(find /opt -path '*/bin/Prismo' -type f | head -n 1)
           echo "Launcher: $launcher"
