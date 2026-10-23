@@ -28,7 +28,11 @@ jobs:
           distribution: temurin
           java-version: "25"
 
+      # cache-provider basic: the action's open-source cache on GitHub Actions cache. Its default ("enhanced") is a
+      # commercial caching service with its own terms of use.
       - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
 
       # WiX 5.0.2: the last WiX before the Open Source Maintenance Fee (v6+). jpackage finds it in ~/.dotnet/tools.
       - name: Install WiX (Windows)

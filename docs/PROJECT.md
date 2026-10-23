@@ -460,6 +460,7 @@ Full table in `TECH_STACK.md`. macOS is not a target.
 - Windows Hello / Linux auth for Gallery Lock
 - Live Photos support
 - Batch Rename / Convert (including HEIC to JPEG) / Compress (file operations)
+- `.rpm` package for Fedora / openSUSE (1.0.0 ships a Windows `.exe` and a Linux `.deb`; `jpackage --type rpm` on a Fedora CI runner, with the dependencies under Fedora's package names, and the same install / remove check as the `.deb`)
 
 ---
 
@@ -467,7 +468,7 @@ Full table in `TECH_STACK.md`. macOS is not a target.
 
 Moved to **`TECH_STACK.md`**: libraries, versions, Java/JavaFX version, threading model, database write model, packaging approach, and why Java.
 
-**Distribution**: `.msi`/`.exe` (Windows), `.deb`/`.rpm` (Linux), each bundling its own Java runtime, so the user never installs Java. AppImage is optional and needs an extra tool. Same model as IntelliJ IDEA, Android Studio, DBeaver, DataGrip.
+**Distribution**: `.exe` (Windows) and `.deb` (Linux) since 1.0.0; `.rpm` is future scope (Post-MVP Roadmap). Each bundles its own Java runtime, so the user never installs Java. AppImage is optional and needs an extra tool. Same model as IntelliJ IDEA, Android Studio, DBeaver, DataGrip.
 
 ---
 
