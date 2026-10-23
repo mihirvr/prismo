@@ -30,5 +30,13 @@ replay_pid*
 
 # Personal build journal (local only)
 /BUILD_JOURNAL.md
+# Hand-off for other AI tools (holds personal paths, local only)
+/ANTIGRAVITY_HANDOFF.md
 # Test data from run-locally.bat --test
 /test-data/
+
+# Website (frontend/): installed packages, build output, design-skill working files
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.taste-skill/
+/.taste-skill/

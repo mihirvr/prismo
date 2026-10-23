@@ -201,6 +201,7 @@ prismo/
 │   ├── DEVELOPMENT.md          # Development workflow, rules, and conventions
 │   ├── RUN_LOCALLY.md          # Running Prismo from the source, with separate test data, and a hand-test checklist
 │   └── images/                 # The logo with its name, for this README (light and dark backgrounds)
+├── frontend/                   # The Prismo website (React + Vite, hosted on Vercel): its own package.json, separate from the app build; sample photos in public/photos with credits.json
 ├── gradle/
 │   ├── libs.versions.toml      # Every dependency version, in one place
 │   └── wrapper/                # Gradle wrapper (pinned Gradle version + checksum)
