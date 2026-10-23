@@ -1,8 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ITEMS } from './library.js'
-import { Down, Folder, GitHub, Left, Plus, Right } from './icons.jsx'
+import { Down, Folder, GitHub, Left, LinuxMark, Plus, Right, WindowsMark } from './icons.jsx'
 
 const REPO = 'https://github.com/mihirvr/prismo'
+
+// The installers' download links. While a link is null its button is greyed out ("soon").
+// At the release, put the Releases page's file links here.
+const DOWNLOADS = {
+  windows: null,
+  linux: null,
+}
 
 function Head({ title, intro, center, id }) {
   return (
@@ -356,7 +363,7 @@ const FAQ = [
   ['Does anything go online?', 'No. There is no cloud, no upload and no telemetry. It works with no internet at all.'],
   ['What about NAS and USB drives?', 'Add them as library folders. If one can’t be reached, its tiles go grey and a banner says so, and everything returns with it. Network folders are checked every 10 minutes instead of watched live.'],
   ['Which files does it open?', 'JPEG, PNG, WebP, GIF, HEIC, and RAW files (CR2, CR3, NEF, ARW, DNG and more) through the preview inside them. Videos: MP4, MOV, MKV, WebM and AVI.'],
-  ['Does it run on Linux or Mac?', 'It is built and tested on Windows. It is written to work on Linux too, but has not been run there yet, so it may not behave properly.'],
+  ['Does it run on Linux or Mac?', 'Linux: yes, as a .deb package for Ubuntu, Debian and their relatives. Prismo is built and tested on Windows first; the Linux package is checked automatically (it installs and opens), but has not been used much on a real Linux desktop yet, so expect some rough edges. Mac: not yet.'],
   ['When can I download it?', 'Soon. The installer is the next thing being built, and the Download button turns on at the first release. Until then you can build it from the source on GitHub.'],
 ]
 
@@ -391,15 +398,21 @@ function Faq() {
 
 /* ---------- download ---------- */
 
+function DownloadButton({ href, icon, label }) {
+  if (href) return <a className="btn" href={href}>{icon}{label}</a>
+  return <a className="btn" href="#download" aria-disabled="true" onClick={(e) => e.preventDefault()}>{icon}{label} (soon)</a>
+}
+
 function Download() {
   return (
     <section className="section container" id="download" aria-labelledby="dl-h">
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.png" alt="The Prismo logo" width="128" height="128" />
-        <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for Windows.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source. The installer arrives with the first release; until then you can build it from the source.</p>
+        <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). The installers arrive with the first release; until then you can build it from the source.</p>
         <div className="row rise" style={{ '--i': 3 }}>
-          <a className="btn" href="#download" aria-disabled="true" onClick={(e) => e.preventDefault()}>Download for Windows (soon)</a>
+          <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
+          <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />
           <a className="btn ghost" href={REPO}><GitHub />View on GitHub</a>
         </div>
       </div>

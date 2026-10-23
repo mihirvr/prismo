@@ -151,7 +151,7 @@ export default function App() {
               Prismo puts every photo and video on your drives into one timeline, sorted by date, the way your phone does. No more opening folder after folder. It works offline and never copies, moves or uploads a file.
             </p>
             <div className="actions rise" style={{ '--i': 2 }}>
-              <a className="btn" href="#download">Download for Windows</a>
+              <a className="btn" href="#download">Download for PC</a>
               <a className="btn ghost" href={REPO}><GitHub />View on GitHub</a>
             </div>
             <p className="note rise" style={{ '--i': 3 }}>Free and open source (MIT). No account, no tracking.</p>
@@ -180,7 +180,7 @@ export default function App() {
           <div className="who">
             <img src="/brand/prismo-mark.png" alt="" width="26" height="26" />
             <b>Prismo</b>
-            <span>A free photo library for Windows</span>
+            <span>A free photo library for Windows and Linux</span>
           </div>
           <nav aria-label="Footer">
             <a href="#why">Why Prismo</a>
