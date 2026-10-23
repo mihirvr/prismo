@@ -286,6 +286,9 @@ val installer = tasks.register<Exec>("installer") {
             "--linux-app-category", "graphics",
             "--linux-menu-group", "Graphics;Photography;",
             "--linux-shortcut",
+            // Our own postinst / prerm (copies of jpackage's, see their header): adding Prismo to the menu can't
+            // fail the install on a system without a desktop menu.
+            "--resource-dir", layout.projectDirectory.dir("src/packaging/linux").asFile.path,
             // jpackage only sees what the files in the app folder link to. JavaFX loads GTK 3 at run time, and
             // FFmpeg's .so files sit inside a jar; their system libraries were read from those .so files
             // (sound: ALSA, PulseAudio; libudev; X11: xcb). Ubuntu 24.04 renamed some packages (the t64 names).

@@ -1,0 +1,42 @@
+#!/bin/sh
+# postinst script for APPLICATION_PACKAGE
+#
+# Prismo's copy of jpackage's template.postinst (JDK 25), passed with --resource-dir. jpackage fills in the
+# UPPER_CASE placeholders. One change: adding Prismo to the applications menu can't fail the install. jpackage's
+# version runs the xdg-desktop-menu commands under "set -e", and on a system without a desktop menu folder
+# (a server, a very minimal install) xdg-desktop-menu exits with an error, so dpkg stopped with
+# "post-installation script returned error exit status 3". Here a failed menu step falls back to copying the
+# .desktop file into /usr/share/applications, and the install carries on.
+#
+# see: dh_installdeb(1)
+
+set -e
+
+package_type=deb
+LAUNCHER_AS_SERVICE_SCRIPTS
+
+case "$1" in
+    configure)
+        # A separate "sh -e": inside an "if" this shell ignores set -e, so a failed command must end its own shell.
+        if ! sh -e <<'MENU'
+DESKTOP_COMMANDS_INSTALL
+MENU
+        then
+            for desktop in /opt/APPLICATION_PACKAGE/lib/*.desktop; do
+                [ -f "$desktop" ] && install -D -m 644 "$desktop" "/usr/share/applications/$(basename "$desktop")" || true
+            done
+            echo "Prismo: the menu entry was added by copying its .desktop file (xdg-desktop-menu could not)." >&2
+        fi
+LAUNCHER_AS_SERVICE_COMMANDS_INSTALL
+    ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+    ;;
+
+    *)
+        echo "postinst called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0

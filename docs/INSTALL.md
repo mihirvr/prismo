@@ -112,9 +112,8 @@ On Ubuntu 22.04, Debian 12 or older, use `libgtk-3-0` and `libasound2` instead o
 
 ### If something goes wrong
 
-- **The install stops with `No writable system menu directory found`:** your system has no desktop menu folder
-  yet (this happens on very minimal installs). Create it and let `apt` finish:
-  `sudo mkdir -p /etc/xdg/menus && sudo apt -f install`
+- **No Prismo in the applications menu** (very minimal installs without a desktop menu): the install still works;
+  start it with `/opt/prismo/bin/Prismo`, or log out and back in after installing a desktop.
 - **It doesn't start from the menu:** run `/opt/prismo/bin/Prismo` in a terminal and read the error. A line with
   `cannot open shared object file` names a missing library: install the package for it (table above).
 - **Blank or broken window:** try software drawing: `JAVA_TOOL_OPTIONS=-Dprism.order=sw /opt/prismo/bin/Prismo`

@@ -2,3 +2,5 @@
 /gradlew        text eol=lf
 *.bat           text eol=crlf
 *.jar           binary
+# Prismo's .deb install / remove scripts run on Linux: LF only.
+/src/packaging/linux/*  text eol=lf

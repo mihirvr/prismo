@@ -1,0 +1,40 @@
+#!/bin/sh
+# prerm script for APPLICATION_PACKAGE
+#
+# Prismo's copy of jpackage's template.prerm (JDK 25), passed with --resource-dir. jpackage fills in the
+# UPPER_CASE placeholders. One change, the same as in postinst: taking Prismo out of the applications menu can't
+# stop the app from being removed, and a .desktop file postinst copied by hand is removed too.
+#
+# see: dh_installdeb(1)
+
+set -e
+
+package_type=deb
+COMMON_SCRIPTS
+DESKTOP_SCRIPTS
+LAUNCHER_AS_SERVICE_SCRIPTS
+
+remove_from_menu() {
+DESKTOP_COMMANDS_UNINSTALL
+}
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        # After "||" the shell ignores set -e, so every step runs and none can stop the removal.
+        remove_from_menu || true
+        for desktop in /opt/APPLICATION_PACKAGE/lib/*.desktop; do
+            rm -f "/usr/share/applications/$(basename "$desktop")"
+        done
+LAUNCHER_AS_SERVICE_COMMANDS_UNINSTALL
+    ;;
+
+    failed-upgrade)
+    ;;
+
+    *)
+        echo "prerm called with unknown argument \`$1'" >&2
+        exit 1
+    ;;
+esac
+
+exit 0

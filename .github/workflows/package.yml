@@ -62,9 +62,6 @@ jobs:
         run: |
           deb=$(ls build/packaging/installer/*.deb)
           dpkg-deb --field "$deb" Depends
-          # The package adds Prismo to the applications menu (xdg-desktop-menu), which needs the menu folder every
-          # desktop has; this server has no desktop.
-          sudo mkdir -p /etc/xdg/menus
           sudo apt-get install -y "./$deb"
           launcher=$(find /opt -path '*/bin/Prismo' -type f | head -n 1)
           echo "Launcher: $launcher"
@@ -73,6 +70,13 @@ jobs:
           cat "$log"
           grep -q "Main window shown" "$log"
           if grep -E " (ERROR|WARN) " "$log"; then echo "Warnings or errors in the log (above)"; exit 1; fi
+          # Our own postinst (src/packaging/linux) must be the one installed, and the menu entry must be there.
+          sed -n '/configure)/,/;;/p' /var/lib/dpkg/info/prismo.postinst
+          ls /usr/share/applications | grep -i prismo
+          # Removing it must work too and leave nothing behind in /opt.
+          sudo apt-get remove -y prismo
+          if [ -e /opt/prismo ]; then echo "/opt/prismo is still there after removing the package"; exit 1; fi
+          if ls /usr/share/applications | grep -i prismo; then echo "menu entry left behind"; exit 1; fi
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
