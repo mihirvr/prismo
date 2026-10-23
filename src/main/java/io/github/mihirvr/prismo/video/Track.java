@@ -18,6 +18,8 @@ public record Track(int stream, String language, String title, boolean isDefault
 
     /** ISO 639-2 three-letter codes ("eng") and two-letter codes ("en") → the language's English name. */
     private static final Map<String, String> LANGUAGES = new HashMap<>();
+    /** The same names, lower case → as written ("hindi" → "Hindi"), for file names that spell the language out. */
+    private static final Map<String, String> NAMES = new HashMap<>();
 
     static {
         for (String code : Locale.getISOLanguages()) {
@@ -38,6 +40,11 @@ public record Track(int stream, String language, String title, boolean isDefault
             String name = LANGUAGES.get(pair[1]);
             if (name != null) {
                 LANGUAGES.putIfAbsent(pair[0], name);
+            }
+        }
+        for (String name : LANGUAGES.values()) {
+            if (!name.isBlank()) {
+                NAMES.putIfAbsent(name.toLowerCase(Locale.ROOT), name);
             }
         }
     }
@@ -63,5 +70,14 @@ public record Track(int stream, String language, String title, boolean isDefault
             return null;
         }
         return LANGUAGES.get(code);
+    }
+
+    /**
+     * The English name of a language written as a code ("en", "hin") or spelled out ("Hindi", "english"), as in a
+     * subtitle file's name; null if {@code text} is neither.
+     */
+    static String languageOf(String text) {
+        String name = new Track(-1, text, "", false, true).languageName();
+        return name != null ? name : NAMES.get(text.strip().toLowerCase(Locale.ROOT));
     }
 }

@@ -7,6 +7,7 @@ import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.Menus;
 import io.github.mihirvr.prismo.ui.OfflineFolders;
+import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import java.nio.file.Files;
@@ -18,6 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletionException;
+import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -26,6 +28,7 @@ import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.value.ObservableValue;
 import javafx.css.PseudoClass;
 import javafx.geometry.Insets;
@@ -88,6 +91,10 @@ import org.slf4j.LoggerFactory;
  * trackpad pinch zooms. Right-click opens a menu with all of the above, each entry with its key; the top bar's
  * "More" button has the file items, the "i" button opens the Info panel.
  *
+ * <p><b>Back / Forward</b> (P8, the mouse's side buttons and Alt+Left / Alt+Right) are handled by the app for the
+ * whole window: Back closes the viewer ({@link #close}), and {@link #setOnLeave} tells the app where it was, so
+ * Forward can open it again on the same item.
+ *
  * <p><b>Full screen:</b> the top bar, the previous / next buttons, the video controls and the pointer fade out
  * after {@link #IDLE_TIME} without a mouse move, and come back on the next one. Not while a menu is open or the
  * pointer rests on one of them.
@@ -149,6 +156,8 @@ public final class MediaViewer extends StackPane {
     private List<TimelineItem> items = List.of();
     private int index = -1;
     private Consumer<TimelineItem> onClose = _ -> { };
+    /** Told the list and the item shown just before the viewer closes (the app's Back / Forward history). */
+    private BiConsumer<List<TimelineItem>, Integer> onLeave = (_, _) -> { };
     private ItemAction.Handler onAction = (_, _) -> false;
     /** The Settings switch "Show files hidden in File Explorer" (which actions an item gets). */
     private BooleanSupplier osHiddenShown = () -> false;
@@ -228,6 +237,15 @@ public final class MediaViewer extends StackPane {
         this.onClose = onClose;
     }
 
+    /**
+     * Called with the list and the index of the item shown when the viewer is closed ({@link #close}: Esc, the Back
+     * button, the mouse's back button), before anything is cleared. Not called when it closes because the last item
+     * left the list (nothing to come back to).
+     */
+    public void setOnLeave(BiConsumer<List<TimelineItem>, Integer> onLeave) {
+        this.onLeave = onLeave;
+    }
+
     /** Runs favorite / hide / Trash / restore / delete for the shown item. */
     public void setOnAction(ItemAction.Handler onAction) {
         this.onAction = onAction;
@@ -272,6 +290,9 @@ public final class MediaViewer extends StackPane {
             return;
         }
         TimelineItem last = current();
+        if (last != null) {
+            onLeave.accept(items, index);
+        }
         slideshow.stop();
         hideMenu();
         closeInfo();
@@ -898,7 +919,7 @@ public final class MediaViewer extends StackPane {
     }
 
     private HBox buildTopBar() {
-        Button back = button(Icon.BACK, "Back (Esc)", this::close);
+        Button back = button(Icon.BACK, "Back (Esc, Alt+Left or the mouse's back button)", this::close);
         Button rotate = button(Icon.ROTATE, "Rotate the view (R); the file isn't changed", this::rotate);
         slideshowButton.setGraphic(Icon.SLIDESHOW.node(ICON_SIZE));
         slideshowButton.getStyleClass().add("icon-button");
@@ -1166,6 +1187,16 @@ public final class MediaViewer extends StackPane {
     /** Playback speed, 0.5..2. */
     public DoubleProperty videoSpeedProperty() {
         return video.speedProperty();
+    }
+
+    /** The box behind video subtitles (Settings › Video; the app saves it). */
+    public ObjectProperty<SubtitleBackground> subtitleBackgroundProperty() {
+        return video.subtitleBackgroundProperty();
+    }
+
+    /** Where the sound track and subtitles picked in each video are kept (P8). */
+    public void setTrackMemory(TrackMemory trackMemory) {
+        video.setTrackMemory(trackMemory);
     }
 
     // --- For tests and tools ---

@@ -14,7 +14,7 @@ Issues #1–#9 are done: a Gradle project (Java 25, JavaFX 25), the SQLite datab
 
 The current file layout is the "Project Structure" section of `README.md`.
 
-Next on the roadmap: Packaging (#10).
+Packaging (#10) is built: `./gradlew installer` makes the Windows `.exe` or Linux `.deb`, and GitHub Actions builds both (see Cross-Platform CI/CD Awareness below). Next: the first release.
 
 ---
 
@@ -133,7 +133,10 @@ Every completed task should move through these stages.
 
 ## Cross-Platform CI/CD Awareness
 
-Because `jpackage` cannot cross-compile (e.g., Windows cannot build a `.deb`), final testing for Issue #10 (Packaging) will eventually require setting up GitHub Actions to spin up OS-specific runners. The Windows runner also needs the WiX Toolset to build `.msi`/`.exe`.
+Because `jpackage` cannot cross-compile (e.g., Windows cannot build a `.deb`), the installers are built on GitHub Actions, one runner per OS (`.github/workflows/package.yml`, run on a `v*` tag or by hand). On your own machine:
+
+- `./gradlew appImage` builds the ready-to-run folder `build/packaging/image/Prismo` (nothing extra to install).
+- `./gradlew installer` builds this OS's installer into `build/packaging/installer`. On Windows it needs **WiX 5.0.2** once: install the .NET SDK (e.g. `winget install Microsoft.DotNet.SDK.8`), then `dotnet tool install --global wix --version 5.0.2`, `wix extension add -g WixToolset.Util.wixext/5.0.2` and `wix extension add -g WixToolset.UI.wixext/5.0.2`. Not WiX 6 or later (they come under a maintenance-fee EULA; see TECH_STACK.md, Installers). On Linux it needs `fakeroot`.
 
 ---
 

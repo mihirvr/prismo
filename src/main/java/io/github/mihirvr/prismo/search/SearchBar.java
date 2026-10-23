@@ -34,6 +34,9 @@ import javafx.util.Duration;
  * <p>Keys in the box: Esc clears it (a second Esc hands the keyboard back to the grid); Enter or Down moves the
  * keyboard focus to the first result.
  *
+ * <p><b>Back / Forward</b> (P8): {@link #setOnSearchChanged} hears when other results come on screen or the search
+ * is cleared; {@link #showSearch} puts a search back (or clears it).
+ *
  * <p>All methods run on the JavaFX Application Thread.
  */
 public final class SearchBar extends HBox {
@@ -57,6 +60,8 @@ public final class SearchBar extends HBox {
     private String shownText;
     private ViewOptions shownOptions;
     private Runnable onLeave = () -> { };
+    /** Told when the search on screen changes: results for another text, or none (Back / Forward history). */
+    private Runnable onSearchChanged = () -> { };
 
     /** @param results the view to show results in; its owner places it in the window */
     public SearchBar(Searcher searcher, TimelineView results) {
@@ -115,6 +120,31 @@ public final class SearchBar extends HBox {
         this.onLeave = onLeave;
     }
 
+    /** What runs when results for another text come on screen, or the search is cleared. */
+    public void setOnSearchChanged(Runnable onSearchChanged) {
+        this.onSearchChanged = onSearchChanged;
+    }
+
+    /** The text whose results are on screen, or null when no search is shown. */
+    public String shownSearch() {
+        return shownText;
+    }
+
+    /** Back / Forward: searches for {@code text} at once (null or blank: clears the box, the open tab shows again). */
+    public void showSearch(String text) {
+        if (text == null || text.isBlank()) {
+            if (!field.getText().isEmpty()) {
+                field.clear();
+            }
+            return;
+        }
+        if (!text.equals(field.getText())) {
+            field.setText(text);
+        }
+        typing.stop();
+        search();
+    }
+
     /** Puts the keyboard in the box with its text selected (Ctrl+F). */
     public void focusField() {
         field.requestFocus();
@@ -157,6 +187,7 @@ public final class SearchBar extends HBox {
         } else {
             results.showFromTop(result.items(), result.options().grouped());
         }
+        boolean otherText = !result.text().equals(shownText);
         shownText = result.text();
         shownOptions = result.options();
         int n = result.items().size();
@@ -165,6 +196,9 @@ public final class SearchBar extends HBox {
         noMatches.setText("No matches for “" + result.text().strip() + "”"
                 + (filter == MediaFilter.ALL ? "" : " in " + filter));
         active.set(true);
+        if (otherText) {
+            onSearchChanged.run();
+        }
     }
 
     private void failed(String text, SQLException error) {
@@ -174,11 +208,15 @@ public final class SearchBar extends HBox {
     }
 
     private void clearResults() {
+        boolean wasShown = shownText != null;
         shownText = null;
         shownOptions = null;
         active.set(false);
         count.setText("");
         results.showFromTop(List.of(), true); // drops the tiles, which cancels their thumbnail loads
+        if (wasShown) {
+            onSearchChanged.run();
+        }
     }
 
     private void onKey(KeyEvent event) {

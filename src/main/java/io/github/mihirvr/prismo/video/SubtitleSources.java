@@ -33,9 +33,10 @@ public final class SubtitleSources {
 
     /**
      * One choice in the menu: a file ({@code file} set) or a track inside the video ({@code stream} ≥ 0).
-     * {@code supported} is false for picture subtitles.
+     * {@code supported} is false for picture subtitles. {@code language} is the language's English name ("English"),
+     * from the track's tag or the file's name, or null if neither says (used to prefer the language picked last).
      */
-    public record Source(String label, Path file, int stream, boolean supported) {
+    public record Source(String label, Path file, int stream, boolean supported, String language) {
     }
 
     private SubtitleSources() {
@@ -48,7 +49,7 @@ public final class SubtitleSources {
         for (Track track : tracks) {
             number++;
             String label = track.label(number) + (track.text() ? "" : " (picture subtitles, can't be shown)");
-            sources.add(new Source(label, null, track.stream(), track.text()));
+            sources.add(new Source(label, null, track.stream(), track.text(), track.languageName()));
         }
         return List.copyOf(sources);
     }
@@ -65,7 +66,12 @@ public final class SubtitleSources {
             }
         }
         List<Source> more = new ArrayList<>(sources);
-        more.add(new Source(wanted.getFileName().toString(), wanted, -1, true));
+        String name = wanted.getFileName().toString();
+        int dot = name.indexOf('.');
+        int last = name.lastIndexOf('.');
+        // "Movie.en.srt": the parts between the first dot and the extension may name the language.
+        String language = dot > 0 && last > dot ? languageIn(name.substring(dot + 1, last)) : null;
+        more.add(new Source(name, wanted, -1, true, language));
         return List.copyOf(more);
     }
 
@@ -92,9 +98,23 @@ public final class SubtitleSources {
             String fileName = file.getFileName().toString();
             String middle = fileName.substring(base.length(), fileName.length() - ".srt".length());
             middle = middle.startsWith(".") ? middle.substring(1) : middle;
-            sources.add(new Source(fileLabel(middle, fileName), file, -1, true));
+            sources.add(new Source(fileLabel(middle, fileName), file, -1, true, languageIn(middle)));
         }
         return sources;
+    }
+
+    /**
+     * The language named by one of the dot-separated parts of a file name's middle ("en", "Hindi", "en.forced"), the
+     * first one that is a language; null if none is.
+     */
+    static String languageIn(String middle) {
+        for (String part : middle.split("[.]")) {
+            String language = part.isBlank() ? null : Track.languageOf(part);
+            if (language != null) {
+                return language;
+            }
+        }
+        return null;
     }
 
     /** "English (file)" for {@code .en.srt}, "Hindi (file)" for {@code .Hindi.srt}, else the file's name. */

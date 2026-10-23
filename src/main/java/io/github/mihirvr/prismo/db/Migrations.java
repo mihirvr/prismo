@@ -33,7 +33,8 @@ final class Migrations {
             "V2__library_roots.sql",
             "V3__search.sql",
             "V4__os_hidden.sql",
-            "V5__reread_raw.sql");
+            "V5__reread_raw.sql",
+            "V6__video_choices.sql");
 
     private final List<String> scripts;
 

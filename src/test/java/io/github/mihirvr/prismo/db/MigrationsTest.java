@@ -109,6 +109,42 @@ class MigrationsTest {
     }
 
     @Test
+    void theVideoChoicesTableKeepsOnlyCompletePicksAndGoesWithItsVideo() throws Exception {
+        try (Connection connection = Database.connect(url("v6.db"), false)) {
+            new Migrations(Migrations.SCRIPTS.subList(0, 5)).migrate(connection);
+            try (Statement statement = connection.createStatement()) {
+                statement.executeUpdate("""
+                        INSERT INTO media (id, path, folder, file_name, extension, media_type, size_bytes,
+                                           date_modified, date_added)
+                        VALUES (7, 'D:\\a.mkv', 'D:\\', 'a.mkv', 'mkv', 'video', 1, 0, 0)""");
+            }
+
+            assertEquals(6, new Migrations().migrate(connection));
+
+            try (Statement statement = connection.createStatement()) {
+                assertTrue(tableExists(connection, "video_choices"));
+                statement.executeUpdate("""
+                        INSERT INTO video_choices (media_id, audio_stream, subtitle, subtitle_stream)
+                        VALUES (7, 1, 'track', 3)""");
+                assertThrows(SQLException.class, () -> statement.executeUpdate(
+                        "UPDATE video_choices SET subtitle_stream = NULL"), "a track pick needs its stream");
+                assertThrows(SQLException.class, () -> statement.executeUpdate(
+                        "UPDATE video_choices SET subtitle = 'file'"), "a file pick needs its file");
+                assertThrows(SQLException.class, () -> statement.executeUpdate(
+                        "UPDATE video_choices SET subtitle = 'maybe'"), "off, track or file only");
+                assertThrows(SQLException.class, () -> statement.executeUpdate(
+                        "INSERT INTO video_choices (media_id) VALUES (99)"), "only for a media row that exists");
+
+                statement.executeUpdate("DELETE FROM media WHERE id = 7");
+
+                try (ResultSet rows = statement.executeQuery("SELECT count(*) FROM video_choices")) {
+                    assertEquals(0, rows.getInt(1), "gone with its video");
+                }
+            }
+        }
+    }
+
+    @Test
     void migratingTwiceChangesNothing() throws Exception {
         try (Connection connection = Database.connect(url("twice.db"), false)) {
             Migrations migrations = new Migrations();

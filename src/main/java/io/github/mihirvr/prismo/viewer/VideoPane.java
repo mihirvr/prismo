@@ -2,15 +2,18 @@ package io.github.mihirvr.prismo.viewer;
 
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.Menus;
+import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.WatchProgress;
 import io.github.mihirvr.prismo.video.SubtitleSources;
 import io.github.mihirvr.prismo.video.Subtitles;
 import io.github.mihirvr.prismo.video.Track;
+import io.github.mihirvr.prismo.video.TrackChoice;
 import io.github.mihirvr.prismo.video.VideoNatives;
 import io.github.mihirvr.prismo.video.VideoPlayer;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,8 +24,10 @@ import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.SimpleDoubleProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
@@ -49,7 +54,9 @@ import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
+import javafx.scene.text.Text;
 import javafx.scene.text.TextAlignment;
+import javafx.scene.text.TextLineInfo;
 import javafx.stage.FileChooser;
 import javafx.stage.Screen;
 import javafx.util.Duration;
@@ -70,6 +77,13 @@ import javafx.util.Duration;
  * <p><b>Watch progress</b> (PROJECT.md): a video opens where it was left ({@link WatchProgress#resumeAt}), with
  * a short note; the position is saved every {@link #SAVE_EVERY_MICROS} while playing, on pause, at the end and
  * when the video is closed. Volume, mute and speed are kept across videos (and, by the app, across runs).
+ *
+ * <p><b>Remembered tracks</b> (P8): what the user picks (sound track, subtitles, delay) is saved for the video
+ * ({@link TrackMemory}) and comes back next time; a video with nothing picked starts with the language picked last
+ * ({@link TrackChoice} has the rules). Only the user's own picks are saved, never what the rules turned on.
+ *
+ * <p><b>The subtitle line</b> (P8): centred, its box only as wide as the text, with the box's look from
+ * {@link SubtitleBackground} (a style class; the colours are in the stylesheet).
  */
 final class VideoPane extends StackPane {
 
@@ -96,8 +110,12 @@ final class VideoPane extends StackPane {
     /** The subtitle line's distance from the bottom: above the controls, or lower while they're hidden. */
     private static final double SUBTITLE_ABOVE_CONTROLS = 84;
     private static final double SUBTITLE_LOW = 36;
+    /** The subtitle box is at most this part of the video's width; longer lines wrap. */
+    static final double SUBTITLE_MAX_WIDTH = 0.8;
 
     private final PlaybackMemory memory;
+    /** What the user picked in videos (P8); the app sets the real one. */
+    private TrackMemory trackMemory = TrackMemory.NONE;
     private final ImageView picture = new ImageView();
     private final Button playPause = new Button();
     /** True while the play / pause button shows "pause" (so its icon is only swapped when that changes). */
@@ -118,8 +136,11 @@ final class VideoPane extends StackPane {
     private final BooleanProperty muted = new SimpleBooleanProperty(false);
     private final DoubleProperty speed = new SimpleDoubleProperty(1);
     private final HBox controls;
-    /** The subtitle line, near the bottom over the picture. */
-    private final Label subtitle = new Label();
+    /** The subtitle line, near the bottom over the picture, centred; its box fits the text. */
+    private final Label subtitle = new SubtitleLine();
+    /** The box behind the subtitle line (Settings › Video, the Subtitles menu › Background); the app saves it. */
+    private final ObjectProperty<SubtitleBackground> subtitleBackground =
+            new SimpleObjectProperty<>(SubtitleBackground.DEFAULT);
     /** A short note in the middle near the top ("Speed 1.5×"), gone after {@link #NOTE_TIME}. */
     private final Label note = new Label();
     private final PauseTransition noteTimer = new PauseTransition(NOTE_TIME);
@@ -159,6 +180,8 @@ final class VideoPane extends StackPane {
     private long subtitleLoads;
     /** False while the bar is too narrow for the sound-track button ({@link #fitControls}). */
     private boolean soundRoom = true;
+    /** What the user picked for the open video (loaded when it opens, updated by each pick, saved at once). */
+    private TrackChoice.Picked picked = TrackChoice.Picked.NOTHING;
 
     VideoPane(PlaybackMemory memory) {
         this.memory = memory;
@@ -251,9 +274,12 @@ final class VideoPane extends StackPane {
         subtitle.getStyleClass().add("viewer-subtitle");
         subtitle.setWrapText(true);
         subtitle.setTextAlignment(TextAlignment.CENTER);
+        subtitle.setAlignment(Pos.CENTER);
         subtitle.setMouseTransparent(true);
         subtitle.setVisible(false);
-        subtitle.maxWidthProperty().bind(widthProperty().multiply(0.8));
+        // Its widest is a part of the video's width (SubtitleLine): measured again when that changes.
+        widthProperty().addListener((_, _, _) -> subtitle.requestLayout());
+        subtitleBackground.subscribe(this::showBackground);
         // Readable at any window size: about a 26th of the height, within 15–42 px.
         subtitle.styleProperty().bind(heightProperty().map(h -> "-fx-font-size: %.0fpx;".formatted(
                 Math.clamp(h.doubleValue() / 26, 15, 42))));
@@ -350,6 +376,11 @@ final class VideoPane extends StackPane {
         long mine = generation;
         item = video;
         this.onFirstPicture = onFirstPicture;
+        // What was picked for this video last time (P8); the sound track is chosen by the player before any sound.
+        picked = trackMemory.load(video.ref().id());
+        subtitleDelayMicros = picked.subtitleDelayMicros();
+        TrackChoice.Picked pickedBefore = picked;
+        String audioLanguage = trackMemory.audioLanguage();
         double resume = WatchProgress.resumeAt(memory.load(video.ref().id()), video.durationSeconds());
         savedMicros = Math.round(resume * 1_000_000);
         // Decode at most at the screen's real pixel size: a 4K video on a 1080p screen needs a quarter of the memory.
@@ -359,6 +390,11 @@ final class VideoPane extends StackPane {
         int maxHeight = (int) Math.ceil(bounds.getHeight() * screen.getOutputScaleY());
         player = VideoPlayer.open(video.ref().path(), maxWidth, maxHeight, savedMicros, new VideoPlayer.Listener() {
             @Override
+            public int chooseAudio(List<Track> tracks, int fileDefault) { // the player's thread: final values only
+                return TrackChoice.audioStream(tracks, fileDefault, pickedBefore.audioStream(), audioLanguage);
+            }
+
+            @Override
             public void opened(VideoPlayer.Info opened) {
                 Platform.runLater(() -> {
                     if (generation == mine) {
@@ -367,7 +403,7 @@ final class VideoPane extends StackPane {
                         rotation = opened.rotation();
                         picture.setRotate(rotation);
                         fitPicture();
-                        findSubtitles();
+                        findSubtitles(mine);
                         updateMenus();
                         onInfo.accept(opened);
                     }
@@ -560,14 +596,14 @@ final class VideoPane extends StackPane {
     void nextSubtitles() {
         for (int i = subtitleChoice + 1; i < subtitleSources.size(); i++) {
             if (subtitleSources.get(i).supported()) {
-                chooseSubtitles(i);
+                chooseSubtitles(i, true);
                 return;
             }
         }
         if (subtitleSources.isEmpty()) {
             showNote("No subtitles for this video");
         } else {
-            chooseSubtitles(-1);
+            chooseSubtitles(-1, true);
         }
     }
 
@@ -589,13 +625,13 @@ final class VideoPane extends StackPane {
         }
     }
 
-    /** Adds {@code file} to the subtitle choices (once) and turns it on. */
+    /** Adds {@code file} to the subtitle choices (once) and turns it on (the user's pick: remembered). */
     void useSubtitleFile(Path file) {
         subtitleSources = SubtitleSources.withChosenFile(subtitleSources, file);
         Path wanted = file.toAbsolutePath().normalize();
         for (int i = 0; i < subtitleSources.size(); i++) {
             if (wanted.equals(subtitleSources.get(i).file())) {
-                chooseSubtitles(i);
+                chooseSubtitles(i, true);
                 return;
             }
         }
@@ -605,6 +641,7 @@ final class VideoPane extends StackPane {
     void shiftSubtitles(long micros) {
         subtitleDelayMicros = micros == 0 ? 0 : subtitleDelayMicros + micros;
         showNote("Subtitle delay " + delayText(subtitleDelayMicros));
+        remember(picked.withDelay(subtitleDelayMicros));
         updateMenus();
     }
 
@@ -624,27 +661,65 @@ final class VideoPane extends StackPane {
         chooseSoundTrack((at + 1) % tracks.size());
     }
 
+    /** The user picked sound track {@code index} (the menu or A): played, and remembered for this video. */
     private void chooseSoundTrack(int index) {
         Track track = info.audioTracks().get(index);
         player.selectAudio(track.stream());
         showNote("Sound: " + track.label(index + 1));
+        remember(picked.withAudio(track.stream()));
+        trackMemory.setAudioLanguage(TrackChoice.audioLanguageAfter(track, trackMemory.audioLanguage()));
         updateMenus();
     }
 
     // --- Subtitles ---
 
-    /** Lists the subtitles for the video just opened; a file next to it is turned on at once (like other players). */
-    private void findSubtitles() {
-        subtitleSources = SubtitleSources.forVideo(item.ref().path(), info.subtitleTracks());
-        if (!subtitleSources.isEmpty() && subtitleSources.getFirst().file() != null) {
-            chooseSubtitles(0);
-        }
+    /**
+     * Lists the subtitles for the video just opened and turns on the ones {@link TrackChoice#subtitles} picks: what
+     * was picked for this video, else the language picked last, else a file next to the video (like other players).
+     * Listing the folder and checking a remembered file are disk work, so they run on a virtual thread.
+     */
+    private void findSubtitles(long mine) {
+        Path video = item.ref().path();
+        List<Track> tracks = info.subtitleTracks();
+        TrackChoice.SubtitlePick remembered = picked.subtitles();
+        String language = trackMemory.subtitleLanguage();
+        Thread.ofVirtual().name("prismo-subtitle-list").start(() -> {
+            TrackChoice.SubtitleStart start;
+            try {
+                start = TrackChoice.subtitles(video, SubtitleSources.forVideo(video, tracks), remembered, language,
+                        Files::isRegularFile);
+            } catch (RuntimeException e) {
+                start = new TrackChoice.SubtitleStart(List.of(), -1);
+            }
+            TrackChoice.SubtitleStart found = start;
+            Platform.runLater(() -> {
+                if (generation == mine) {
+                    subtitleSources = found.sources();
+                    if (found.choice() >= 0) {
+                        chooseSubtitles(found.choice(), false);
+                    } else {
+                        updateMenus();
+                    }
+                }
+            });
+        });
     }
 
-    private void chooseSubtitles(int index) {
+    /**
+     * Turns on subtitles {@code index} of {@link #subtitleSources}, or Off (-1). {@code byUser}: picked in the menu,
+     * with C or with "Choose subtitle file…", so it is remembered for this video, and its language for the next ones.
+     */
+    private void chooseSubtitles(int index, boolean byUser) {
         subtitleChoice = index;
         subtitles = Subtitles.NONE;
         long load = ++subtitleLoads;
+        if (byUser && item != null) {
+            SubtitleSources.Source source = index < 0 ? null : subtitleSources.get(index);
+            remember(picked.withSubtitles(source == null ? TrackChoice.SubtitlePick.SUBTITLES_OFF
+                    : source.file() != null ? TrackChoice.SubtitlePick.file(item.ref().path(), source.file())
+                    : TrackChoice.SubtitlePick.track(source.stream())));
+            trackMemory.setSubtitleLanguage(TrackChoice.subtitleLanguageAfter(source, trackMemory.subtitleLanguage()));
+        }
         updateMenus();
         if (index < 0) {
             showNote("Subtitles off");
@@ -692,7 +767,7 @@ final class VideoPane extends StackPane {
         RadioMenuItem off = new RadioMenuItem("Off");
         off.setToggleGroup(group);
         off.setSelected(subtitleChoice < 0);
-        off.setOnAction(_ -> chooseSubtitles(-1));
+        off.setOnAction(_ -> chooseSubtitles(-1, true));
         items.add(off);
         for (int i = 0; i < subtitleSources.size(); i++) {
             int index = i;
@@ -701,7 +776,7 @@ final class VideoPane extends StackPane {
             choice.setToggleGroup(group);
             choice.setSelected(i == subtitleChoice);
             choice.setDisable(!source.supported());
-            choice.setOnAction(_ -> chooseSubtitles(index));
+            choice.setOnAction(_ -> chooseSubtitles(index, true));
             items.add(choice);
         }
         if (subtitleSources.isEmpty()) {
@@ -722,7 +797,27 @@ final class VideoPane extends StackPane {
         MenuItem reset = Menus.item("Reset delay", null, null, () -> shiftSubtitles(0));
         reset.setDisable(subtitleDelayMicros == 0);
         items.add(reset);
+        items.add(new SeparatorMenuItem());
+        items.add(backgroundMenu());
         return items;
+    }
+
+    /** Subtitles › Background: the box behind the line, the same choice as Settings › Video. */
+    private Menu backgroundMenu() {
+        Menu menu = new Menu("Background");
+        ToggleGroup group = new ToggleGroup();
+        for (SubtitleBackground choice : SubtitleBackground.values()) {
+            RadioMenuItem entry = new RadioMenuItem(choice == SubtitleBackground.NONE ? "None (outlined text)"
+                    : choice.label());
+            entry.setToggleGroup(group);
+            entry.setSelected(choice == subtitleBackground.get());
+            entry.setOnAction(_ -> {
+                subtitleBackground.set(choice);
+                showNote("Subtitle background " + choice.label());
+            });
+            menu.getItems().add(entry);
+        }
+        return menu;
     }
 
     private List<MenuItem> soundItems() {
@@ -803,6 +898,23 @@ final class VideoPane extends StackPane {
 
     // --- Notes, saving, stopping ---
 
+    /** The user picked something in this video (P8): kept for it and saved at once (through the DB writer). */
+    private void remember(TrackChoice.Picked now) {
+        picked = now;
+        if (item != null) {
+            trackMemory.save(item.ref().id(), now);
+        }
+    }
+
+    /** Puts {@code background}'s style class on the subtitle line (only one at a time). */
+    private void showBackground(SubtitleBackground background) {
+        for (SubtitleBackground each : SubtitleBackground.values()) {
+            subtitle.getStyleClass().remove(each.styleClass());
+        }
+        subtitle.getStyleClass().add(background.styleClass());
+        updateMenus();
+    }
+
     void showNote(String text) {
         note.setText(text);
         note.setVisible(true);
@@ -846,6 +958,7 @@ final class VideoPane extends StackPane {
         subtitleChoice = -1;
         subtitles = Subtitles.NONE;
         subtitleDelayMicros = 0;
+        picked = TrackChoice.Picked.NOTHING;
         subtitleLoads++;
         subtitle.setText("");
         subtitle.setVisible(false);
@@ -865,6 +978,29 @@ final class VideoPane extends StackPane {
     }
 
     // --- For the viewer, tests and tools ---
+
+    /** Where the user's picks are kept (the app's; {@link TrackMemory#NONE} until set). */
+    void setTrackMemory(TrackMemory trackMemory) {
+        this.trackMemory = trackMemory;
+    }
+
+    /** The subtitle box's look; the app saves it and Settings › Video changes it too. */
+    ObjectProperty<SubtitleBackground> subtitleBackgroundProperty() {
+        return subtitleBackground;
+    }
+
+    /** The subtitle choices for the open video and the one turned on (-1 = Off). For tests and tools. */
+    List<SubtitleSources.Source> subtitleSources() {
+        return subtitleSources;
+    }
+
+    int subtitleChoice() {
+        return subtitleChoice;
+    }
+
+    long subtitleDelayMicros() {
+        return subtitleDelayMicros;
+    }
 
     /** The control bar at the bottom (the viewer hides it with the rest in full screen). */
     HBox controls() {
@@ -924,5 +1060,37 @@ final class VideoPane extends StackPane {
     /** True while the play / pause button shows "pause". */
     boolean showsPause() {
         return showingPause;
+    }
+
+    /**
+     * The subtitle line (P8): as wide as its text, so the box behind it shrinks to fit, but at most
+     * {@link #SUBTITLE_MAX_WIDTH} of the video's width. A longer line wraps there, and the box is as wide as the widest
+     * wrapped line (measured with a {@link Text} wrapped at the same width, line by line: JavaFX wraps greedily, so
+     * wrapping again at that widest line's width gives the same lines). A Label's widest size is its preferred one, so
+     * the stack pane never stretches it; centred by its alignment in the pane.
+     */
+    private final class SubtitleLine extends Label {
+        private final Text measure = new Text();
+
+        @Override
+        protected double computePrefWidth(double height) {
+            double whole = super.computePrefWidth(height);
+            double limit = Math.floor(VideoPane.this.getWidth() * SUBTITLE_MAX_WIDTH);
+            if (limit <= 0 || whole <= limit) {
+                return whole;
+            }
+            Insets insets = getInsets();
+            double sides = insets.getLeft() + insets.getRight();
+            measure.setFont(getFont());
+            measure.setLineSpacing(getLineSpacing());
+            measure.setText(getText());
+            measure.setWrappingWidth(Math.max(1, limit - sides));
+            // The text's own bounds are the wrapping width; each line's bounds (JavaFX 24+ LayoutInfo) are its own.
+            double widest = 0;
+            for (TextLineInfo line : measure.getLayoutInfo().getTextLines(false)) {
+                widest = Math.max(widest, line.bounds().getWidth());
+            }
+            return Math.min(limit, Math.ceil(widest) + sides + 1);
+        }
     }
 }

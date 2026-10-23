@@ -57,3 +57,18 @@ video with sound, a screenshot).
 16. **Restart:** close and start again: window place and size, look, thumbnail size, video volume / speed and every
     setting are as you left them.
 17. **Small window:** make the window as small as it goes: nothing overlaps, and the viewer's video bar still fits.
+18. **Subtitle look:** play a video with an `.srt` next to it. The line is centred near the bottom and its dark box
+    is only as wide as the text (a long line wraps at about 80 % of the width). Try each background in Settings ›
+    Video and in the right-click menu › Subtitles › Background (None, 25 %, 50 %, 75 %, 100 %), in the Light and Dark
+    looks: with None the text has a dark outline and is still readable on a bright picture. Restart: the choice is
+    kept.
+19. **Back / Forward:** click the Collections tab, a page (Favorites), a folder in the tree, an album, then search for
+    something and clear it. The mouse's back side button (or Alt+Left) walks back through each of these, the
+    forward button (or Alt+Right) walks ahead again; going somewhere new stops Forward. Open a photo, move to the
+    next one, press Back: the viewer closes; Forward opens it on that photo. A video opened again with Forward
+    carries on where it was.
+20. **Remembered tracks:** in a video with two sound tracks or subtitle tracks, pick a sound track (A), subtitles
+    (C or the menu) and a delay (Z / X). Close it and open it again (and after a restart): the same choices come
+    back. Another video you haven't set up starts in the languages you picked last; pick Off once and a video with
+    an `.srt` next to it then stays off. Delete or rename a subtitle file you picked from another folder: the video
+    still opens, with the language picked last.

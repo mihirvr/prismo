@@ -89,6 +89,8 @@ Gallery Lock (PIN), duplicate finder, AI/content search, face recognition, OCR, 
 
 Built: a top bar with the Timeline | Collections tabs, the search box, "Library folders…" and a Settings button (icons are the app's own line drawings, not emoji).
 
+**Back / Forward (built in P8):** like a web browser, with the mouse's back / forward side buttons or Alt+Left / Alt+Right. Back goes to the tab, Collections page, folder, album or search the user was on before; Forward goes ahead again; going somewhere new drops what Forward could reach. In the viewer, Back closes it and Forward opens it again on the same item (a video carries on from its watch position). Up to 50 steps back.
+
 ---
 
 ## Timeline (Home)
@@ -179,8 +181,8 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 - **Video controls:** Space or a click = play / pause; J / L ±10 s; Left / Right ±5 s; Home = from the start; Up / Down volume; M mute; loop; `,` / `.` one picture back / on while paused.
 - **Speed:** 0.5× to 2× in steps (`[` / `]` and a menu); the sound keeps its pitch.
 - **Sound tracks:** when a video has more than one, a menu and the A key pick one (named from the file's language and title tags).
-- **Subtitles:** an `.srt` file next to the video (`Holiday.srt`, `Holiday.en.srt`…) is found and turned on by itself; any other `.srt` can be picked with "Choose subtitle file…" in the Subtitles menu (a file dialog that opens in the video's folder; added for this video until it closes); text subtitle tracks inside MKV / MP4 can be chosen (C cycles, or the menu); picture subtitles (DVD / Blu-ray) are listed but can't be shown; Off. ASS styling is shown as plain text. Delay ±0.1 s per Z / X press, shown on screen, with "Reset delay" in the menu.
-- **Remembered:** volume, mute and speed are kept after a restart. Loop stays on from video to video until Prismo closes; the subtitle choice and delay start fresh for each video.
+- **Subtitles:** an `.srt` file next to the video (`Holiday.srt`, `Holiday.en.srt`…) is found and turned on by itself; any other `.srt` can be picked with "Choose subtitle file…" in the Subtitles menu (a file dialog that opens in the video's folder; added for this video until it closes); text subtitle tracks inside MKV / MP4 can be chosen (C cycles, or the menu); picture subtitles (DVD / Blu-ray) are listed but can't be shown; Off. ASS styling is shown as plain text. Delay ±0.1 s per Z / X press, shown on screen, with "Reset delay" in the menu. The line is centred near the bottom on a black box only as wide as the text; the box is 50 % see-through by default and can be 25 / 75 / 100 % or left out (then the text gets a dark outline), in Settings › Video or the Subtitles menu › Background (P8).
+- **Remembered:** volume, mute and speed are kept after a restart. Loop stays on from video to video until Prismo closes. Each video remembers the sound track, subtitles and delay picked in it (P8, kept in the database); a video with nothing picked starts in the sound and subtitle language picked last (Off counts for subtitles), else as before.
 
 ---
 
@@ -352,7 +354,7 @@ This is deliberately *not* separate Workspaces/library profiles — that's a big
 - Thumbnail size slider (tiny → huge)
 - Drag & drop (move, copy, create albums)
 - Right-click menu: open, open with, open folder, rename, move, copy, delete, favorite, hide, properties (built so far: open, favorite, hide, Hide in File Explorer, Trash, Show in folder, Open with default app, Copy and Info, each with its shortcut shown; "properties" became the viewer's Info panel)
-- Keyboard shortcuts: arrows, space, delete, Ctrl+A/C/V, F11, Esc
+- Keyboard shortcuts: arrows, space, delete, Ctrl+A/C/V, F11, Esc (built: every key is listed in Settings › Keyboard shortcuts; Alt+Left / Alt+Right and the mouse's side buttons go back / forward)
 
 ---
 

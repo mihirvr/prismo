@@ -9,6 +9,7 @@ import io.github.mihirvr.prismo.ui.DialogPlacement;
 import io.github.mihirvr.prismo.ui.Grouping;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.MediaDetails;
+import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.Theme;
 import java.io.File;
 import java.net.URI;
@@ -64,6 +65,7 @@ import javafx.stage.Window;
  *       Prismo's Hide also marks the file ({@link HiddenMode}).</li>
  *   <li><b>Ignored folders:</b> folders the library skips ({@link IgnoreRules}).</li>
  *   <li><b>Timeline:</b> how date-sorted grids are grouped ({@link Grouping}).</li>
+ *   <li><b>Video:</b> the box behind subtitles ({@link SubtitleBackground}), with a small sample (P8).</li>
  *   <li><b>Performance:</b> how many cores make thumbnails; the thumbnails' size on disk and Clear.</li>
  *   <li><b>Keyboard shortcuts:</b> what every key does ({@link Shortcuts}), a reference that scrolls inside the
  *       page, so it doesn't make the window taller than the other pages.</li>
@@ -84,6 +86,7 @@ public final class SettingsDialog {
      * @param osHiddenShown    Hidden items › "Show files hidden in File Explorer"; the app reloads the views
      * @param ignoredFolders   Ignored folders; the app re-indexes
      * @param grouping         Timeline › date headers
+     * @param subtitleBackground Video › the box behind subtitles (the video's Subtitles menu changes it too)
      * @param thumbnailThreads Performance › threads making thumbnails
      * @param thumbnailDisk    Performance › the thumbnails on disk
      * @param about            About › version and web page
@@ -91,7 +94,8 @@ public final class SettingsDialog {
      */
     public record Options(ObjectProperty<HiddenMode> hiddenMode, BooleanProperty osHiddenShown,
             ObjectProperty<IgnoreRules> ignoredFolders, ObjectProperty<Grouping> grouping,
-            IntegerProperty thumbnailThreads, ThumbnailDisk thumbnailDisk, AppInfo about, Consumer<URI> openWebsite) {
+            ObjectProperty<SubtitleBackground> subtitleBackground, IntegerProperty thumbnailThreads,
+            ThumbnailDisk thumbnailDisk, AppInfo about, Consumer<URI> openWebsite) {
     }
 
     /** The thumbnails on disk, worked out off the UI thread (the futures complete on any thread). */
@@ -105,7 +109,7 @@ public final class SettingsDialog {
     /** The pages, in the order of the list on the left. */
     enum Page {
         APPEARANCE("Appearance", Icon.IMAGE), HIDDEN("Hidden items", Icon.EYE_OFF),
-        IGNORED("Ignored folders", Icon.FOLDER), TIMELINE("Timeline", Icon.CLOCK),
+        IGNORED("Ignored folders", Icon.FOLDER), TIMELINE("Timeline", Icon.CLOCK), VIDEO("Video", Icon.SUBTITLES),
         PERFORMANCE("Performance", Icon.SETTINGS), SHORTCUTS("Keyboard shortcuts", Icon.KEYBOARD),
         ABOUT("About", Icon.INFO);
 
@@ -145,6 +149,7 @@ public final class SettingsDialog {
     private final ToggleGroup themes = new ToggleGroup();
     private final ToggleGroup hiddenModes = new ToggleGroup();
     private final ToggleGroup groupings = new ToggleGroup();
+    private final ToggleGroup subtitleBackgrounds = new ToggleGroup();
     private final CheckBox showOsHidden = new CheckBox("Show files hidden in File Explorer");
     private final VBox ignoredList = new VBox(6);
     private final Label diskSize = new Label("Working it out…");
@@ -173,6 +178,7 @@ public final class SettingsDialog {
                 case HIDDEN -> hiddenSection();
                 case IGNORED -> ignoredSection();
                 case TIMELINE -> timelinePage();
+                case VIDEO -> videoPage();
                 case PERFORMANCE -> performancePage();
                 case SHORTCUTS -> shortcutsPage();
                 case ABOUT -> aboutPage();
@@ -409,6 +415,40 @@ public final class SettingsDialog {
         note.setText("Used on the Timeline, in search results and on the Collections pages when they are sorted by a"
                 + " date. Sorting by name, size or resolution shows no headers.");
         return new VBox(12, heading("Date headers"), choices, note);
+    }
+
+    // --- Video ---
+
+    /** The box behind subtitles: five cards (None, 25 % … 100 %), a sample line on a light-to-dark strip, a note. */
+    private VBox videoPage() {
+        VBox choices = new VBox(8);
+        for (SubtitleBackground background : SubtitleBackground.values()) {
+            choices.getChildren().add(choiceCard(background.label(), background.description(), background,
+                    subtitleBackgrounds));
+        }
+        // A sample: the same style classes as the real line (prismo.css), over a strip from light to dark.
+        Label sample = new Label("Subtitles look like this");
+        sample.getStyleClass().addAll("viewer-subtitle", options.subtitleBackground().get().styleClass());
+        subtitleBackgrounds.selectToggle(subtitleBackgrounds.getToggles().get(
+                options.subtitleBackground().get().ordinal()));
+        subtitleBackgrounds.selectedToggleProperty().addListener((_, old, selected) -> {
+            if (selected == null) {
+                old.setSelected(true);
+            } else {
+                SubtitleBackground background = (SubtitleBackground) selected.getUserData();
+                options.subtitleBackground().set(background);
+                for (SubtitleBackground each : SubtitleBackground.values()) {
+                    sample.getStyleClass().remove(each.styleClass());
+                }
+                sample.getStyleClass().add(background.styleClass());
+            }
+        });
+        StackPane strip = new StackPane(sample);
+        strip.getStyleClass().add("subtitle-sample");
+        Label note = wrapping("settings-note", 0);
+        note.setText("Also in a video's right-click menu: Subtitles › Background. Prismo remembers the sound track and"
+                + " subtitles you pick in each video, and starts other videos in the language you picked last.");
+        return new VBox(12, heading("Subtitle background"), choices, strip, note);
     }
 
     // --- Performance ---
@@ -675,6 +715,10 @@ public final class SettingsDialog {
 
     ToggleGroup hiddenModes() {
         return hiddenModes;
+    }
+
+    ToggleGroup subtitleBackgrounds() {
+        return subtitleBackgrounds;
     }
 
     CheckBox showOsHidden() {

@@ -56,6 +56,10 @@ import org.slf4j.LoggerFactory;
  * a load replaced while it waited is skipped, and a result that's no longer the newest is dropped on the UI
  * thread. Reloading while the tab isn't on screen is put off until it is shown again.
  *
+ * <p><b>Back / Forward</b> (P8): the page, folder and album on screen are a {@link Spot}. A change the user makes
+ * (a page in the list, a folder in the tree, an album opened or "Albums" to go back) is reported to
+ * {@link #setOnNavigate}; {@link #goTo} shows a spot again without reporting it.
+ *
  * <p>All methods run on the JavaFX Application Thread.
  */
 public final class CollectionsPage extends BorderPane {
@@ -87,6 +91,19 @@ public final class CollectionsPage extends BorderPane {
         }
     }
 
+    /**
+     * Where the user is on this tab, for Back / Forward: the page, plus the folder chosen on Folders (null = the first
+     * library folder) or the album open on Albums (null = the list of albums). Unused parts are null, so two spots
+     * of the same page compare equal.
+     */
+    public record Spot(Page page, String folder, Album album) {
+
+        public Spot {
+            folder = page == Page.FOLDERS ? folder : null;
+            album = page == Page.ALBUMS ? album : null;
+        }
+    }
+
     private final Database database;
     private final Executor loads;
     private final AtomicLong latestLoad = new AtomicLong();
@@ -113,6 +130,10 @@ public final class CollectionsPage extends BorderPane {
     private final Set<String> expanded = new HashSet<>();
     /** True while the tree is being rebuilt, so its selection changes aren't taken as clicks. */
     private boolean rebuildingTree;
+    /** Told when the user moves to another page, folder or album (Back / Forward history). */
+    private Runnable onNavigate = () -> { };
+    /** True while {@link #goTo} puts a spot back, so its own changes aren't reported as the user's. */
+    private boolean restoring;
     /** What the grid shows now (scope + options), to tell a reload (stay put) from a new view (to the top). */
     private Object shownKey;
     private boolean stale = true;
@@ -138,6 +159,7 @@ public final class CollectionsPage extends BorderPane {
         albumGrid.setOnOpen(album -> {
             openAlbum = album;
             refresh();
+            navigated();
         });
         gridHolder.getChildren().add(grid);
 
@@ -150,6 +172,7 @@ public final class CollectionsPage extends BorderPane {
             if (page != null) {
                 openAlbum = null;
                 refresh();
+                navigated();
             }
         });
 
@@ -160,6 +183,7 @@ public final class CollectionsPage extends BorderPane {
             if (!rebuildingTree && item != null && item.getValue() != null) {
                 folder = item.getValue().path();
                 refresh();
+                navigated();
             }
         });
         recursive.setSelected(true);
@@ -170,6 +194,7 @@ public final class CollectionsPage extends BorderPane {
         backToAlbums.setOnAction(_ -> {
             openAlbum = null;
             refresh();
+            navigated();
         });
 
         title.getStyleClass().add("collections-title");
@@ -220,6 +245,37 @@ public final class CollectionsPage extends BorderPane {
 
     public void showPage(Page page) {
         pages.getSelectionModel().select(page);
+    }
+
+    /** Where the user is on this tab now (Back / Forward history). */
+    public Spot spot() {
+        return new Spot(page(), folder, openAlbum);
+    }
+
+    /** Shows {@code spot} again (Back / Forward), without reporting it as the user's move. */
+    public void goTo(Spot spot) {
+        restoring = true;
+        try {
+            pages.getSelectionModel().select(spot.page()); // its listener closes any open album
+            if (spot.page() == Page.FOLDERS) {
+                folder = spot.folder();
+            }
+            openAlbum = spot.album();
+            refresh();
+        } finally {
+            restoring = false;
+        }
+    }
+
+    /** What runs when the user moves to another page, folder or album (the app's Back / Forward history). */
+    public void setOnNavigate(Runnable onNavigate) {
+        this.onNavigate = onNavigate;
+    }
+
+    private void navigated() {
+        if (!restoring) {
+            onNavigate.run();
+        }
     }
 
     /** Keyboard focus to the list of pages (Up / Down move between them). */

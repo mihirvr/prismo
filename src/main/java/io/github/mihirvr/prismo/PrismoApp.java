@@ -10,6 +10,7 @@ import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.db.LibraryRootStore;
 import io.github.mihirvr.prismo.db.PlaybackPositions;
 import io.github.mihirvr.prismo.db.SettingsStore;
+import io.github.mihirvr.prismo.db.TrackChoices;
 import io.github.mihirvr.prismo.index.FileOperations;
 import io.github.mihirvr.prismo.index.IgnoreRules;
 import io.github.mihirvr.prismo.index.IndexProgress;
@@ -35,6 +36,7 @@ import io.github.mihirvr.prismo.ui.Grouping;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.OfflineFolders;
+import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.Theme;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
@@ -43,8 +45,10 @@ import io.github.mihirvr.prismo.ui.TimelineView;
 import io.github.mihirvr.prismo.ui.ViewOptions;
 import io.github.mihirvr.prismo.ui.ViewOptionsBar;
 import io.github.mihirvr.prismo.ui.WindowPlacement;
+import io.github.mihirvr.prismo.video.TrackChoice;
 import io.github.mihirvr.prismo.viewer.MediaViewer;
 import io.github.mihirvr.prismo.viewer.PlaybackMemory;
+import io.github.mihirvr.prismo.viewer.TrackMemory;
 import io.github.mihirvr.prismo.watch.ChangeBatcher;
 import io.github.mihirvr.prismo.watch.FileWatcher;
 import java.io.IOException;
@@ -127,6 +131,11 @@ public final class PrismoApp extends Application {
     private static final String VOLUME_SETTING = "video.volume";
     private static final String MUTED_SETTING = "video.muted";
     private static final String SPEED_SETTING = "video.speed";
+    /** Settings › Video: the box behind subtitles (P8). */
+    private static final String SUBTITLE_BACKGROUND_SETTING = "video.subtitle_background";
+    /** The sound and subtitle languages picked last ("English"; subtitles also "off"), for videos with no pick (P8). */
+    private static final String AUDIO_LANGUAGE_SETTING = "video.audio_language";
+    private static final String SUBTITLE_LANGUAGE_SETTING = "video.subtitle_language";
     /** Filters + Sort and Folders' "Include subfolders", kept across restarts (P7). */
     private static final String VIEW_SETTING = "timeline.view";
     private static final String INCLUDE_SUBFOLDERS_SETTING = "collections.include_subfolders";
@@ -187,6 +196,15 @@ public final class PrismoApp extends Application {
     private final ObjectProperty<Grouping> grouping = new SimpleObjectProperty<>(Grouping.DEFAULT);
     /** Settings › Performance › threads making thumbnails. UI thread. */
     private final IntegerProperty thumbnailThreads = new SimpleIntegerProperty(ThumbnailService.DEFAULT_THREADS);
+    /** Settings › Video › the box behind subtitles; the video's Subtitles menu changes it too. UI thread. */
+    private final ObjectProperty<SubtitleBackground> subtitleBackground =
+            new SimpleObjectProperty<>(SubtitleBackground.DEFAULT);
+    /** The sound / subtitle language picked last in any video, or null. UI thread (set in init). */
+    private String audioLanguage;
+    private String subtitleLanguage;
+    private TrackChoices trackChoices;
+    /** Back / Forward (P8). Made in start(). */
+    private Navigation navigation;
     private Path cacheDir;
     private PlaybackPositions playbackPositions;
     /** The last watch-progress save, and whether one happened since the viewer opened. UI thread. */
@@ -242,6 +260,7 @@ public final class PrismoApp extends Application {
         thumbnails = new ThumbnailService(thumbnailCache, new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
         searcher = new Searcher(database);
         playbackPositions = new PlaybackPositions(database);
+        trackChoices = new TrackChoices(database);
         // Watcher events → batches (debounced) → applied on the indexing thread, after any run already queued.
         changes = new ChangeBatcher(CHANGES_QUIET, CHANGES_MAX_WAIT,
                 batch -> indexingThread.execute(() -> applyChanges(batch)));
@@ -266,6 +285,9 @@ public final class PrismoApp extends Application {
         thumbnailThreads.set((int) number(THUMBNAIL_THREADS_SETTING, 1, ThumbnailService.MAX_THREADS,
                 ThumbnailService.DEFAULT_THREADS));
         thumbnails.setThreads(thumbnailThreads.get());
+        subtitleBackground.set(SubtitleBackground.fromSetting(settings.get(SUBTITLE_BACKGROUND_SETTING).orElse(null)));
+        audioLanguage = settings.get(AUDIO_LANGUAGE_SETTING).filter(v -> !v.isBlank()).orElse(null);
+        subtitleLanguage = settings.get(SUBTITLE_LANGUAGE_SETTING).filter(v -> !v.isBlank()).orElse(null);
     }
 
     /** The thumbnails on disk for Settings › Performance: size and clearing, on a virtual thread each. */
@@ -330,6 +352,59 @@ public final class PrismoApp extends Application {
         };
     }
 
+    /**
+     * What the user picked in videos (P8), for the viewer: each video's sound track, subtitles and delay
+     * ({@link TrackChoices}: read on the UI thread, one row by its key, like the watch position; written in the
+     * background) and the languages picked last (settings, saved when they change).
+     */
+    private TrackMemory trackMemory() {
+        return new TrackMemory() {
+            @Override
+            public TrackChoice.Picked load(long mediaId) {
+                try {
+                    return trackChoices.load(mediaId);
+                } catch (SQLException e) {
+                    log.warn("Could not read the tracks picked for video {}", mediaId, e);
+                    return TrackChoice.Picked.NOTHING;
+                }
+            }
+
+            @Override
+            public void save(long mediaId, TrackChoice.Picked picked) {
+                trackChoices.save(mediaId, picked).exceptionally(e -> {
+                    log.warn("Could not save the tracks picked for video {}", mediaId, e);
+                    return null;
+                });
+            }
+
+            @Override
+            public String audioLanguage() {
+                return audioLanguage;
+            }
+
+            @Override
+            public void setAudioLanguage(String language) {
+                if (language != null && !language.equals(audioLanguage)) {
+                    audioLanguage = language;
+                    settings.put(AUDIO_LANGUAGE_SETTING, language);
+                }
+            }
+
+            @Override
+            public String subtitleLanguage() {
+                return subtitleLanguage;
+            }
+
+            @Override
+            public void setSubtitleLanguage(String language) {
+                if (language != null && !language.equals(subtitleLanguage)) {
+                    subtitleLanguage = language;
+                    settings.put(SUBTITLE_LANGUAGE_SETTING, language);
+                }
+            }
+        };
+    }
+
     /** Runs on the JavaFX Application Thread. */
     @Override
     public void start(Stage stage) {
@@ -353,15 +428,15 @@ public final class PrismoApp extends Application {
         viewer.videoVolumeProperty().set(savedVolume);
         viewer.videoMutedProperty().set(savedMuted);
         viewer.videoSpeedProperty().set(savedSpeed);
-        timeline.setOnOpen(viewer::open);
-        timeline.setOnInfo(viewer::openWithInfo);
+        viewer.setTrackMemory(trackMemory());
+        viewer.subtitleBackgroundProperty().bindBidirectional(subtitleBackground);
+        subtitleBackground.addListener((_, _, chosen) ->
+                settings.put(SUBTITLE_BACKGROUND_SETTING, chosen.settingValue()));
 
         // The Collections tab: its pages load on the Timeline's load thread, so loads never overlap.
         collections = new CollectionsPage(database, thumbnailLoader, timelineLoads);
         collections.grid().thumbnailSizeProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         collections.grid().setFileItems(fileItems);
-        collections.setOnOpen(viewer::open);
-        collections.setOnInfo(viewer::openWithInfo);
         collections.includeSubfoldersProperty().set(savedIncludeSubfolders);
         collections.includeSubfoldersProperty().addListener((_, _, on) ->
                 settings.put(INCLUDE_SUBFOLDERS_SETTING, Boolean.toString(on)));
@@ -371,11 +446,18 @@ public final class PrismoApp extends Application {
         searchResults = new TimelineView(thumbnailLoader);
         searchResults.thumbnailSizeProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         searchResults.setFileItems(fileItems);
-        searchResults.setOnOpen(viewer::open);
-        searchResults.setOnInfo(viewer::openWithInfo);
         searchResults.setVisible(false);
         searchBar = new SearchBar(searcher, searchResults);
         searchBar.activeProperty().addListener((_, _, _) -> showCurrentView());
+
+        // Back / Forward (P8): every grid opens the viewer through it, so an open viewer is a place too.
+        navigation = new Navigation(timelineTab, collectionsTab, collections, searchBar, viewer);
+        for (TimelineView grid : List.of(timeline, collections.grid(), searchResults)) {
+            grid.setOnOpen((items, index) -> navigation.open(items, index, false));
+            grid.setOnInfo((items, index) -> navigation.open(items, index, true));
+        }
+        collections.setOnNavigate(navigation::userNavigated);
+        searchBar.setOnSearchChanged(navigation::searchChanged);
 
         // Favorite / hide / Trash / restore / delete, the same from every grid and the viewer.
         FileRemover remover = FileRemover.forThisComputer();
@@ -412,6 +494,7 @@ public final class PrismoApp extends Application {
                 positionsSaved = false; // a video was watched: reload once the save is written, for its progress bar
                 lastPositionSave.whenComplete((_, _) -> libraryChanged());
             }
+            navigation.viewerClosed();
         });
 
         ImageView appIcon = new ImageView(new Image(PrismoApp.class.getResource("/ui/icon/prismo-48.png").toExternalForm()));
@@ -447,6 +530,7 @@ public final class PrismoApp extends Application {
                         collections.focusPageList();
                     }
                 }
+                navigation.userNavigated();
             }
         });
         HBox tabBar = new HBox(timelineTab, collectionsTab);
@@ -501,7 +585,7 @@ public final class PrismoApp extends Application {
             thumbnails.setThreads(threads.intValue());
         });
         SettingsDialog.Options settingsOptions = new SettingsDialog.Options(hiddenMode, osHiddenShown, ignoredFolders,
-                grouping, thumbnailThreads, thumbnailDisk(), AppInfo.load(),
+                grouping, subtitleBackground, thumbnailThreads, thumbnailDisk(), AppInfo.load(),
                 address -> getHostServices().showDocument(address.toString()));
         Runnable openSettings = () -> new SettingsDialog(stage, appearance,
                 theme -> settings.put(THEME_SETTING, theme.settingValue()), settingsOptions).show();
@@ -546,6 +630,7 @@ public final class PrismoApp extends Application {
         stage.setMinHeight(WindowPlacement.MIN_HEIGHT);
         placeWindow(stage);
         stage.setScene(scene);
+        navigation.install(scene); // the mouse's side buttons and Alt+Left / Alt+Right
         // The viewer handles Esc itself (leave full screen first, then close), so JavaFX's own Esc is turned off.
         stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
         stage.setFullScreenExitHint("Press F11 or Esc to leave full screen");

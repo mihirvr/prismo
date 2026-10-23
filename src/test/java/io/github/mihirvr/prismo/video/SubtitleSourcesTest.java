@@ -34,6 +34,23 @@ class SubtitleSourcesTest {
     }
 
     @Test
+    void eachChoiceKnowsItsLanguageWhenTheNameOrTagSaysIt() throws IOException {
+        Path video = Files.createFile(dir.resolve("Trip.mkv"));
+        for (String name : List.of("Trip.srt", "Trip.en.forced.srt", "Trip.Hindi.srt")) {
+            Files.writeString(dir.resolve(name), TestMedia.SUBTITLES_SRT);
+        }
+
+        List<SubtitleSources.Source> found = SubtitleSources.forVideo(video, List.of(
+                new Track(2, "fre", "", false, true), new Track(3, "und", "", false, true)));
+        List<SubtitleSources.Source> withPicked = SubtitleSources.withChosenFile(found,
+                dir.resolve("elsewhere").resolve("Trip.de.srt"));
+
+        assertEquals(java.util.Arrays.asList("English", "Hindi", null, "French", null, "German"),
+                withPicked.stream().map(SubtitleSources.Source::language).toList(),
+                "en.forced, Hindi, a plain Trip.srt, the tracks' tags, a picked file's name");
+    }
+
+    @Test
     void listsTheVideosOwnTracksAfterTheFilesAndPictureOnesAsNotShowable() throws IOException {
         Path video = Files.createFile(dir.resolve("film.mkv"));
         List<SubtitleSources.Source> found = SubtitleSources.forVideo(video, List.of(

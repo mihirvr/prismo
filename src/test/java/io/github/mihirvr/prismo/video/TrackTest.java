@@ -27,6 +27,16 @@ class TrackTest {
     }
 
     @Test
+    void aLanguageWrittenAsACodeOrSpelledOutIsFound() {
+        assertEquals("English", Track.languageOf("en"));
+        assertEquals("Hindi", Track.languageOf("hin"));
+        assertEquals("Hindi", Track.languageOf("Hindi"), "spelled out, as in Holiday.Hindi.srt");
+        assertEquals("German", Track.languageOf(" GERMAN "));
+        assertEquals(null, Track.languageOf("forced"));
+        assertEquals(null, Track.languageOf("und"), "not given");
+    }
+
+    @Test
     void withNothingToGoOnItIsNumbered() {
         assertEquals("Track 3", track("und", "").label(3), "und = not given");
         assertEquals("Track 2", track("", "").label(2));

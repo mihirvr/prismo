@@ -12,7 +12,7 @@
 
 > Browse your memories like a phone. Manage your files like a desktop.
 
-**Website:** https://prismo.mihirr.in
+**Website:** https://prismo.mihirr.in · **Install:** [docs/INSTALL.md](docs/INSTALL.md)
 
 Prismo is a local media browser inspired by modern mobile galleries — Samsung Gallery, Google Photos, Apple Photos — built for the desktop. It indexes your existing folders and gives you a beautiful, searchable, timeline-based view of your media without ever importing, duplicating, or uploading a single file.
 
@@ -70,7 +70,8 @@ The app runs (`./gradlew run`). What works today:
 
 - **Library and Timeline:** add folders ("Library folders…": add, turn off, remove); Prismo indexes them, makes thumbnails in the background (real thumbnails for videos too, with a play badge and the length) and shows everything on a date-grouped Timeline. Files you add, rename, move or delete in your folders show up in Prismo by themselves within a second or two.
 - **Viewer:** click a photo (or move with the arrow keys and press Enter): zoom, pan, rotate, slideshow, full screen (the controls and the pointer hide after 2.5 s without mouse movement), previous / next buttons at the edges.
-- **Videos** play in the app (MP4, M4V, MOV, MKV, WebM, AVI; phone videos upright): skip ±10 s and ±5 s, volume and mute, speed 0.5×–2× (the sound keeps its pitch), loop, frame steps while paused, a choice of sound track when there are several, and subtitles (an `.srt` file next to the video, any `.srt` you pick with "Choose subtitle file…", or text subtitles inside MKV / MP4) with a delay you can shift by 0.1 s. A thin bar on a video's thumbnail shows how far you watched (full and in another colour once watched), and the video carries on where you left it.
+- **Back and Forward, like a web browser:** the mouse's side buttons (or Alt+Left / Alt+Right) go back to the tab, Collections page, folder, album or search you were on before, and forward again. In the viewer, Back closes it, and Forward opens it again on the same photo or video.
+- **Videos** play in the app (MP4, M4V, MOV, MKV, WebM, AVI; phone videos upright): skip ±10 s and ±5 s, volume and mute, speed 0.5×–2× (the sound keeps its pitch), loop, frame steps while paused, a choice of sound track when there are several, and subtitles (an `.srt` file next to the video, any `.srt` you pick with "Choose subtitle file…", or text subtitles inside MKV / MP4) with a delay you can shift by 0.1 s. Subtitles sit centred near the bottom on a black box that fits the text; the box can be see-through (25 / 50 / 75 %), solid, or left out (then the text gets a dark outline), in Settings › Video or the Subtitles menu. Each video remembers the sound track, subtitles and delay you picked, and a video you haven't set up starts in the sound and subtitle language you picked last. A thin bar on a video's thumbnail shows how far you watched (full and in another colour once watched), and the video carries on where you left it.
 - **Info panel** (I, or the Info button in the viewer): the file's details, a photo's camera settings and GPS position, a video's formats and tracks.
 - **Right-click menus** on the grids and in the viewer, each item with its shortcut: favorite, hide, Trash, Show in folder, Open with default app, Copy (puts the file on the clipboard, to paste in File Explorer), Info.
 - **Search and Filters:** the search box (Ctrl+F) finds files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results.
@@ -80,9 +81,9 @@ The app runs (`./gradlew run`). What works today:
 - **Selecting many:** Ctrl-click, Shift-click, Shift + arrow keys or Ctrl+A; a bar at the bottom then favorites, hides, trashes, copies or moves them all at once.
 - **File operations:** Rename (F2) and Move to folder… (with a question when a name is already taken: keep both or skip); Prismo follows the file, favorites and all.
 - **Offline and network folders:** when a library folder can't be reached (an unplugged drive, a network share that's off), a banner says so and its tiles are greyed out; nothing is lost and everything comes back with the drive. Network folders are checked every 10 minutes instead of watched live.
-- **Settings** (the Settings button in the top bar, or Ctrl+,): the look (Light, Dark, AMOLED black, or Follow system, which changes with Windows), hidden items, ignored folders (node_modules, .git and the like are skipped), Timeline date headers (smart, day, week, month or year), thumbnail CPU use and cache size (with Clear thumbnails), the keyboard shortcuts, and About. The title bar follows the look on Windows. Every setting, the window's size and place, the thumbnail size, Filters + Sort, "Include subfolders" and the video volume / mute / speed are kept after a restart.
+- **Settings** (the Settings button in the top bar, or Ctrl+,): the look (Light, Dark, AMOLED black, or Follow system, which changes with Windows), hidden items, ignored folders (node_modules, .git and the like are skipped), Timeline date headers (smart, day, week, month or year), the subtitle background, thumbnail CPU use and cache size (with Clear thumbnails), the keyboard shortcuts, and About. The title bar follows the look on Windows. Every setting, the window's size and place, the thumbnail size, Filters + Sort, "Include subfolders", the video volume / mute / speed and the sound and subtitle languages picked last are kept after a restart.
 
-Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features, HEIC, RAW, selection, file operations, offline folders, more settings). Next: Packaging. No installer yet.
+Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features, HEIC, RAW, selection, file operations, offline folders, more settings). Packaging is built: a Windows installer (`.exe`, no admin rights needed) and a Linux `.deb`, made by `./gradlew installer` and by GitHub Actions. Next: the first release on the Releases page. How to install: [docs/INSTALL.md](docs/INSTALL.md).
 
 **Windows first:** Prismo is built and tested on Windows. It is written to work on Linux too (the Windows-only parts, like the Hidden mark and the dark title bar, switch off there), but it has not been run on Linux yet, so it may not behave properly there.
 
@@ -91,6 +92,7 @@ To try it on Windows without touching your normal Prismo data: `.\run-locally.ba
 - [Project Outline](docs/PROJECT.md) — full design document
 - [Tech Stack](docs/TECH_STACK.md) — libraries and how the parts fit together
 - [Development Guide](docs/DEVELOPMENT.md) — development workflow, rules, and conventions
+- [Installing Prismo](docs/INSTALL.md) — Windows and Linux, updating, uninstalling, and fixes when something goes wrong
 
 ---
 
@@ -106,6 +108,7 @@ Right-click menus and button tooltips show these too.
 | Ctrl+1 / Ctrl+2 | Timeline / Collections tab |
 | Ctrl+, | Settings |
 | Ctrl + mouse wheel | Bigger / smaller thumbnails (on a grid) |
+| Alt+Left / Alt+Right, or the mouse's back / forward side buttons | Back / forward: the tab, Collections page, folder, album or search you were on before (like a web browser) |
 
 **Grid (Timeline, search results, Collections pages)**
 
@@ -136,6 +139,7 @@ Right-click menus and button tooltips show these too.
 | Page Up / Page Down | Previous / next item |
 | Left / Right | Previous / next item (photos; in a video they skip 5 s) |
 | Esc | Close the Info panel, leave full screen, then close the viewer |
+| Alt+Left, or the mouse's back button | Close the viewer (Alt+Right or the forward button opens it again on the same item) |
 | F11, double-click a video | Full screen |
 | I | Info panel |
 | F / H / Delete, Ctrl+C, F2 | As on the grid |
@@ -195,6 +199,8 @@ HEIC support · RAW previews · Video Watch Progress
 
 ```
 prismo/
+├── .github/workflows/
+│   └── package.yml             # GitHub Actions: builds the Windows .exe and Linux .deb (on a v* tag or by hand), installs and starts the .deb
 ├── assets/
 │   └── branding/               # The original logo artwork (the app and this README use their own copies)
 ├── docs/
@@ -202,6 +208,7 @@ prismo/
 │   ├── TECH_STACK.md           # Libraries, versions, and implementation approach
 │   ├── DEVELOPMENT.md          # Development workflow, rules, and conventions
 │   ├── RUN_LOCALLY.md          # Running Prismo from the source, with separate test data, and a hand-test checklist
+│   ├── INSTALL.md              # Installing, updating and uninstalling on Windows and Linux; what Linux needs; troubleshooting
 │   └── images/                 # The logo with its name, for this README (light and dark backgrounds)
 ├── frontend/                   # The Prismo website (React + Vite), live at prismo.mihirr.in (Vercel): its own package.json, separate from the app build; sample photos in public/photos with credits.json
 ├── gradle/
@@ -212,31 +219,33 @@ prismo/
 │   │   ├── java/io/github/mihirvr/prismo/
 │   │   │   ├── Launcher.java       # Entry point (main)
 │   │   │   ├── PrismoApp.java      # JavaFX application: startup, main window, shutdown
+│   │   │   ├── Navigation.java     # Back / Forward like a web browser: the mouse's side buttons and Alt+Left / Alt+Right
 │   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders, file reads that never lock a file (+ CR3 EXIF), dark title bar (Windows), the Windows Hidden mark, Show in folder, network drives, can a folder be reached, running ffmpeg as a separate program
-│   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders, video watch positions
+│   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders, video watch positions, the sound track / subtitles picked in each video
 │   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress; removes gone files, follows moves; ignored folders; rename / move
 │   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, video frames via ffmpeg, HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
-│   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; date grouping; selection; offline folders; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement
+│   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; date grouping; selection; offline folders; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement; the Back / Forward history; the subtitle background choices
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
 │   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, hide modes, Library folders dialog
-│   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, Timeline, performance, keyboard shortcuts, About
+│   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, Timeline, video (subtitle background), performance, keyboard shortcuts, About
 │   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
-│   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, speed, sound and subtitle tracks, subtitles (.srt)
+│   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, speed, sound and subtitle tracks, subtitles (.srt), which tracks a video starts with
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, full screen, video controls, Info panel
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
 │   │       ├── app.properties      # Version (filled in by the build) and website, for Settings › About
-│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index, V4__os_hidden = the Windows Hidden mark, V5__reread_raw = read RAW metadata again)
+│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index, V4__os_hidden = the Windows Hidden mark, V5__reread_raw = read RAW metadata again, V6__video_choices = the tracks picked in each video)
 │   │       └── ui/
 │   │           ├── prismo.css      # The app's stylesheet (the Light look; every colour is a named colour)
 │   │           ├── theme-dark.css  # The Dark look: redefines the named colours
 │   │           ├── theme-amoled.css # The AMOLED black look (on top of Dark)
 │   │           ├── icon/           # The app icon in 9 sizes (16–256 px), for the window, taskbar and dialogs
 │   │           └── logo/           # The Prismo logo with its name, for light and dark backgrounds (in-app copies)
+│   ├── packaging/notices/      # THIRD_PARTY_NOTICES.md and the licence texts of everything the installer ships (copied next to the app)
 │   └── test/
 │       ├── java/...                # Unit tests, mirroring the main packages (+ testing/ shared helpers)
 │       └── resources/              # Test-only logging config and test migration scripts
-├── build.gradle.kts            # Build: Java 25 toolchain, JavaFX, dependencies, run/test settings
+├── build.gradle.kts            # Build: Java 25 toolchain (Temurin), JavaFX, dependencies, run/test settings, packaging (jlink runtime, jpackage app folder and installer)
 ├── settings.gradle.kts         # Project name + JDK auto-download plugin
 ├── gradlew / gradlew.bat       # Run Gradle without installing it (./gradlew build)
 ├── .gitattributes              # Line endings (keeps gradlew working on Linux)
@@ -246,9 +255,7 @@ prismo/
 └── README.md
 ```
 
-Build and run: `./gradlew run` · tests: `./gradlew test`.
-
-New packages appear as features land (packaging, …).
+Build and run: `./gradlew run` · tests: `./gradlew test` · installer: `./gradlew installer` (see [DEVELOPMENT.md](docs/DEVELOPMENT.md)).
 
 ---
 

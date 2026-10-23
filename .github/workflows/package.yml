@@ -1,0 +1,81 @@
+# Builds Prismo's installers on GitHub's own machines: jpackage can't cross-build, so each OS makes its own
+# (Windows .exe, Linux .deb). Runs when a version tag (v1.0.0, ...) is pushed, or by hand from the Actions tab.
+# The installers are attached to the run as downloadable artifacts; putting them on a Release is a separate step.
+# Actions are pinned to exact commits (the tag is in the comment).
+name: Package
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same JDK as the toolchain in build.gradle.kts, so Gradle doesn't download it again.
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      # WiX 5.0.2: the last WiX before the Open Source Maintenance Fee (v6+). jpackage finds it in ~/.dotnet/tools.
+      - name: Install WiX (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add -g WixToolset.Util.wixext/5.0.2
+          wix extension add -g WixToolset.UI.wixext/5.0.2
+
+      # fakeroot: jpackage builds the .deb with it. xvfb: a virtual screen for the JavaFX tests.
+      - name: Install packaging tools (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y fakeroot xvfb
+
+      - name: Test and build the installer (Windows)
+        if: runner.os == 'Windows'
+        run: ./gradlew build installer --console=plain
+
+      - name: Test and build the installer (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum ./gradlew build installer --console=plain
+
+      # Linux has never been run by hand, so check the .deb here: apt must find every declared dependency,
+      # and the installed app must open its window (on the virtual screen) without errors.
+      - name: Install the .deb and start Prismo (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          deb=$(ls build/packaging/installer/*.deb)
+          dpkg-deb --field "$deb" Depends
+          sudo apt-get install -y "./$deb"
+          launcher=$(find /opt -path '*/bin/Prismo' -type f | head -n 1)
+          echo "Launcher: $launcher"
+          timeout 40 xvfb-run --auto-servernum "$launcher" || true
+          log="$HOME/.local/state/prismo/logs/prismo.log"
+          cat "$log"
+          grep -q "Main window shown" "$log"
+          if grep -E " (ERROR|WARN) " "$log"; then echo "Warnings or errors in the log (above)"; exit 1; fi
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prismo-${{ runner.os }}
+          path: build/packaging/installer/*
+          if-no-files-found: error
+
+      - name: Test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports-${{ runner.os }}
+          path: build/reports/tests/

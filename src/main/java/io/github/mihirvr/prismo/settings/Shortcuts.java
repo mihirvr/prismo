@@ -23,7 +23,10 @@ public final class Shortcuts {
                     new Shortcut("Ctrl+F", "Search"),
                     new Shortcut("Ctrl+1 / Ctrl+2", "Timeline / Collections"),
                     new Shortcut("Ctrl+,", "Settings"),
-                    new Shortcut("Ctrl + mouse wheel", "Bigger or smaller thumbnails"))),
+                    new Shortcut("Ctrl + mouse wheel", "Bigger or smaller thumbnails"),
+                    new Shortcut("Alt+Left / Alt+Right", "Back / forward: the tab, page, folder, album or search before,"
+                            + " like a web browser"),
+                    new Shortcut("Mouse back / Mouse forward", "The same, with the mouse's side buttons"))),
             new Section("Photo grid", List.of(
                     new Shortcut("Arrow keys", "Move between photos"),
                     new Shortcut("Enter", "Open"),
@@ -42,6 +45,7 @@ public final class Shortcuts {
                     new Shortcut("Esc", "Clear the selection"))),
             new Section("Viewer", List.of(
                     new Shortcut("Esc", "Back to the grid (closes the Info panel first)"),
+                    new Shortcut("Alt+Left / Mouse back", "Close the viewer (Alt+Right or Mouse forward opens it again)"),
                     new Shortcut("Page Up / Page Down", "Previous / next photo or video"),
                     new Shortcut("F11", "Full screen"),
                     new Shortcut("I", "Info panel"),

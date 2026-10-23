@@ -1000,13 +1000,61 @@
     -fx-font-size: 12px;
 }
 
-/* The subtitle line: white on a soft dark box, readable on any picture. Size set in VideoPane. */
-.viewer .viewer-subtitle {
+/*
+ * The subtitle line: white text, centred, on a black box only as wide as the text (VideoPane.SubtitleLine). The box's
+ * opacity is the Settings › Video choice, one style class each (ui/SubtitleBackground); 50% is the default. With no
+ * box the text gets a dark outline instead (a tight, strong shadow on the text itself), so it stays readable on a
+ * bright picture. Fixed colours, the same in every look: it sits on the video. Size set in VideoPane. The Settings
+ * page's sample (.subtitle-sample) uses the same rules.
+ */
+.viewer .viewer-subtitle,
+.subtitle-sample .viewer-subtitle {
     -fx-text-fill: #ffffff;
-    -fx-background-color: rgba(0, 0, 0, 0.62);
+    -fx-background-color: rgba(0, 0, 0, 0.5);
     -fx-background-radius: 6;
     -fx-padding: 3 12 4 12;
-    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 3, 0.4, 0, 1);
+}
+
+.viewer .viewer-subtitle.subtitle-none,
+.subtitle-sample .viewer-subtitle.subtitle-none {
+    -fx-background-color: transparent;
+}
+
+.viewer .viewer-subtitle.subtitle-none .text,
+.subtitle-sample .viewer-subtitle.subtitle-none .text {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.95), 4, 0.7, 0, 0);
+}
+
+.viewer .viewer-subtitle.subtitle-25,
+.subtitle-sample .viewer-subtitle.subtitle-25 {
+    -fx-background-color: rgba(0, 0, 0, 0.25);
+}
+
+.viewer .viewer-subtitle.subtitle-50,
+.subtitle-sample .viewer-subtitle.subtitle-50 {
+    -fx-background-color: rgba(0, 0, 0, 0.5);
+}
+
+.viewer .viewer-subtitle.subtitle-75,
+.subtitle-sample .viewer-subtitle.subtitle-75 {
+    -fx-background-color: rgba(0, 0, 0, 0.75);
+}
+
+.viewer .viewer-subtitle.subtitle-100,
+.subtitle-sample .viewer-subtitle.subtitle-100 {
+    -fx-background-color: #000000;
+}
+
+/* Settings › Video: the sample line on a strip from a bright sky to a dark scene, so each choice shows its effect. */
+.subtitle-sample {
+    -fx-background-color: linear-gradient(to right, #f4f1e6 0%, #9fb8cf 45%, #2c3440 100%);
+    -fx-background-radius: 8;
+    -fx-padding: 14 12 14 12;
+    -fx-min-height: 64;
+}
+
+.subtitle-sample .viewer-subtitle {
+    -fx-font-size: 17px;
 }
 
 /* "Speed 1.5×", "Volume 80%": a short note, top centre. */

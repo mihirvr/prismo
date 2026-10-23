@@ -139,6 +139,16 @@ public final class VideoPlayer implements AutoCloseable {
 
         /** The file can't be played: {@code reason} is in plain words, for the user. */
         void failed(String reason);
+
+        /**
+         * Which sound track to start with, before any sound plays (P8: the one picked last time, or in the language
+         * picked last): a {@link Track#stream()} of {@code tracks}. Called once on the player's thread, before
+         * {@link #opened}. By default the file's own choice, {@code fileDefault}; a stream not in {@code tracks} is
+         * ignored.
+         */
+        default int chooseAudio(List<Track> tracks, int fileDefault) {
+            return fileDefault;
+        }
     }
 
     private final Path file;
@@ -398,9 +408,11 @@ public final class VideoPlayer implements AutoCloseable {
             }
         }
         // The track the file marks as default, else the first. (Left to itself FFmpeg picks the "best" one, which
-        // may be the second.)
-        int chosen = audio.stream().filter(Track::isDefault).findFirst().or(() -> audio.stream().findFirst())
+        // may be the second.) Then the listener may pick another one (P8).
+        int fileDefault = audio.stream().filter(Track::isDefault).findFirst().or(() -> audio.stream().findFirst())
                 .map(Track::stream).orElse(-1);
+        int wanted = listener.chooseAudio(List.copyOf(audio), fileDefault);
+        int chosen = audio.stream().anyMatch(track -> track.stream() == wanted) ? wanted : fileDefault;
         return new Info(Math.max(0, grabber.getLengthInTime()), grabber.getImageWidth(), grabber.getImageHeight(),
                 rotation, picture, grabber.hasAudio(), grabber.getFrameRate(), List.copyOf(audio),
                 List.copyOf(subtitles), chosen, picture ? videoCodec : "", codecs.getOrDefault(chosen, ""));

@@ -40,7 +40,8 @@ class ShortcutsTest {
     void theGuideNamesTheKeysTheAppHandles() {
         List<String> keys = Shortcuts.SECTIONS.stream().flatMap(s -> s.shortcuts().stream())
                 .map(Shortcuts.Shortcut::keys).toList();
-        for (String key : List.of("Ctrl+F", "Ctrl+A", "F2", "J / L", "[ / ]", "Z / X", "Page Up / Page Down", "F11")) {
+        for (String key : List.of("Ctrl+F", "Ctrl+A", "F2", "J / L", "[ / ]", "Z / X", "Page Up / Page Down", "F11",
+                "Alt+Left / Alt+Right", "Mouse back / Mouse forward", "Alt+Left / Mouse back")) {
             assertTrue(keys.contains(key), key);
         }
     }
