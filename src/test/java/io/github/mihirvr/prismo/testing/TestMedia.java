@@ -17,6 +17,7 @@ import org.bytedeco.ffmpeg.global.avcodec;
 import org.bytedeco.ffmpeg.global.avutil;
 import org.bytedeco.javacv.FFmpegFrameRecorder;
 import org.bytedeco.javacv.Frame;
+import io.github.mihirvr.prismo.platform.ExternalProgram;
 import io.github.mihirvr.prismo.video.VideoNatives;
 
 /**
@@ -203,7 +204,7 @@ public final class TestMedia {
     public static Path withTracks(Path file) throws IOException, InterruptedException {
         Path srt = file.resolveSibling(file.getFileName() + ".input.srt");
         Files.writeString(srt, SUBTITLES_SRT, StandardCharsets.UTF_8);
-        Process ffmpeg = new ProcessBuilder(VideoNatives.ffmpegExecutable().toString(), "-v", "error", "-y",
+        Process ffmpeg = ExternalProgram.processFor(List.of(VideoNatives.ffmpegExecutable().toString(), "-v", "error", "-y",
                 "-f", "lavfi", "-i", "testsrc2=s=320x240:r=25:d=3",
                 "-f", "lavfi", "-i", "sine=f=440:d=3",
                 "-f", "lavfi", "-i", "sine=f=1000:d=3",
@@ -214,7 +215,7 @@ public final class TestMedia {
                 "-metadata:s:a:1", "language=hin", "-metadata:s:a:1", "title=Commentary",
                 "-metadata:s:s:0", "language=eng",
                 "-disposition:a:0", "0", "-disposition:a:1", "default",
-                file.toString()).redirectErrorStream(true).start();
+                file.toString())).redirectErrorStream(true).start();
         String output = new String(ffmpeg.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         if (ffmpeg.waitFor() != 0) {
             throw new IOException("ffmpeg failed: " + output);

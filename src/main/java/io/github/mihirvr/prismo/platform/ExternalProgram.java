@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -24,7 +25,7 @@ public final class ExternalProgram {
      * {@code -loglevel error} that's its errors). Ends it and throws after {@code timeoutSeconds}.
      */
     public static String run(List<String> command, long timeoutSeconds) throws IOException {
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        Process process = processFor(command).redirectErrorStream(true).start();
         // Read its output on another thread while it runs: a full pipe would block it, and reading here
         // would wait for it to end, so a stuck program would never reach the time limit below.
         CompletableFuture<String> output = CompletableFuture.supplyAsync(() -> read(process.getInputStream()),
@@ -42,6 +43,27 @@ public final class ExternalProgram {
         } catch (ExecutionException | TimeoutException e) {
             return "";
         }
+    }
+
+    /**
+     * A {@link ProcessBuilder} for {@code command} that also finds the libraries in the program's own folder. On
+     * Linux the bundled {@code ffmpeg} finds its own FFmpeg libraries there ({@code RUNPATH $ORIGIN}), but those
+     * libraries' own needs ({@code libva.so.2}, also in that folder) are looked up only in the system folders: a
+     * RUNPATH doesn't carry over to the libraries a program loads. So the folder goes on {@code LD_LIBRARY_PATH}.
+     * Windows already looks in the program's folder first.
+     */
+    public static ProcessBuilder processFor(List<String> command) {
+        ProcessBuilder builder = new ProcessBuilder(command);
+        if (OperatingSystem.current() == OperatingSystem.LINUX) {
+            Path folder = Path.of(command.getFirst()).toAbsolutePath().getParent();
+            builder.environment().merge("LD_LIBRARY_PATH", folder.toString(), (old, own) -> libraryPath(own, old));
+        }
+        return builder;
+    }
+
+    /** The program's folder first, then what was set already ({@code :}-separated, like Linux expects). */
+    static String libraryPath(String folder, String existing) {
+        return existing == null || existing.isBlank() ? folder : folder + ":" + existing;
     }
 
     private static String read(InputStream stream) {
