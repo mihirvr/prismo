@@ -64,7 +64,7 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Early development: v1.0 MVP in progress** (v0.1 Foundation and v0.5 Core Loop done)
+**Version 1.0.0: the first release** (v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`). What works today:
 
@@ -83,7 +83,7 @@ The app runs (`./gradlew run`). What works today:
 - **Offline and network folders:** when a library folder can't be reached (an unplugged drive, a network share that's off), a banner says so and its tiles are greyed out; nothing is lost and everything comes back with the drive. Network folders are checked every 10 minutes instead of watched live.
 - **Settings** (the Settings button in the top bar, or Ctrl+,): the look (Light, Dark, AMOLED black, or Follow system, which changes with Windows), hidden items, ignored folders (node_modules, .git and the like are skipped), Timeline date headers (smart, day, week, month or year), the subtitle background, thumbnail CPU use and cache size (with Clear thumbnails), the keyboard shortcuts, and About. The title bar follows the look on Windows. Every setting, the window's size and place, the thumbnail size, Filters + Sort, "Include subfolders", the video volume / mute / speed and the sound and subtitle languages picked last are kept after a restart.
 
-Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features, HEIC, RAW, selection, file operations, offline folders, more settings). Packaging is built: a Windows installer (`.exe`, no admin rights needed) and a Linux `.deb`, made by `./gradlew installer` and by GitHub Actions. Next: the first release on the Releases page. How to install: [docs/INSTALL.md](docs/INSTALL.md).
+Done so far: Project Setup, Database Layer, Media Indexer, Thumbnail Cache, Timeline, Viewer, Search, Filesystem Watcher, Collections, and the pre-packaging work (video player, looks, app icon, viewer and video features, HEIC, RAW, selection, file operations, offline folders, more settings). Packaging is built: a Windows installer (`.exe`, no admin rights needed) and a Linux `.deb`, made by `./gradlew installer` and by GitHub Actions. Download it from the [Releases page](https://github.com/mihirvr/prismo/releases). How to install: [docs/INSTALL.md](docs/INSTALL.md).
 
 **Windows first:** Prismo is built and tested on Windows. It is written to work on Linux too (the Windows-only parts, like the Hidden mark and the dark title bar, switch off there), but it has not been run on Linux yet, so it may not behave properly there.
 

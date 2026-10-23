@@ -14,7 +14,7 @@ Issues #1–#9 are done: a Gradle project (Java 25, JavaFX 25), the SQLite datab
 
 The current file layout is the "Project Structure" section of `README.md`.
 
-Packaging (#10) is built: `./gradlew installer` makes the Windows `.exe` or Linux `.deb`, and GitHub Actions builds both (see Cross-Platform CI/CD Awareness below). Next: the first release.
+Packaging (#10) is built: `./gradlew installer` makes the Windows `.exe` or Linux `.deb`, and GitHub Actions builds both (see Cross-Platform CI/CD Awareness below). Version 1.0.0 is the first release (GitHub Releases page).
 
 ---
 
