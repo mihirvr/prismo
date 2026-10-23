@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.mihirvr.prismo.testing.TestPaths;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +30,7 @@ class DialogTextsTest {
     @Test
     void aSelectionListsAFewNamesThenHowManyMore() {
         java.util.List<Path> files = java.util.stream.IntStream.rangeClosed(1, 8)
-                .mapToObj(i -> Path.of("D:\\Photos\\IMG_" + i + ".jpg")).toList();
+                .mapToObj(i -> TestPaths.of("Photos", "IMG_" + i + ".jpg")).toList();
 
         assertEquals("IMG_1.jpg\nIMG_2.jpg", DialogTexts.fileList(files.subList(0, 2)));
         String shown = DialogTexts.fileList(files);
@@ -42,8 +43,9 @@ class DialogTextsTest {
 
     @Test
     void aFolderIsNamedByItsLastPartAndADriveByItsRoot() {
-        assertEquals("Holidays", DialogTexts.folderName(Path.of("D:\\Photos\\Holidays")));
-        assertEquals(Path.of("D:\\").toString(), DialogTexts.folderName(Path.of("D:\\")));
+        assertEquals("Holidays", DialogTexts.folderName(TestPaths.of("Photos", "Holidays")));
+        Path drive = TestPaths.root().getRoot();
+        assertEquals(drive.toString(), DialogTexts.folderName(drive));
     }
 
     @Test

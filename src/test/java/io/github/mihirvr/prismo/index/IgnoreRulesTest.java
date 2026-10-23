@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.testing.TestMedia;
+import io.github.mihirvr.prismo.testing.TestPaths;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.ResultSet;
@@ -20,7 +21,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class IgnoreRulesTest {
 
-    private static final Path ROOT = Path.of("D:\\Photos");
+    private static final Path ROOT = TestPaths.of("Photos");
 
     @TempDir
     Path tmp;
@@ -29,15 +30,15 @@ class IgnoreRulesTest {
     void aFolderNameMatchesAnywhereInsideTheLibraryButNotInTheLibraryFoldersOwnPath() {
         IgnoreRules rules = new IgnoreRules(List.of("node_modules"));
 
-        assertTrue(rules.ignores(ROOT, ROOT.resolve("site\\node_modules")));
-        assertTrue(rules.ignores(ROOT, ROOT.resolve("site\\Node_Modules\\pic.png")), "any case, and what's inside");
-        assertFalse(rules.ignores(ROOT, ROOT.resolve("site\\node_modules_old")), "a whole name, not a part");
+        assertTrue(rules.ignores(ROOT, in("site", "node_modules")));
+        assertTrue(rules.ignores(ROOT, in("site", "Node_Modules", "pic.png")), "any case, and what's inside");
+        assertFalse(rules.ignores(ROOT, in("site", "node_modules_old")), "a whole name, not a part");
         assertFalse(rules.ignores(ROOT, ROOT), "never the library folder itself");
-        Path rootNamedLikeARule = Path.of("D:\\node_modules");
+        Path rootNamedLikeARule = TestPaths.of("node_modules");
         assertFalse(rules.ignores(rootNamedLikeARule, rootNamedLikeARule.resolve("a.png")),
                 "only folders inside the library count");
-        Path old = Path.of("D:\\Photos\\Old");
-        assertFalse(new IgnoreRules(List.of("D:\\Photos\\Old")).ignores(old, old),
+        Path old = TestPaths.of("Photos", "Old");
+        assertFalse(new IgnoreRules(List.of(old.toString())).ignores(old, old),
                 "a whole-folder rule never hides a library folder itself (turn it off instead)");
     }
 
@@ -45,19 +46,19 @@ class IgnoreRulesTest {
     void aShortPathMatchesThoseFoldersOneInsideTheOther() {
         IgnoreRules rules = new IgnoreRules(List.of("Android\\data"));
 
-        assertTrue(rules.ignores(ROOT, ROOT.resolve("Phone backup\\Android\\data\\com.app\\x.jpg")));
-        assertFalse(rules.ignores(ROOT, ROOT.resolve("Phone backup\\Android\\media\\x.jpg")));
-        assertFalse(rules.ignores(ROOT, ROOT.resolve("data\\Android\\x.jpg")), "in that order only");
+        assertTrue(rules.ignores(ROOT, in("Phone backup", "Android", "data", "com.app", "x.jpg")));
+        assertFalse(rules.ignores(ROOT, in("Phone backup", "Android", "media", "x.jpg")));
+        assertFalse(rules.ignores(ROOT, in("data", "Android", "x.jpg")), "in that order only");
     }
 
     @Test
     void aFullFolderMatchesItselfAndWhatsInsideOnly() {
-        IgnoreRules rules = new IgnoreRules(List.of("D:\\Photos\\Private\\"));
+        IgnoreRules rules = new IgnoreRules(List.of(ROOT.resolve("Private") + java.io.File.separator));
 
-        assertTrue(rules.ignores(ROOT, ROOT.resolve("Private")));
-        assertTrue(rules.ignores(ROOT, ROOT.resolve("private\\2024\\a.jpg")));
-        assertFalse(rules.ignores(ROOT, ROOT.resolve("Private stuff\\a.jpg")), "not a folder that starts the same");
-        assertFalse(rules.ignores(ROOT, ROOT.resolve("Trip\\Private\\a.jpg")), "a full folder isn't a name");
+        assertTrue(rules.ignores(ROOT, in("Private")));
+        assertTrue(rules.ignores(ROOT, in("private", "2024", "a.jpg")));
+        assertFalse(rules.ignores(ROOT, in("Private stuff", "a.jpg")), "not a folder that starts the same");
+        assertFalse(rules.ignores(ROOT, in("Trip", "Private", "a.jpg")), "a full folder isn't a name");
         assertTrue(IgnoreRules.isFullFolder("\\\\server\\share\\x"));
         assertTrue(IgnoreRules.isFullFolder("/home/me/x"));
         assertFalse(IgnoreRules.isFullFolder("Android\\data"));
@@ -80,7 +81,7 @@ class IgnoreRulesTest {
     void theIndexerSkipsIgnoredFoldersAndForgetsWhatWasIndexedInThem() throws Exception {
         Path library = Files.createDirectories(tmp.resolve("Pictures")).toRealPath();
         Path kept = TestMedia.png(library.resolve("a.png"), 10, 10);
-        Path build = TestMedia.png(Files.createDirectories(library.resolve("site\\node_modules\\pkg")).resolve("logo.png"),
+        Path build = TestMedia.png(Files.createDirectories(library.resolve(Path.of("site", "node_modules", "pkg"))).resolve("logo.png"),
                 10, 10);
         AtomicReference<IgnoreRules> rules = new AtomicReference<>(IgnoreRules.NONE);
         try (Database database = Database.open(tmp.resolve("prismo.db"))) {
@@ -106,5 +107,10 @@ class IgnoreRulesTest {
                 return rows.getInt(1);
             }
         });
+    }
+
+    /** A path inside the made-up library folder, built from parts (works on every OS). */
+    private static Path in(String first, String... more) {
+        return ROOT.resolve(Path.of(first, more));
     }
 }

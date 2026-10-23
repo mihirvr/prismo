@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.github.mihirvr.prismo.index.FileOperations;
+import io.github.mihirvr.prismo.testing.TestPaths;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
@@ -10,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class FileItemsTest {
 
-    private static final Path TRIP = Path.of("D:\\Photos\\Trip");
+    private static final Path TRIP = TestPaths.of("Photos", "Trip");
 
     @Test
     void theMoveMessageSaysWhatHappened() {

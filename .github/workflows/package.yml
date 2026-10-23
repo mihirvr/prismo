@@ -38,10 +38,14 @@ jobs:
           wix extension add -g WixToolset.Util.wixext/5.0.2
           wix extension add -g WixToolset.UI.wixext/5.0.2
 
-      # fakeroot: jpackage builds the .deb with it. xvfb: a virtual screen for the JavaFX tests.
+      # fakeroot: jpackage builds the .deb with it. xvfb: a virtual screen for the JavaFX tests. The rest are the
+      # system libraries FFmpeg's device library links to (sound, X11): the .deb declares them for users, but the
+      # tests run before the .deb is installed, and GitHub's Ubuntu image doesn't have them all.
       - name: Install packaging tools (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y fakeroot xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot xvfb libasound2t64 libpulse0 libudev1 libxcb1 libxcb-shm0
 
       - name: Test and build the installer (Windows)
         if: runner.os == 'Windows'
