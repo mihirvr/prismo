@@ -47,6 +47,9 @@ public enum Icon {
     /** Two photos, one behind the other: Albums. */
     ALBUMS("M7.5 3.5H19A1.5 1.5 0 0 1 20.5 5V16.5M3.5 8.5A1.5 1.5 0 0 1 5 7H15.5A1.5 1.5 0 0 1 17 8.5V19"
             + "A1.5 1.5 0 0 1 15.5 20.5H5A1.5 1.5 0 0 1 3.5 19ZM3.5 17L7.5 13L11 16.5L13 14.5L17 18.5"),
+    /** A calendar page: Go to date (1.0.1). */
+    CALENDAR("M4.5 7A1.5 1.5 0 0 1 6 5.5H18A1.5 1.5 0 0 1 19.5 7V18.5A1.5 1.5 0 0 1 18 20H6A1.5 1.5 0 0 1 4.5 18.5Z"
+            + "M4.5 10H19.5M8.5 3.5V7M15.5 3.5V7"),
     CLOCK("M12 3.5A8.5 8.5 0 1 1 12 20.5A8.5 8.5 0 1 1 12 3.5ZM12 7.5V12L15 14"),
     /** A warning triangle: a file that can't be read. */
     WARNING("M12 4L21 19.5H3ZM12 10V14M12 17V17.01"),

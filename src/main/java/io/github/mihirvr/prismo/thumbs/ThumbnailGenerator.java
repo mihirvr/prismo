@@ -9,8 +9,12 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.Locale;
+import java.util.Set;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageReadParam;
@@ -33,6 +37,9 @@ import javax.imageio.stream.MemoryCacheImageInputStream;
  *   <li><b>Encode:</b> JPEG at quality 0.85.</li>
  * </ol>
  *
+ * <p>A JPEG whose EXIF holds a preview as big as the thumbnail and of the photo's shape skips all of that: the
+ * preview is scaled and turned instead, and only the start of the file is read ({@link EmbeddedPreview}, 1.0.1).
+ *
  * <p>Videos go to {@link VideoThumbnailer} instead (one frame, by the bundled {@code ffmpeg} program). HEIC and RAW
  * photos are read by {@link OtherStills} (ffmpeg, or the JPEG preview inside the RAW file), then scaled the same way.
  *
@@ -40,7 +47,15 @@ import javax.imageio.stream.MemoryCacheImageInputStream;
  */
 public final class ThumbnailGenerator {
 
+    /**
+     * Raised when a change can make thumbnails of files that failed before; their failure markers are then forgotten
+     * once, so they are tried again. 2 = 1.0.1 (tiled HEIC).
+     */
+    public static final int REVISION = 2;
     private static final float JPEG_QUALITY = 0.85f;
+    private static final Set<String> JPEG = Set.of("jpg", "jpeg", "jpe", "jfif");
+    /** An image this small is read whole even in the warm-up's quick pass: it costs about as much as a preview. */
+    static final long QUICK_BYTES = 1024 * 1024;
 
     private final int size;
     private final VideoThumbnailer videos;
@@ -88,12 +103,68 @@ public final class ThumbnailGenerator {
             writeJpeg(scaleAndOrient(decoded, orientation), target);
             return;
         }
+        if (JPEG.contains(extension.toLowerCase(Locale.ROOT))) {
+            BufferedImage fromPreview = fromEmbeddedPreview(source);
+            if (fromPreview != null) {
+                writeJpeg(fromPreview, target);
+                return;
+            }
+        }
         BufferedImage decoded;
         try (ImageInputStream in = FileReads.image(source)) {
             decoded = decodeSubsampled(in, source);
         }
         BufferedImage thumbnail = scaleAndOrient(decoded, ExifOrientation.read(source));
         writeJpeg(thumbnail, target);
+    }
+
+    /**
+     * The thumbnail made from the preview stored in the JPEG's EXIF, reading only the start of the file, or null when
+     * there is none that fits ({@link EmbeddedPreview#fits}): then the whole photo is decoded as before.
+     */
+    private BufferedImage fromEmbeddedPreview(Path source) throws IOException {
+        byte[] header;
+        try (InputStream in = Files.newInputStream(source)) { // a plain stream: the file is never locked
+            header = in.readNBytes(EmbeddedPreview.HEADER_BYTES);
+        }
+        EmbeddedPreview.Found found = EmbeddedPreview.find(header).orElse(null);
+        if (found == null) {
+            return null;
+        }
+        BufferedImage preview;
+        try {
+            preview = ImageIO.read(new ByteArrayInputStream(found.jpeg()));
+        } catch (IOException | RuntimeException e) {
+            return null; // a damaged preview: the photo itself may be fine
+        }
+        if (preview == null || !EmbeddedPreview.fits(preview.getWidth(), preview.getHeight(), found, size)) {
+            return null;
+        }
+        return scaleAndOrient(preview, found.orientation());
+    }
+
+    /**
+     * The warm-up's quick pass (1.0.1): makes the thumbnail only if little of the file has to be read: a JPEG whose EXIF
+     * preview fits, or an image of at most {@link #QUICK_BYTES}. Returns false, writing nothing, for anything else
+     * (big photos without a usable preview, HEIC, RAW, videos): those come in the second pass.
+     */
+    public boolean generateQuick(Path source, Path target) throws IOException {
+        String extension = MediaType.extensionOf(source.getFileName().toString());
+        if (isVideo(extension) || !canDecode(extension)) {
+            return false;
+        }
+        if (JPEG.contains(extension.toLowerCase(Locale.ROOT))) {
+            BufferedImage fromPreview = fromEmbeddedPreview(source);
+            if (fromPreview != null) {
+                writeJpeg(fromPreview, target);
+                return true;
+            }
+        }
+        if (Files.size(source) > QUICK_BYTES) {
+            return false;
+        }
+        generate(source, target);
+        return true;
     }
 
     /** Decodes {@code in} (the picture of {@code source}) at about twice the thumbnail size, skipping pixels. */

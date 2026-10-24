@@ -3,8 +3,11 @@ package io.github.mihirvr.prismo.ui;
 import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import javafx.beans.property.DoubleProperty;
@@ -90,6 +93,8 @@ public final class TimelineView extends StackPane {
     private static final double BAR_ICON_SIZE = 18;
 
     private final ListView<TimelineRow> list = new ListView<>();
+    /** Middle-click auto-scroll (1.0.1). */
+    private final AutoScroll autoScroll;
     private final ThumbnailLoader loader;
     private final Clock clock;
     private final DoubleProperty thumbnailSize = new SimpleDoubleProperty(DEFAULT_THUMBNAIL_SIZE);
@@ -159,6 +164,12 @@ public final class TimelineView extends StackPane {
         StackPane.setAlignment(selectionBar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(selectionBar, new Insets(0, 16, 14, 16));
         getChildren().addAll(list, selectionBar);
+        autoScroll = new AutoScroll(list, this::flow);
+        visibleProperty().addListener((_, _, shown) -> {
+            if (!shown) {
+                autoScroll.stop();
+            }
+        });
 
         list.widthProperty().addListener((_, _, _) -> relayout());
         thumbnailSize.addListener((_, _, _) -> relayout());
@@ -206,6 +217,86 @@ public final class TimelineView extends StackPane {
         list.getItems().setAll(buildRows());
         list.scrollTo(0);
         updateSelection();
+    }
+
+    /** True when the items are in date order (a date sort, with date headers): only then can it jump to a date. */
+    public boolean isDateOrdered() {
+        return grouped && !items.isEmpty();
+    }
+
+    /**
+     * The days that have at least one item, for the Go to date calendar (1.0.1). One pass over the items in memory, no
+     * disk: a few milliseconds for 40,000.
+     */
+    public Set<LocalDate> daysWithItems() {
+        Set<LocalDate> days = new HashSet<>();
+        for (TimelineItem item : items) {
+            days.add(LocalDate.ofEpochDay(DateGroups.dayOf(item.sortDate())));
+        }
+        return days;
+    }
+
+    /** The day of the item at the top of the view (or the first item), or null when there are none. */
+    public LocalDate dayAtTop() {
+        if (items.isEmpty()) {
+            return null;
+        }
+        Anchor top = anchor();
+        int at = top == null ? 0 : Math.max(0, indexOf(top.mediaId()));
+        return LocalDate.ofEpochDay(DateGroups.dayOf(items.get(at).sortDate()));
+    }
+
+    /**
+     * Scrolls to {@code day}: its first item goes to the top (under its date header) and gets the focus. A day without
+     * items goes to the nearest one after it in the view's order (newest first: the next older day). Date order only.
+     */
+    public void jumpTo(LocalDate day) {
+        jumpToIndex(jumpIndex(items, day.toEpochDay()));
+    }
+
+    /** Scrolls to the first item of {@code month} in the view's order, or the nearest one after it. Date order only. */
+    public void jumpTo(YearMonth month) {
+        boolean newestFirst = newestFirst(items);
+        jumpToIndex(jumpIndex(items, (newestFirst ? month.atEndOfMonth() : month.atDay(1)).toEpochDay()));
+    }
+
+    /**
+     * Where a jump to {@code day} (an epoch day) lands in {@code items} (in date order, either way): the first item
+     * of that day or, without one, of the nearest day after it in that order; the last item when there is none.
+     */
+    static int jumpIndex(List<TimelineItem> items, long day) {
+        boolean newestFirst = newestFirst(items);
+        for (int i = 0; i < items.size(); i++) {
+            long itemDay = DateGroups.dayOf(items.get(i).sortDate());
+            if (newestFirst ? itemDay <= day : itemDay >= day) {
+                return i;
+            }
+        }
+        return items.size() - 1;
+    }
+
+    private static boolean newestFirst(List<TimelineItem> items) {
+        return items.isEmpty() || items.getFirst().sortDate() >= items.getLast().sortDate();
+    }
+
+    private void jumpToIndex(int index) {
+        if (!isDateOrdered() || index < 0) {
+            return;
+        }
+        autoScroll.stop();
+        long id = items.get(index).ref().id();
+        List<TimelineRow> rows = list.getItems();
+        int row = TimelineRows.rowOf(rows, id);
+        if (row < 0) {
+            return;
+        }
+        // Its date header on top when it starts the group; putting a row at the top is exact (see rebuild).
+        list.scrollTo(row > 0 && rows.get(row - 1) instanceof TimelineRow.Header ? row - 1 : row);
+        focusedId = id;
+        for (RowCell cell : cells) {
+            cell.updateMarks();
+        }
+        requestFocus();
     }
 
     /** The first item, or null if there are none. */

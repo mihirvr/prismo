@@ -45,7 +45,7 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The dialog only asks; the app does the work ({@link Operations}) on its indexing thread, so a change never
  * runs at the same time as an index run or a watcher batch. While one runs, the controls are disabled; then the
- * list is read again. Reading the list (counts, "can it be reached?") is I/O, so it runs on a virtual thread.
+ * list is read again. Reading the list (counts, "can it be reached?") is I/O, so it runs on a thread of its own.
  * All methods run on the JavaFX Application Thread.
  */
 public final class LibraryFoldersDialog {
@@ -125,7 +125,8 @@ public final class LibraryFoldersDialog {
     // --- Reading the list ---
 
     private void reload() {
-        Thread.ofVirtual().name("prismo-library-list").start(() -> {
+        // A platform thread (1.0.1): on a virtual thread the list waited behind other work and showed up empty.
+        Thread.ofPlatform().name("prismo-library-list").daemon(true).start(() -> {
             try {
                 List<LibraryRootStore.Root> roots = store.all();
                 List<Integer> counts = store.counts(roots);
@@ -220,7 +221,7 @@ public final class LibraryFoldersDialog {
      */
     private void askToRemove(LibraryRootStore.Root root) {
         setBusy(true);
-        Thread.ofVirtual().name("prismo-library-count").start(() -> {
+        Thread.ofPlatform().name("prismo-library-count").daemon(true).start(() -> {
             int count;
             try {
                 count = store.counts(List.of(root)).getFirst();

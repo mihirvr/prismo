@@ -35,6 +35,9 @@
     -prismo-tab-hover: rgba(0, 0, 0, 0.05);
     -prismo-scrollbar: rgba(0, 0, 0, 0.22);
     -prismo-scrollbar-hover: rgba(0, 0, 0, 0.38);
+    -prismo-scrollbar-track: rgba(0, 0, 0, 0.06); /* the grid's scroll bar (1.0.1) */
+    -prismo-scrollbar-strong: rgba(0, 0, 0, 0.42);
+    -prismo-scrollbar-strong-hover: rgba(0, 0, 0, 0.6);
     -prismo-tooltip-bg: #1f2433;
     -prismo-tooltip-text: #ffffff;
     -prismo-card: #ffffff;       /* rows and cards inside dialogs */
@@ -1500,3 +1503,110 @@
 .theme-preview-amoled .preview-bar { -fx-background-color: #000000; -fx-border-color: transparent transparent #22252c transparent; }
 .theme-preview-amoled .preview-tile { -fx-background-color: #1b1d22; -fx-background-radius: 3; }
 .preview-accent { -fx-background-color: #3366ff; -fx-background-radius: 3; }
+
+/*
+ * The grid's scroll bar (1.0.1): wider, with a visible track and a stronger handle. With 40,000 items the handle was a
+ * few pixels tall at 22 % opacity, so the bar looked missing. JavaFX (ScrollBarSkin.minThumbLength) makes a handle at
+ * least 1.5 x the bar's "breadth", the preferred width of its end buttons; ours are hidden and had none. Giving them a
+ * preferred width but no height keeps the handle at least ~48 px long without the buttons taking any room.
+ */
+.timeline-list .scroll-bar:vertical {
+    -fx-pref-width: 14;
+}
+
+.timeline-list .scroll-bar:vertical > .track {
+    -fx-background-color: -prismo-scrollbar-track;
+    -fx-background-insets: 2;
+    -fx-background-radius: 6;
+}
+
+.timeline-list .scroll-bar:vertical > .increment-button,
+.timeline-list .scroll-bar:vertical > .decrement-button {
+    -fx-pref-width: 32;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
+    -fx-padding: 0;
+}
+
+.timeline-list .scroll-bar:vertical > .thumb {
+    -fx-background-color: -prismo-scrollbar-strong;
+    -fx-background-radius: 6;
+}
+
+.timeline-list .scroll-bar:vertical > .thumb:hover,
+.timeline-list .scroll-bar:vertical > .thumb:pressed {
+    -fx-background-color: -prismo-scrollbar-strong-hover;
+}
+
+/* Go to date (1.0.1): a calendar inside a menu pop-up. */
+.context-menu > .date-jump-item,
+.context-menu > .date-jump-item:focused {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+.date-jump {
+    -fx-padding: 6 8 4 8;
+    -fx-spacing: 6;
+}
+
+.date-jump-header {
+    -fx-alignment: center;
+}
+
+.date-jump-title {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-cursor: hand;
+}
+
+.date-jump-title:hover {
+    -fx-background-color: -prismo-hover;
+}
+
+.date-jump-title > .label {
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+}
+
+.date-jump-cells {
+    -fx-hgap: 2;
+    -fx-vgap: 2;
+}
+
+.date-jump-weekday {
+    -fx-min-width: 36;
+    -fx-alignment: center;
+    -fx-font-size: 11px;
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.date-jump-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 6;
+    -fx-text-fill: -prismo-text;
+    -fx-cursor: hand;
+}
+
+.date-jump-day {
+    -fx-min-width: 36;
+    -fx-min-height: 32;
+}
+
+.date-jump-month {
+    -fx-min-width: 64;
+    -fx-min-height: 40;
+}
+
+.date-jump-cell:hover {
+    -fx-background-color: -prismo-accent-tint;
+}
+
+.date-jump-cell:disabled {
+    -fx-opacity: 0.35;
+}
+
+.date-jump-hint {
+    -fx-font-size: 11px;
+    -fx-text-fill: -prismo-text-faint;
+}

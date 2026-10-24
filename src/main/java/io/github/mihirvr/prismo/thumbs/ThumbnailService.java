@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import io.github.mihirvr.prismo.index.MediaType;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -34,6 +35,10 @@ import org.slf4j.LoggerFactory;
  *
  * <p>The queue is ordered by {@link Priority}: thumbnails on screen jump ahead of warm-up, and a request
  * whose caller cancelled it (the row scrolled away) is skipped instead of decoded.
+ *
+ * <p>Warm-up goes over the library twice (1.0.1): first only the thumbnails that are quick to make (little of the file
+ * is read), then the rest, videos last and only {@link #VIDEO_JOBS} of them at once. On a hard disk or a NAS most of
+ * the grid is filled in minutes this way, instead of waiting behind every big video and old photo in date order.
  */
 public final class ThumbnailService implements AutoCloseable {
 
@@ -79,7 +84,18 @@ public final class ThumbnailService implements AutoCloseable {
     @FunctionalInterface
     interface Generator {
         void generate(Path source, Path target) throws IOException;
+
+        /** Pass 1 of the warm-up: makes the thumbnail only if that is quick; false, writing nothing, if it isn't. */
+        default boolean generateQuick(Path source, Path target) throws IOException {
+            return false;
+        }
     }
+
+    /**
+     * Video thumbnails the warm-up makes at once. A video thumbnail can read a lot of a big file (old camera AVIs are
+     * 100+ MB); with 7 at once a hard disk's queue was 17 deep and the quick photo reads waited behind them.
+     */
+    static final int VIDEO_JOBS = 2;
 
     private final ThumbnailCache cache;
     private final Generator generator;
@@ -95,7 +111,17 @@ public final class ThumbnailService implements AutoCloseable {
     public static final int DEFAULT_THREADS = Math.max(1, MAX_THREADS - 1);
 
     public ThumbnailService(ThumbnailCache cache, ThumbnailGenerator generator) {
-        this(cache, generator::generate, DEFAULT_THREADS);
+        this(cache, new Generator() {
+            @Override
+            public void generate(Path source, Path target) throws IOException {
+                generator.generate(source, target);
+            }
+
+            @Override
+            public boolean generateQuick(Path source, Path target) throws IOException {
+                return generator.generateQuick(source, target);
+            }
+        }, DEFAULT_THREADS);
     }
 
     ThumbnailService(ThumbnailCache cache, Generator generator, int poolSize) {
@@ -243,16 +269,16 @@ public final class ThumbnailService implements AutoCloseable {
                 log.debug("No thumbnail for {}: the file isn't there", media.path());
                 return new Missing(e.toString()); // no marker: tried again once the file is back
             }
-            log.debug("Thumbnail failed for {}: {}", media.path(), e.toString());
+            log.warn("Thumbnail failed for {}: {}", media.path(), e.toString()); // once per file: then it is marked
             writeFailMarker(marker, media.dateModified());
             return new Failed(e.toString());
         }
     }
 
     /**
-     * Generates thumbnails for {@code media} in order (pass newest first), blocking until all are done.
-     * Keeps at most a few jobs per thread queued, so a 100,000-item library doesn't create 100,000
-     * futures at once. Interrupting the calling thread stops it.
+     * Generates thumbnails for {@code media} (pass newest first), blocking until all are done: pass 1 makes the quick
+     * ones in that order, pass 2 the rest, stills before videos. Keeps at most a few jobs per thread queued, so a
+     * 100,000-item library doesn't create 100,000 futures at once. Interrupting the calling thread stops it.
      */
     public WarmUpProgress warmUp(List<MediaRef> media, Consumer<WarmUpProgress> progress) throws InterruptedException {
         int jobs = poolSize * 4; // read once: Settings may change the thread count meanwhile
@@ -262,7 +288,7 @@ public final class ThumbnailService implements AutoCloseable {
         AtomicInteger failed = new AtomicInteger();
         AtomicInteger missing = new AtomicInteger();
         AtomicLong lastReport = new AtomicLong();
-        // Called from the loop below and from worker threads: once everything is queued the loop is
+        // Called from the loops below and from worker threads: once everything is queued a loop is
         // waiting, so only the finished jobs can keep the count moving.
         Runnable report = () -> {
             long now = System.nanoTime();
@@ -272,20 +298,68 @@ public final class ThumbnailService implements AutoCloseable {
                         missing.get(), false));
             }
         };
-        for (MediaRef ref : media) {
+        Consumer<Result> count = result -> {
+            switch (result) {
+                case Ready _ -> ready.incrementAndGet();
+                case Unsupported _ -> unsupported.incrementAndGet();
+                case Failed _ -> failed.incrementAndGet();
+                case Missing _ -> missing.incrementAndGet();
+                case null -> failed.incrementAndGet(); // the job itself threw
+            }
+        };
+
+        // Pass 1: only what is quick. Set by worker threads, read after the window is whole again (which the
+        // semaphore orders after every write).
+        boolean[] later = new boolean[media.size()];
+        for (int i = 0; i < media.size(); i++) {
+            int index = i;
             window.acquire(); // throws InterruptedException when the app shuts down
-            request(ref).whenComplete((result, error) -> {
-                switch (result) {
-                    case Ready _ -> ready.incrementAndGet();
-                    case Unsupported _ -> unsupported.incrementAndGet();
-                    case Failed _ -> failed.incrementAndGet();
-                    case Missing _ -> missing.incrementAndGet();
-                    case null -> failed.incrementAndGet(); // the job itself threw
+            requestQuick(media.get(i)).whenComplete((result, error) -> {
+                if (result == null) {
+                    later[index] = true; // not quick: pass 2
+                } else {
+                    count.accept(result);
                 }
                 report.run(); // before the release: the final report below comes after every callback
                 window.release();
             });
             report.run();
+        }
+        window.acquire(jobs);
+        window.release(jobs);
+
+        // Pass 2: the rest, stills first, then videos, at most VIDEO_JOBS of those at once.
+        List<MediaRef> stills = new ArrayList<>();
+        List<MediaRef> videos = new ArrayList<>();
+        for (int i = 0; i < media.size(); i++) {
+            if (later[i]) {
+                MediaRef ref = media.get(i);
+                (MediaType.fromExtension(ref.extension()).orElse(null) == MediaType.VIDEO ? videos : stills).add(ref);
+            }
+        }
+        Semaphore videoJobs = new Semaphore(VIDEO_JOBS);
+        for (List<MediaRef> part : List.of(stills, videos)) {
+            boolean video = part == videos;
+            for (MediaRef ref : part) {
+                window.acquire();
+                if (video) {
+                    try {
+                        videoJobs.acquire();
+                    } catch (InterruptedException e) {
+                        window.release();
+                        throw e;
+                    }
+                }
+                request(ref).whenComplete((result, error) -> {
+                    count.accept(result);
+                    report.run();
+                    if (video) {
+                        videoJobs.release();
+                    }
+                    window.release();
+                });
+                report.run();
+            }
         }
         window.acquire(jobs); // wait for the last jobs
         window.release(jobs);
@@ -293,6 +367,61 @@ public final class ThumbnailService implements AutoCloseable {
                 missing.get(), true);
         progress.accept(done);
         return done;
+    }
+
+    /**
+     * Pass 1 of {@link #warmUp}: the thumbnail if it is quick to make, queued at warm-up priority. Completes with null
+     * when it isn't, or when the quick try fails: pass 2 then makes it the usual way, which also says why it failed
+     * and remembers that. A file someone else is already making is left to them (null too).
+     */
+    CompletableFuture<Result> requestQuick(MediaRef media) {
+        Path file = cache.fileFor(media.id());
+        if (ThumbnailCache.isFresh(file, media.dateModified())) {
+            return CompletableFuture.completedFuture(new Ready(file));
+        }
+        if (ThumbnailCache.isFresh(cache.failMarkerFor(media.id()), media.dateModified())) {
+            return CompletableFuture.completedFuture(new Failed("failed before; waiting for the file to change"));
+        }
+        if (!ThumbnailGenerator.canMake(media.extension())) {
+            return CompletableFuture.completedFuture(new Unsupported(media.extension()));
+        }
+        CompletableFuture<Result> result = new CompletableFuture<>();
+        try {
+            pool.execute(new QuickTask(media, result, sequence.getAndIncrement()));
+        } catch (RejectedExecutionException e) {
+            result.complete(null); // shutting down
+        }
+        return result;
+    }
+
+    /** Runs on a worker: makes {@code media}'s thumbnail if that is quick, else completes {@code result} with null. */
+    private void runQuick(MediaRef media, CompletableFuture<Result> result) {
+        Path file = cache.fileFor(media.id());
+        if (ThumbnailCache.isFresh(file, media.dateModified())) {
+            result.complete(new Ready(file));
+            return;
+        }
+        if (inFlight.containsKey(media.id())) {
+            result.complete(null); // a visible request is making it in full; pass 2 finds it made
+            return;
+        }
+        Path temp = null;
+        try {
+            Files.createDirectories(file.getParent());
+            temp = Files.createTempFile(file.getParent(), media.id() + "-", ".tmp");
+            if (!generator.generateQuick(media.path(), temp)) {
+                result.complete(null);
+                return;
+            }
+            Files.setLastModifiedTime(temp, FileTime.fromMillis(media.dateModified()));
+            Files.move(temp, file, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            temp = null;
+            result.complete(new Ready(file));
+        } catch (IOException | RuntimeException e) {
+            result.complete(null); // pass 2 tries again and says why
+        } finally {
+            deleteQuietly(temp);
+        }
     }
 
     /** Outcome of {@link Job#join}. */
@@ -361,22 +490,16 @@ public final class ThumbnailService implements AutoCloseable {
     }
 
     /**
-     * A job's place in the queue. Comparable so the {@link PriorityBlockingQueue} can sort it. An inner
-     * (non-static) class so {@link #run} can reach the service.
+     * A place in the queue. Comparable so the {@link PriorityBlockingQueue} can sort it. Inner (non-static)
+     * classes so they can reach the service.
      */
-    private final class Task implements Runnable, Comparable<Task> {
-        private final Job job;
+    private abstract class Queued implements Runnable, Comparable<Queued> {
         private final Priority priority;
         private final long sequence;
 
-        Task(Job job, Priority priority, long sequence) {
-            this.job = job;
+        Queued(Priority priority, long sequence) {
             this.priority = priority;
             this.sequence = sequence;
-        }
-
-        Job job() {
-            return job;
         }
 
         Priority priority() {
@@ -384,18 +507,49 @@ public final class ThumbnailService implements AutoCloseable {
         }
 
         @Override
-        public void run() {
-            ThumbnailService.this.run(this);
-        }
-
-        @Override
-        public int compareTo(Task other) {
+        public int compareTo(Queued other) {
             if (priority != other.priority) {
                 return priority.compareTo(other.priority);
             }
             return priority == Priority.VISIBLE
                     ? Long.compare(other.sequence, sequence) // newest first
                     : Long.compare(sequence, other.sequence); // in the order asked
+        }
+    }
+
+    /** A job's place in the queue. */
+    private final class Task extends Queued {
+        private final Job job;
+
+        Task(Job job, Priority priority, long sequence) {
+            super(priority, sequence);
+            this.job = job;
+        }
+
+        Job job() {
+            return job;
+        }
+
+        @Override
+        public void run() {
+            ThumbnailService.this.run(this);
+        }
+    }
+
+    /** A quick try for the warm-up's first pass ({@link #requestQuick}), queued like warm-up. */
+    private final class QuickTask extends Queued {
+        private final MediaRef media;
+        private final CompletableFuture<Result> result;
+
+        QuickTask(MediaRef media, CompletableFuture<Result> result, long sequence) {
+            super(Priority.BACKGROUND, sequence);
+            this.media = media;
+            this.result = result;
+        }
+
+        @Override
+        public void run() {
+            runQuick(media, result);
         }
     }
 

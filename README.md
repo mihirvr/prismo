@@ -64,7 +64,7 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.0.0: the first release** (v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done). Windows first; the Linux package is an early preview.
+**Version 1.0.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixes thumbnails and library folders). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`). What works today:
 

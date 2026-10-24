@@ -50,6 +50,45 @@ class IndexerTest {
         database.close();
     }
 
+    /**
+     * A new library shows its first photos after a small chunk, not after a whole batch (1.0.1): chunks of 50, 100,
+     * 200, 400, then the batch size. "saved" only ever counts rows already in the database, so a view reloaded on a
+     * report shows them.
+     */
+    @Test
+    void theFirstChunksAreSmallAndSavedRowsAreReallyThere() throws Exception {
+        Path many = Files.createDirectories(tmp.resolve("Many"));
+        Path one = TestMedia.png(many.resolve("0000.png"), 8, 8);
+        for (int i = 1; i < 1000; i++) {
+            Files.copy(one, many.resolve("%04d.png".formatted(i)));
+        }
+        Indexer defaultBatches = new Indexer(database, new MetadataReader(ZoneOffset.UTC), Indexer.DEFAULT_BATCH_SIZE);
+        List<String> wrong = new ArrayList<>();
+
+        IndexProgress done = defaultBatches.index(List.of(many), progress -> {
+            if (!progress.done() && !List.of(0, 50, 150, 350, 750).contains(progress.saved())) {
+                wrong.add("saved " + progress.saved() + " is not a chunk boundary");
+            }
+            try {
+                int rows = database.read(c -> {
+                    try (Statement st = c.createStatement(); ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM media")) {
+                        rs.next();
+                        return rs.getInt(1);
+                    }
+                });
+                if (rows < progress.saved()) {
+                    wrong.add("saved " + progress.saved() + " but only " + rows + " rows");
+                }
+            } catch (Exception e) {
+                wrong.add(e.toString());
+            }
+        });
+
+        assertEquals(List.of(), wrong);
+        assertEquals(1000, done.indexed());
+        assertEquals(1000, done.saved());
+    }
+
     @Test
     void indexesMediaRecursivelyAndIgnoresOtherFiles() throws Exception {
         IndexProgress result = indexer.index(List.of(library), progress -> { });

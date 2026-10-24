@@ -27,6 +27,9 @@
     -prismo-tab-hover: rgba(255, 255, 255, 0.06);
     -prismo-scrollbar: rgba(255, 255, 255, 0.22);
     -prismo-scrollbar-hover: rgba(255, 255, 255, 0.38);
+    -prismo-scrollbar-track: rgba(255, 255, 255, 0.07); /* the grid's scroll bar (1.0.1) */
+    -prismo-scrollbar-strong: rgba(255, 255, 255, 0.45);
+    -prismo-scrollbar-strong-hover: rgba(255, 255, 255, 0.65);
     -prismo-tooltip-bg: #2e3340;
     -prismo-tooltip-text: #f2f3f6;
     -prismo-card: #1c1f26;

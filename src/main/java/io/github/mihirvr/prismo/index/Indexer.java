@@ -42,7 +42,9 @@ import org.slf4j.LoggerFactory;
  *       unchanged are skipped without opening them. If only their Hidden mark changed (Windows' Hidden
  *       attribute, {@link OsHiddenMark}: it comes with the walk's attributes), just the mark is written.</li>
  *   <li>New or changed files are collected into chunks of {@code batchSize}. Each chunk's metadata is
- *       read in parallel on virtual threads (at most {@code MAX_PARALLEL_READS} files open at once).</li>
+ *       read in parallel (at most {@code MAX_PARALLEL_READS} files open at once). The first chunks are smaller
+ *       ({@link #FIRST_CHUNK}, then doubling): a new library shows its first photos after a moment, not after a
+ *       whole chunk of reads (500 files took 15-20 s on a laptop hard disk, with nothing on screen).</li>
  *   <li>Each chunk is written in one transaction by the database's single writer thread. While chunk N
  *       is being written, chunk N+1's metadata is already being read; at most one write in flight,
  *       which gives back-pressure if the disk is slower than the readers.</li>
@@ -61,6 +63,8 @@ public final class Indexer {
     private static final Logger log = LoggerFactory.getLogger(Indexer.class);
 
     static final int DEFAULT_BATCH_SIZE = 500;
+    /** The first chunk's size in a run; each next one doubles, up to the batch size (1.0.1). */
+    static final int FIRST_CHUNK = 50;
     /** Caps open file handles and disk seeks; plenty for SSDs, still kind to spinning disks. */
     private static final int MAX_PARALLEL_READS = 16;
     private static final long PROGRESS_INTERVAL_NANOS = 100_000_000L; // 100 ms
@@ -99,13 +103,24 @@ public final class Indexer {
     public IndexProgress index(List<Path> roots, Consumer<IndexProgress> progress)
             throws InterruptedException, SQLException {
         Run run = new Run(progress);
-        try (ExecutorService readers = Executors.newVirtualThreadPerTaskExecutor()) {
+        try (ExecutorService readers = readers()) {
             for (Path root : roots) {
                 run.indexRoot(root, readers);
             }
             run.finish(readers);
         }
         return run.done("Indexing");
+    }
+
+    /**
+     * The threads that read files' metadata during a run: {@code MAX_PARALLEL_READS} platform threads (1.0.1). With a
+     * virtual thread per file, the file opens ran on the few carrier threads all virtual threads share, and a file open
+     * on Windows keeps its carrier: a first index of a big library on a hard disk tied them all up, and every other
+     * virtual thread in the app (the "can it be reached?" check, the Library folders list) waited seconds for a turn.
+     */
+    private static ExecutorService readers() {
+        return Executors.newFixedThreadPool(MAX_PARALLEL_READS,
+                Thread.ofPlatform().name("prismo-index-read-", 0).daemon(true).factory());
     }
 
     /**
@@ -117,7 +132,7 @@ public final class Indexer {
     public IndexProgress update(Map<Path, Set<Path>> changedByRoot, Consumer<IndexProgress> progress)
             throws InterruptedException, SQLException {
         Run run = new Run(progress);
-        try (ExecutorService readers = Executors.newVirtualThreadPerTaskExecutor()) {
+        try (ExecutorService readers = readers()) {
             for (Map.Entry<Path, Set<Path>> entry : changedByRoot.entrySet()) {
                 if (!Files.isDirectory(entry.getKey())) {
                     log.info("Library folder {} can't be reached; leaving its files as they are", entry.getKey());
@@ -152,6 +167,11 @@ public final class Indexer {
         private final Map<Long, Boolean> markChanged = new LinkedHashMap<>();
         private CompletableFuture<Integer> pendingWrite = CompletableFuture.completedFuture(0);
         private long lastReportNanos;
+        /** Chunks read so far in this run: sets the next chunk's size. */
+        private int flushes;
+        /** Files handed to the writer so far, and of those, the ones whose write has finished. */
+        private int queued;
+        private int saved;
         private int found;
         private int indexed;
         private int unchanged;
@@ -280,7 +300,8 @@ public final class Indexer {
                 added.add(new MoveMatcher.Found(file.toString(), size, modified));
             }
             chunk.add(new PendingFile(file, type, size, modified, osHidden));
-            if (chunk.size() >= batchSize) {
+            report(); // "found" goes up during the walk too
+            if (chunk.size() >= Math.min(batchSize, FIRST_CHUNK << Math.min(flushes, 10))) {
                 flush(readers);
             }
         }
@@ -310,6 +331,7 @@ public final class Indexer {
             if (chunk.isEmpty()) {
                 return;
             }
+            flushes++;
             List<Future<MediaRecord>> futures = new ArrayList<>(chunk.size());
             for (PendingFile file : chunk) {
                 futures.add(readers.submit(() -> {
@@ -328,10 +350,12 @@ public final class Indexer {
             for (Future<MediaRecord> future : futures) {
                 try {
                     records.add(future.get());
+                    indexed++; // counted as each file is read, so the status moves during a chunk
                 } catch (ExecutionException e) {
                     log.warn("Metadata read failed", e.getCause());
                     failed++;
                 }
+                report();
             }
 
             awaitPendingWrite(); // at most one write in flight
@@ -340,7 +364,10 @@ public final class Indexer {
                 MediaStore.upsert(connection, records, now);
                 return records.size();
             });
-            indexed += records.size();
+            queued += records.size();
+            if (flushes == 1) {
+                awaitPendingWrite(); // the first photos are in the database before anyone is told to show them
+            }
             report();
         }
 
@@ -377,6 +404,7 @@ public final class Indexer {
         void awaitPendingWrite() throws InterruptedException {
             try {
                 pendingWrite.get();
+                saved = queued;
             } catch (ExecutionException e) {
                 throw new IllegalStateException("Writing indexed files failed", e.getCause());
             }
@@ -392,7 +420,7 @@ public final class Indexer {
 
         IndexProgress snapshot(boolean done) {
             return new IndexProgress(found, indexed, unchanged, failed, moved, removed, done,
-                    Duration.ofNanos(System.nanoTime() - startNanos));
+                    Duration.ofNanos(System.nanoTime() - startNanos), saved);
         }
 
         IndexProgress done(String what) {

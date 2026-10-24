@@ -46,6 +46,17 @@ touched: Prismo never copies, moves or changes them unless you ask it to (rename
 | Thumbnails and unpacked video files | `%LOCALAPPDATA%\Prismo\cache` |
 | Logs (attach these to a bug report) | `%LOCALAPPDATA%\Prismo\logs` |
 
+### First start with a big library
+
+The first time you add a big library, Prismo reads every file once (its date taken, size and so on) and makes a
+thumbnail for each one. With tens of thousands of photos and videos this takes a while: on a laptop hard disk,
+about 15 minutes to read 40,000 files, and longer for all the thumbnails. Photos show up as they are found, and
+the thumbnails on screen are always made first.
+
+While this runs, the disk is busy, so **opening photos can be slow and videos can stutter**. That's expected,
+and the status bar says so ("Setting up a big library..."). It happens only once: afterwards Prismo reads just
+what changed, and the thumbnails are kept. SSDs are much faster here than hard disks and network drives (NAS).
+
 ### If something goes wrong
 
 - **The window stays blank, flickers or draws garbage:** usually an old or broken graphics driver. Update it

@@ -5,9 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.mihirvr.prismo.video.VideoNatives;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Random;
@@ -65,9 +67,49 @@ class OtherStillsTest {
         java.util.List<String> thumb = OtherStills.heifCommand(ffmpeg, in, 640, out);
 
         assertTrue(String.join(" ", full).contains("-c:v bmp"), "BMP: PNG compression was ~90% of the time");
-        assertFalse(full.contains("-vf"), "the viewer gets the full picture");
-        assertTrue(String.join(" ", thumb).contains("-vf scale=w=640:h=640:force_original_aspect_ratio=decrease"));
+        assertFalse(full.contains("-filter_complex"), "the viewer gets the full picture");
+        // Not -vf: ffmpeg joins a tiled HEIC in a filter graph of its own, and refuses a -vf on top of that.
+        assertFalse(thumb.contains("-vf"));
+        assertTrue(String.join(" ", thumb).contains(
+                "-filter_complex scale=w=640:h=640:force_original_aspect_ratio=decrease"));
         assertEquals(out.toString(), thumb.getLast());
+    }
+
+    /**
+     * Most phone HEICs are a grid of tiles that ffmpeg joins in a filter graph of its own; 1.0.0 added a {@code -vf}
+     * on top, which ffmpeg refuses, so every such photo was a failed thumbnail. tiled-grid.avif is a made-up 2 x 2 grid
+     * (red, green / blue, yellow; 128 x 96) in the same container layout; how it was made is in make_tiled_grid.py.
+     */
+    @Test
+    void aTiledPhotoGetsAThumbnailWithItsTilesInPlace() throws Exception {
+        Path heic = tmp.resolve("IMG_tiled.heic");
+        try (InputStream in = getClass().getResourceAsStream("/thumbs/tiled-grid.avif")) {
+            Files.copy(in, heic);
+        }
+
+        BufferedImage scaled = ImageIO.read(new java.io.ByteArrayInputStream(
+                OtherStills.encoded(heic, VideoNatives::ffmpegExecutable, 64)));
+        assertEquals(64, scaled.getWidth());
+        assertEquals(48, scaled.getHeight());
+        assertColour(0xFF0000, scaled.getRGB(8, 8), "top left");
+        assertColour(0x00FF00, scaled.getRGB(56, 8), "top right");
+        assertColour(0x0000FF, scaled.getRGB(8, 40), "bottom left");
+        assertColour(0xFFFF00, scaled.getRGB(56, 40), "bottom right");
+
+        Path thumbnail = tmp.resolve("thumb.jpg");
+        new ThumbnailGenerator(64).generate(heic, thumbnail);
+        BufferedImage jpeg = ImageIO.read(thumbnail.toFile());
+        assertEquals(64, jpeg.getWidth());
+        assertColour(0xFFFF00, jpeg.getRGB(56, 40), "the whole grid, not one tile");
+    }
+
+    private static void assertColour(int expected, int argb, String where) {
+        for (int shift = 0; shift <= 16; shift += 8) {
+            int want = (expected >> shift) & 0xFF;
+            int got = (argb >> shift) & 0xFF;
+            assertTrue(Math.abs(want - got) < 40, where + ": expected %06x, got %06x".formatted(expected,
+                    argb & 0xFFFFFF));
+        }
     }
 
     @Test

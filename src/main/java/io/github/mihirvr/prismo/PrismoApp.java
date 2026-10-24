@@ -31,6 +31,7 @@ import io.github.mihirvr.prismo.thumbs.ThumbnailService;
 import io.github.mihirvr.prismo.ui.Appearance;
 import io.github.mihirvr.prismo.ui.DialogTexts;
 import io.github.mihirvr.prismo.ui.EmptyState;
+import io.github.mihirvr.prismo.ui.DateJump;
 import io.github.mihirvr.prismo.ui.FileItems;
 import io.github.mihirvr.prismo.ui.Grouping;
 import io.github.mihirvr.prismo.ui.Icon;
@@ -70,6 +71,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
@@ -128,6 +131,8 @@ public final class PrismoApp extends Application {
     private static final String IGNORED_SETTING = "index.ignored";
     private static final String GROUPING_SETTING = "timeline.grouping";
     private static final String THUMBNAIL_THREADS_SETTING = "thumbnails.threads";
+    /** The {@link ThumbnailGenerator#REVISION} whose failure markers the cache holds. */
+    private static final String THUMBNAILS_REVISION_SETTING = "thumbnails.revision";
     private static final String VOLUME_SETTING = "video.volume";
     private static final String MUTED_SETTING = "video.muted";
     private static final String SPEED_SETTING = "video.speed";
@@ -142,6 +147,10 @@ public final class PrismoApp extends Application {
     /** The app icon in these sizes; the system picks the one closest to what it needs (title bar, taskbar). */
     private static final int[] ICON_SIZES = {16, 20, 24, 32, 40, 48, 64, 128, 256};
     private static final double TOP_BAR_ICON_SIZE = 18;
+    /** Files still to index or to make thumbnails for from which the status bar says a big setup is running. */
+    private static final int BIG_SETUP_FILES = 1000;
+    private static final String BIG_SETUP_NOTE =
+            "Setting up a big library: photos and videos may open slowly or stutter until this finishes";
     /** While indexing, show newly found files at most this often. */
     private static final long TIMELINE_RELOAD_NANOS = 3_000_000_000L;
     /** Watcher events are handled once a path has been quiet this long, but no later than MAX_WAIT. */
@@ -216,6 +225,19 @@ public final class PrismoApp extends Application {
     /** One indexing run at a time; extra requests queue up behind it. */
     private final ExecutorService indexingThread = Executors.newSingleThreadExecutor(
             Thread.ofPlatform().name("prismo-indexer").daemon(true).factory());
+    /** The indexing thread while it is in an index run, so a library folder change can stop it; else null. */
+    private Thread indexRunThread; // guarded by indexRunLock
+    private final Object indexRunLock = new Object();
+    /**
+     * Makes the missing thumbnails after an index run (1.0.1: its own thread). On the indexing thread it held up every
+     * library folder change and watcher batch until all thumbnails were made: hours for a big first library.
+     */
+    private final ExecutorService warmUpThread = Executors.newSingleThreadExecutor(
+            Thread.ofPlatform().name("prismo-thumbnail-warm-up").daemon(true).factory());
+    /** The warm-up running or queued now (a newer one stops it), and its number. Guarded by warmUpLock. */
+    private Future<?> warmUp = CompletableFuture.completedFuture(null);
+    private long warmUpNumber;
+    private final Object warmUpLock = new Object();
     /**
      * Loads the Timeline, one load at a time, in the order asked; a load that a newer one has replaced while it
      * waited is skipped. Its own thread, so a filter or sort change never waits behind an index run.
@@ -258,6 +280,7 @@ public final class PrismoApp extends Application {
         cacheDir = paths.cacheDir();
         thumbnailCache = new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE);
         thumbnails = new ThumbnailService(thumbnailCache, new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
+        forgetOldThumbnailFailures();
         searcher = new Searcher(database);
         playbackPositions = new PlaybackPositions(database);
         trackChoices = new TrackChoices(database);
@@ -594,7 +617,11 @@ public final class PrismoApp extends Application {
         topBar.getStyleClass().add("top-bar");
         Region viewSpacer = new Region();
         HBox.setHgrow(viewSpacer, Priority.ALWAYS);
-        viewBar.getChildren().addAll(viewSpacer, new Label("Size"), size);
+        Button goToDate = new Button("Go to date", Icon.CALENDAR.node(16));
+        goToDate.setTooltip(new Tooltip("Jump to a day or a month"));
+        goToDate.setMinWidth(Region.USE_PREF_SIZE);
+        goToDate.setOnAction(_ -> DateJump.show(goToDate, currentGrid()));
+        viewBar.getChildren().addAll(goToDate, viewSpacer, new Label("Size"), size);
         status.getStyleClass().add("status-bar");
         status.setMaxWidth(Double.MAX_VALUE);
 
@@ -808,6 +835,7 @@ public final class PrismoApp extends Application {
         return new LibraryFoldersDialog.Operations() {
             @Override
             public CompletableFuture<String> add(Path folder) {
+                stopIndexRun(); // a change never waits for a long first index; the new run below goes on with it
                 return onIndexingThread(() -> {
                     LibraryRootStore.Added added = libraryRoots.add(folder).get();
                     if (!added.added()) {
@@ -827,6 +855,7 @@ public final class PrismoApp extends Application {
 
             @Override
             public CompletableFuture<Void> setEnabled(Path root, boolean enabled) {
+                stopIndexRun();
                 return onIndexingThread(() -> {
                     if (!enabled) {
                         watcher.unwatch(root);
@@ -835,21 +864,22 @@ public final class PrismoApp extends Application {
                     libraryRoots.setEnabled(root, enabled).get();
                     log.info("Library folder {} turned {}", root, enabled ? "on" : "off");
                     libraryChanged();
-                    if (enabled) {
-                        startIndexing(); // catches up on anything that changed while it was off
-                    }
+                    // On: catches up on anything that changed while it was off. Off: goes on with the run it stopped.
+                    startIndexing();
                     return null;
                 });
             }
 
             @Override
             public CompletableFuture<Integer> remove(Path root) {
+                stopIndexRun();
                 return onIndexingThread(() -> {
                     watcher.unwatch(root);
                     watchedRoots.remove(root);
                     int forgotten = libraryRoots.remove(root).get();
                     log.info("Removed library folder {}: {} rows forgotten", root, forgotten);
                     libraryChanged();
+                    startIndexing(); // goes on with the run it stopped, for the other folders
                     return forgotten;
                 });
             }
@@ -876,6 +906,9 @@ public final class PrismoApp extends Application {
 
     private void startIndexing() {
         indexingThread.execute(() -> {
+            synchronized (indexRunLock) {
+                indexRunThread = Thread.currentThread();
+            }
             try {
                 loadTimeline();
                 var roots = libraryRoots.enabledRoots();
@@ -885,30 +918,50 @@ public final class PrismoApp extends Application {
                 }
                 watchNewRoots(roots); // before the walk, so nothing that changes during it is missed
                 // Only touched on this thread (the progress callback runs here too); arrays so the lambda can update them.
-                long[] lastLoad = {System.nanoTime()};
+                long[] lastLoad = {System.nanoTime() - TIMELINE_RELOAD_NANOS}; // the first photos show at once
                 int[] shownIndexed = {0};
                 IndexProgress indexed = indexer.index(roots, progress -> {
-                    Platform.runLater(() -> status.setText(describe(progress)));
+                    Platform.runLater(() -> status.setText(withSetupNote(describe(progress),
+                            !progress.done() && progress.indexed() >= BIG_SETUP_FILES)));
                     // A first index of a big folder takes a while: show what's found so far every few seconds.
-                    if (progress.indexed() > shownIndexed[0]
+                    if (progress.saved() > shownIndexed[0]
                             && System.nanoTime() - lastLoad[0] >= TIMELINE_RELOAD_NANOS) {
                         libraryChanged();
                         lastLoad[0] = System.nanoTime();
-                        shownIndexed[0] = progress.indexed();
+                        shownIndexed[0] = progress.saved();
                     }
                 });
-                if (indexed.indexed() > shownIndexed[0] || indexed.moved() > 0 || indexed.removed() > 0) {
-                    libraryChanged();
+                if (indexed.changedAnything()) {
+                    libraryChanged(); // also when the last count was shown before its rows were written
                 }
                 rescanTimer.execute(this::checkReachable);
-                warmThumbnails(describe(indexed));
+                startWarmUp(describe(indexed));
             } catch (InterruptedException e) {
-                Thread.currentThread().interrupt(); // app is shutting down
+                // A library folder change stopped it (it starts a new run), or the app is shutting down.
+                log.info("Index run stopped");
             } catch (SQLException | RuntimeException e) {
                 log.error("Indexing failed", e);
                 Platform.runLater(() -> status.setText("Indexing failed: " + e.getMessage()));
+            } finally {
+                synchronized (indexRunLock) {
+                    indexRunThread = null;
+                    Thread.interrupted(); // a stop that came after the run's last look is not for the next task
+                }
             }
         });
+    }
+
+    /**
+     * Stops the index run in progress, if any: a library folder change must not wait for a first index of a big
+     * folder. What the run already wrote stays; the change starts a new run. Any thread.
+     */
+    private void stopIndexRun() {
+        synchronized (indexRunLock) {
+            if (indexRunThread != null) {
+                log.info("Stopping the index run for a library folder change");
+                indexRunThread.interrupt();
+            }
+        }
     }
 
     /**
@@ -956,13 +1009,65 @@ public final class PrismoApp extends Application {
         }
     }
 
-    /** Runs on the indexing thread after an index run: makes every missing thumbnail, newest first. */
-    private void warmThumbnails(String indexSummary) throws SQLException, InterruptedException {
-        var media = database.read(c -> MediaRefs.newestToThumbnail(c));
-        thumbnails.warmUp(media, p -> Platform.runLater(() -> status.setText(indexSummary
-                + "  ·  Thumbnails %s %,d / %,d (%,d unsupported, %,d failed%s)".formatted(
-                        p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(), p.failed(),
-                        p.missing() == 0 ? "" : ", %,d not available".formatted(p.missing())))));
+    /**
+     * After an index run: makes every missing thumbnail, newest first, on the warm-up thread. A warm-up still running
+     * is stopped first; the new one starts over the list it reads now (thumbnails already made are skipped at once).
+     * Any thread.
+     */
+    private void startWarmUp(String indexSummary) {
+        synchronized (warmUpLock) {
+            warmUp.cancel(true);
+            long number = ++warmUpNumber;
+            try {
+                warmUp = warmUpThread.submit(() -> {
+                    try {
+                        var media = database.read(c -> MediaRefs.newestToThumbnail(c));
+                        thumbnails.warmUp(media, p -> Platform.runLater(() -> {
+                            if (isLatestWarmUp(number)) { // a stopped one's last jobs may still report
+                                int left = p.total() - p.ready() - p.unsupported() - p.failed() - p.missing();
+                                status.setText(withSetupNote(indexSummary
+                                        + "  ·  Thumbnails %s %,d / %,d (%,d unsupported, %,d failed%s)".formatted(
+                                                p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(),
+                                                p.failed(), p.missing() == 0 ? ""
+                                                        : ", %,d not available".formatted(p.missing())),
+                                        !p.done() && left >= BIG_SETUP_FILES));
+                            }
+                        }));
+                    } catch (InterruptedException e) {
+                        // replaced by a newer warm-up, or the app is closing
+                    } catch (SQLException | RuntimeException e) {
+                        log.warn("Making thumbnails failed", e);
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                // the app is closing
+            }
+        }
+    }
+
+    private boolean isLatestWarmUp(long number) {
+        synchronized (warmUpLock) {
+            return number == warmUpNumber;
+        }
+    }
+
+    /**
+     * Once after an update whose thumbnail fixes may read files that failed before ({@link ThumbnailGenerator#REVISION}):
+     * forgets the failure markers, so those files are tried again. Without this, every tiled HEIC that failed in 1.0.0
+     * would stay "Can't read" until the photo itself changed.
+     */
+    private void forgetOldThumbnailFailures() {
+        String now = Integer.toString(ThumbnailGenerator.REVISION);
+        try {
+            if (settings.get(THUMBNAILS_REVISION_SETTING).filter(now::equals).isPresent()) {
+                return;
+            }
+            int forgotten = ThumbnailFolder.forgetFailures(cacheDir);
+            log.info("Thumbnail revision {}: forgot {} failure markers, those files are tried again", now, forgotten);
+            settings.put(THUMBNAILS_REVISION_SETTING, now);
+        } catch (IOException | SQLException | RuntimeException e) {
+            log.warn("Could not forget the old thumbnail failures", e);
+        }
     }
 
     /**
@@ -1044,6 +1149,14 @@ public final class PrismoApp extends Application {
                 .formatted(p.indexed(), p.moved(), p.removed());
     }
 
+    /**
+     * The status text, led by a note while a big first setup runs (1.0.1): indexing and making thumbnails keep the
+     * disk busy, so photos open slowly and videos stutter meanwhile; seen on a 40,000-item library on a hard disk.
+     */
+    private static String withSetupNote(String text, boolean bigSetup) {
+        return bigSetup ? BIG_SETUP_NOTE + "  ·  " + text : text;
+    }
+
     private static String describe(IndexProgress p) {
         String counts = "%,d files · %,d new or changed · %,d unchanged · %,d unreadable"
                 .formatted(p.found(), p.indexed(), p.unchanged(), p.failed());
@@ -1066,10 +1179,14 @@ public final class PrismoApp extends Application {
         if (changes != null) {
             changes.close();
         }
-        // Stop the indexer before the database: it may still be queueing writes.
+        // Stop the indexer and the thumbnail warm-up before the database: they may still be queueing writes.
+        warmUpThread.shutdownNow();
         indexingThread.shutdownNow();
         if (!indexingThread.awaitTermination(10, TimeUnit.SECONDS)) {
             log.warn("Indexer did not stop within 10 s");
+        }
+        if (!warmUpThread.awaitTermination(5, TimeUnit.SECONDS)) {
+            log.warn("Thumbnail warm-up did not stop within 5 s");
         }
         timelineLoads.shutdownNow();
         if (!timelineLoads.awaitTermination(5, TimeUnit.SECONDS)) {

@@ -68,6 +68,45 @@ public final class TestMedia {
     }
 
     /**
+     * A JPEG of {@code photo} whose EXIF holds {@code preview} as its stored preview (IFD1), as cameras and phones write
+     * it, plus Orientation {@code orientation}. Little-endian ("II"), like most phones. Give the two pictures different
+     * colours to see which one a thumbnail was made from.
+     */
+    public static Path jpegWithPreview(Path file, BufferedImage photo, BufferedImage preview, int orientation)
+            throws IOException {
+        ByteArrayOutputStream small = new ByteArrayOutputStream();
+        ImageIO.write(preview, "jpg", small);
+        byte[] previewJpeg = small.toByteArray();
+        // TIFF: header (8), IFD0 with Orientation (2 + 12 + 4), IFD1 with the preview's offset and length (2 + 24 + 4),
+        // then the preview itself.
+        int ifd0 = 8;
+        int ifd1 = ifd0 + 18;
+        int previewAt = ifd1 + 30;
+        ByteBuffer tiff = ByteBuffer.allocate(previewAt + previewJpeg.length).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        tiff.put((byte) 'I').put((byte) 'I').putShort((short) 42).putInt(ifd0);
+        tiff.putShort((short) 1).putShort((short) 0x0112).putShort((short) 3).putInt(1).putShort((short) orientation)
+                .putShort((short) 0).putInt(ifd1);
+        tiff.putShort((short) 2)
+                .putShort((short) 0x0201).putShort((short) 4).putInt(1).putInt(previewAt)
+                .putShort((short) 0x0202).putShort((short) 4).putInt(1).putInt(previewJpeg.length)
+                .putInt(0);
+        tiff.put(previewJpeg);
+        ByteArrayOutputStream plain = new ByteArrayOutputStream();
+        ImageIO.write(photo, "jpg", plain);
+        byte[] jpeg = plain.toByteArray();
+        byte[] header = ascii("Exif\0\0");
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        out.write(jpeg, 0, 2);
+        out.write(ByteBuffer.allocate(4).put((byte) 0xFF).put((byte) 0xE1)
+                .putShort((short) (2 + header.length + tiff.capacity())).array());
+        out.write(header);
+        out.write(tiff.array());
+        out.write(jpeg, 2, jpeg.length - 2);
+        Files.write(file, out.toByteArray());
+        return file;
+    }
+
+    /**
      * A JPEG with a camera's full EXIF block, as a phone writes it: Make "Apple", Model "iPhone 15 Pro",
      * DateTimeOriginal 2024:03:09 17:45:12, exposure 1/250 s, f/1.8, ISO 200, focal length 6.9 mm (24 mm in
      * 35 mm terms), lens "iPhone 15 Pro back camera", flash did not fire (16), and GPS 18°31'13.548" N,

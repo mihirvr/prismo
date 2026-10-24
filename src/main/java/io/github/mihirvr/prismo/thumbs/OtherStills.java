@@ -17,6 +17,8 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
 import javax.imageio.ImageIO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Photos ImageIO can't read itself (P7, rows 9 and 10), turned into a picture for thumbnails and the viewer.
@@ -36,6 +38,7 @@ import javax.imageio.ImageIO;
  */
 public final class OtherStills {
 
+    private static final Logger log = LoggerFactory.getLogger(OtherStills.class);
     private static final Set<String> HEIF = Set.of("heic", "heif", "hif");
     private static final long TIMEOUT_SECONDS = 60;
     /** RAW files bigger than this aren't read for a preview (a whole file is read into memory). */
@@ -103,19 +106,40 @@ public final class OtherStills {
      * {@code ffmpeg} writes the picture to a temporary BMP file, which is read back and deleted. BMP, not PNG: it is
      * not compressed, and compressing was most of the time. Measured in P7 on a 12 MP phone HEIC (bundled ffmpeg):
      * PNG ~2.8 s, BMP ~0.22 s.
+     *
+     * <p>The scaling is a {@code -filter_complex}, not a {@code -vf}: most phone HEICs (Samsung, iPhone) are a grid of
+     * tiles, and ffmpeg 8 joins the tiles in a filter graph of its own. A {@code -vf} on that output is refused ("Simple
+     * and complex filtering cannot be used together"), which made every tiled HEIC a failed thumbnail in 1.0.0 while
+     * the viewer, which asks for the full size without a filter, showed it fine.
      */
     static List<String> heifCommand(Path ffmpeg, Path file, int maxEdge, Path out) {
         List<String> command = new ArrayList<>(List.of(ffmpeg.toString(), "-nostdin", "-hide_banner",
-                "-loglevel", "error", "-threads", "1", "-i", file.toString(), "-frames:v", "1", "-an"));
+                "-loglevel", "error", "-threads", "1", "-i", file.toString()));
         if (maxEdge > 0) {
-            command.addAll(List.of("-vf", "scale=w=%d:h=%d:force_original_aspect_ratio=decrease".formatted(maxEdge,
-                    maxEdge)));
+            command.addAll(List.of("-filter_complex",
+                    "scale=w=%d:h=%d:force_original_aspect_ratio=decrease".formatted(maxEdge, maxEdge)));
         }
-        command.addAll(List.of("-f", "image2", "-c:v", "bmp", "-y", out.toString()));
+        command.addAll(List.of("-frames:v", "1", "-an", "-f", "image2", "-c:v", "bmp", "-y", out.toString()));
         return command;
     }
 
+    /**
+     * A scaled picture that ffmpeg can't make is asked for once more at full size, the way the viewer asks: whatever
+     * the viewer can show must get a thumbnail too. The caller scales it down.
+     */
     private static byte[] heifPicture(Path file, Program ffmpeg, int maxEdge) throws IOException {
+        try {
+            return heifRun(file, ffmpeg, maxEdge);
+        } catch (IOException e) {
+            if (maxEdge == 0 || e instanceof NoSuchFileException) {
+                throw e;
+            }
+            log.warn("ffmpeg could not make a scaled picture of {}, trying full size: {}", file, e.getMessage());
+            return heifRun(file, ffmpeg, 0);
+        }
+    }
+
+    private static byte[] heifRun(Path file, Program ffmpeg, int maxEdge) throws IOException {
         Path out = Files.createTempFile("prismo-heif-", ".bmp");
         try {
             String error = ExternalProgram.run(heifCommand(ffmpeg.path(), file, maxEdge, out), TIMEOUT_SECONDS);

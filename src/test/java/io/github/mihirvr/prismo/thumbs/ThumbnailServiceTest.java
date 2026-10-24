@@ -351,6 +351,118 @@ class ThumbnailServiceTest {
         }
     }
 
+    // --- Two-pass warm-up (1.0.1): quick thumbnails first, then the rest, videos last and at most two at once.
+
+    /** A tiny JPEG at {@code target}, whatever the source: the tests below are about order, not pictures. */
+    private static void anyThumbnail(Path target) throws IOException {
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(4, 4, java.awt.image.BufferedImage.TYPE_INT_RGB),
+                "jpg", target.toFile());
+    }
+
+    /** A generator for which files named "q..." are quick; it records what it made, in order. */
+    private ThumbnailService.Generator recordingGenerator(List<String> made) {
+        return new ThumbnailService.Generator() {
+            @Override
+            public void generate(Path source, Path target) throws IOException {
+                made.add(source.getFileName().toString());
+                anyThumbnail(target);
+            }
+
+            @Override
+            public boolean generateQuick(Path source, Path target) throws IOException {
+                if (!source.getFileName().toString().startsWith("q")) {
+                    return false;
+                }
+                made.add(source.getFileName().toString());
+                anyThumbnail(target);
+                return true;
+            }
+        };
+    }
+
+    @Test
+    @Timeout(20)
+    void warmUpMakesTheQuickOnesFirstThenStillsThenVideos() throws Exception {
+        List<String> made = Collections.synchronizedList(new ArrayList<>());
+        ThumbnailService one = new ThumbnailService(cache, recordingGenerator(made), 1);
+        try {
+            List<MediaRef> newestFirst = List.of(
+                    ref(1, Files.write(tmp.resolve("v1.mp4"), new byte[] {1})),
+                    ref(2, TestMedia.png(tmp.resolve("s1.png"), 20, 20)),
+                    ref(3, TestMedia.png(tmp.resolve("q1.png"), 20, 20)),
+                    ref(4, TestMedia.png(tmp.resolve("s2.png"), 20, 20)),
+                    ref(5, TestMedia.png(tmp.resolve("q2.png"), 20, 20)));
+
+            var done = one.warmUp(newestFirst, _ -> { });
+
+            assertEquals(List.of("q1.png", "q2.png", "s1.png", "s2.png", "v1.mp4"), made);
+            assertEquals(new ThumbnailService.WarmUpProgress(5, 5, 0, 0, 0, true), done);
+        } finally {
+            one.close();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void warmUpMakesAtMostTwoVideoThumbnailsAtOnce() throws Exception {
+        AtomicInteger running = new AtomicInteger();
+        AtomicInteger most = new AtomicInteger();
+        ThumbnailService four = new ThumbnailService(cache, (source, target) -> {
+            most.accumulateAndGet(running.incrementAndGet(), Math::max);
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new java.io.InterruptedIOException("interrupted");
+            } finally {
+                running.decrementAndGet();
+            }
+            anyThumbnail(target);
+        }, 4);
+        try {
+            List<MediaRef> videos = new ArrayList<>();
+            for (int i = 1; i <= 6; i++) {
+                videos.add(ref(i, Files.write(tmp.resolve("clip" + i + ".mp4"), new byte[] {1})));
+            }
+
+            var done = four.warmUp(videos, _ -> { });
+
+            assertEquals(6, done.ready());
+            assertEquals(ThumbnailService.VIDEO_JOBS, most.get(), "4 threads, but only 2 videos at once");
+        } finally {
+            four.close();
+        }
+    }
+
+    @Test
+    @Timeout(20)
+    void aQuickTryThatFailsIsLeftToPassTwoWhichRemembersTheFailure() throws Exception {
+        AtomicInteger fullTries = new AtomicInteger();
+        ThumbnailService failing = new ThumbnailService(cache, new ThumbnailService.Generator() {
+            @Override
+            public void generate(Path source, Path target) throws IOException {
+                fullTries.incrementAndGet();
+                throw new IOException("damaged");
+            }
+
+            @Override
+            public boolean generateQuick(Path source, Path target) throws IOException {
+                throw new IOException("damaged");
+            }
+        }, 1);
+        try {
+            MediaRef bad = ref(7, TestMedia.png(tmp.resolve("q-bad.png"), 20, 20));
+
+            var done = failing.warmUp(List.of(bad), _ -> { });
+
+            assertEquals(1, done.failed());
+            assertEquals(1, fullTries.get(), "pass 2 tried it once more, the usual way");
+            assertTrue(Files.exists(cache.failMarkerFor(7)), "and remembered the failure");
+        } finally {
+            failing.close();
+        }
+    }
+
     private MediaRef png(long id, String name) throws Exception {
         return ref(id, TestMedia.png(tmp.resolve(name + ".png"), 40, 40));
     }

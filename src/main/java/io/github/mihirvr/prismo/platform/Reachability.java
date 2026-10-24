@@ -14,7 +14,7 @@ import java.util.function.Predicate;
 
 /**
  * Which folders can be reached right now (P7, row 8: an unplugged USB drive, a NAS that is off). Each folder is asked
- * on its own virtual thread, and one that hasn't answered within the time limit counts as unreachable: on Windows, a
+ * on its own thread, and one that hasn't answered within the time limit counts as unreachable: on Windows, a
  * look at a network drive whose computer is gone can block for 20 s or more, and that must not hold anything up. A
  * thread that is still stuck finishes on its own later; it holds no lock.
  */
@@ -32,7 +32,9 @@ public final class Reachability {
         Map<Path, CompletableFuture<Boolean>> asked = new LinkedHashMap<>();
         for (Path folder : folders) {
             CompletableFuture<Boolean> answer = new CompletableFuture<>();
-            Thread.ofVirtual().name("prismo-reachable").start(() -> {
+            // A platform thread, not a virtual one: the answer must not wait for a turn on the carrier threads that
+            // other work may be keeping busy; a busy app once looked like a drive that was gone (1.0.1).
+            Thread.ofPlatform().name("prismo-reachable").daemon(true).start(() -> {
                 try {
                     answer.complete(isFolder.test(folder));
                 } catch (RuntimeException e) {

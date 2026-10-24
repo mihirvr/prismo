@@ -44,6 +44,38 @@ public final class ThumbnailFolder {
     }
 
     /**
+     * Deletes only the failure markers (every thumbnail size), so the files that failed are tried again; thumbnails
+     * stay. Returns how many were deleted.
+     */
+    public static int forgetFailures(Path cacheDir) throws IOException {
+        Path thumbs = cacheDir.resolve("thumbs");
+        if (!Files.isDirectory(thumbs)) {
+            return 0;
+        }
+        int[] forgotten = {0};
+        Files.walkFileTree(thumbs, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
+                if (file.getFileName().toString().endsWith(".fail")) {
+                    try {
+                        Files.delete(file);
+                        forgotten[0]++;
+                    } catch (IOException e) {
+                        log.debug("Kept {}: {}", file, e.toString());
+                    }
+                }
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult visitFileFailed(Path file, IOException e) {
+                return FileVisitResult.CONTINUE;
+            }
+        });
+        return forgotten[0];
+    }
+
+    /**
      * Deletes every thumbnail and failure marker (so files that failed are tried again). A file that can't be
      * deleted right now (being written) is left. Returns the bytes freed.
      */
