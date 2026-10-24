@@ -46,6 +46,8 @@ touched: Prismo never copies, moves or changes them unless you ask it to (rename
 | Thumbnails and unpacked video files | `%LOCALAPPDATA%\Prismo\cache` |
 | Logs (attach these to a bug report) | `%LOCALAPPDATA%\Prismo\logs` |
 
+More on these folders, the cache's size and clearing it: [Where Prismo keeps its data and cache](#where-prismo-keeps-its-data-and-cache).
+
 ### First start with a big library
 
 The first time you add a big library, Prismo reads every file once (its date taken, size and so on) and makes a
@@ -138,6 +140,31 @@ On Ubuntu 22.04, Debian 12 or older, use `libgtk-3-0` and `libasound2` instead o
 
 Please report Linux problems as a GitHub issue, with the output of the terminal and the newest file from
 `~/.local/state/prismo/logs`.
+
+---
+
+## Where Prismo keeps its data and cache
+
+Prismo never changes your photo folders. What it saves for itself (its database, settings, the thumbnail cache and
+logs) lives in your user's app-data folders. There is no setting to move them; they are always here:
+
+| What | Windows | Linux |
+|---|---|---|
+| Library data: the database (what's in your library, favorites, albums, Trash, where videos were left) and settings | `%LOCALAPPDATA%\Prismo`, usually `C:\Users\<you>\AppData\Local\Prismo` | `~/.local/share/prismo` |
+| **Cache:** thumbnails (`thumbs`) and the unpacked video player files (`native`) | `%LOCALAPPDATA%\Prismo\cache` | `~/.cache/prismo` |
+| Logs (attach the newest one to a bug report) | `%LOCALAPPDATA%\Prismo\logs` | `~/.local/state/prismo/logs` |
+
+To open the Windows folder quickly, paste `%LOCALAPPDATA%\Prismo` into the File Explorer address bar.
+(`AppData` is a hidden folder, so it doesn't show up when you just browse to your user folder.)
+
+- **How big the cache gets:** about 20 KB per photo or video (one real library: 31,906 thumbnails in 596 MB),
+  so roughly 800 MB for 40,000 items, plus about 70 MB for the video player files. Settings > Performance shows
+  the size.
+- **Clearing it:** Settings > Performance > **Clear thumbnails** deletes the thumbnails; they are made again as they
+  are needed. Deleting the whole `cache` folder while Prismo is closed is safe too. Don't delete the library-data
+  folder unless you want to start over: favorites, albums, hidden items and Trash live in its database.
+- **Uninstalling keeps all of it**, so a reinstall picks up where you left off. To remove Prismo completely, delete
+  these folders after uninstalling.
 
 ---
 
