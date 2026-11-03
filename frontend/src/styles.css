@@ -312,6 +312,8 @@ a { color: inherit; }
 .compare figcaption span { display: block; font-weight: 400; color: var(--muted); font-size: 15px; }
 .mini { background: var(--ui-bg); color: var(--ui-ink); border-radius: 12px; overflow: hidden; font-size: 13px; height: 300px; display: flex; flex-direction: column; }
 .mini .path { padding: 8px 10px; background: var(--ui-side); border-bottom: 1px solid var(--ui-line); color: var(--ui-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* fixed height: the path and day lines keep their height; extra tiles are cut at the bottom instead */
+.mini .path, .mini .day { flex: none; }
 .mini .rows { padding: 6px; display: grid; gap: 2px; }
 .mini .rows div { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; }
 .mini .rows div:nth-child(3) { background: var(--ui-raise); }

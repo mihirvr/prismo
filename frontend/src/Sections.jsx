@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.0.1/Prismo-1.0.1.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.0.1/prismo_1.0.1_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.1.0/Prismo-1.1.0.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.1.0/prismo_1.1.0_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -50,7 +50,7 @@ function Story() {
           <figure className="rise" style={{ '--i': 2 }}>
             <figcaption>With Prismo: one timeline<span>Every folder and drive, by date.</span></figcaption>
             <div className="mini" data-ui aria-hidden="true">
-              <div className="path">Timeline · 11 photos and videos</div>
+              <div className="path">Grid › Timeline · 11 photos and videos</div>
               <div className="day">Saturday, 3 May</div>
               <div className="tiles">{ITEMS.slice(0, 8).map((it) => <img key={it.id} src={it.src} alt="" loading="lazy" />)}</div>
               <div className="day">Sunday, 27 April</div>
@@ -76,7 +76,21 @@ const CARDS = [
         {[['IMG_2413.JPG', 'Holidays'], ['IMG_2426.JPG', 'Holidays'], ['IMG_2439.MP4', 'Camera']].map(([n, f]) => (
           <div className="row2" key={n}><span>{n}</span><span>{f}</span></div>
         ))}
-        <p style={{ color: 'var(--muted)' }}>Filters: Photos, Videos, JPEG, Portrait, Screenshots…</p>
+        <p style={{ color: 'var(--muted)' }}>Filters: Photos, Videos, Portrait, Screenshots… and file types: JPG, HEIC, PNG…</p>
+      </>
+    ),
+  },
+  {
+    head: 'Grid › Folders',
+    name: 'By date, or by folder',
+    text: 'Switch the grid between Timeline, Folders and All files. Arrange sets which comes first and how folders sort, and names count like people do: 1, 2, 10.',
+    body: (
+      <>
+        <div className="row2"><b>View</b><span>Timeline · Folders · All files</span></div>
+        {[['Trip 1', '24'], ['Trip 2', '31'], ['Trip 10', '18']].map(([n, c]) => (
+          <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
+        ))}
+        <p style={{ color: 'var(--muted)' }}>Arrange: folders first, A to Z</p>
       </>
     ),
   },
@@ -104,6 +118,19 @@ const CARDS = [
         <div className="row2"><span>0:14 / 0:38</span><span>Speed 1×</span></div>
         <div className="row2"><span>Sound</span><span>English (2 tracks)</span></div>
         <div className="row2"><span>Subtitles</span><span>clip.srt, delay +0.0 s</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'Open with › Prismo',
+    name: 'Open a photo straight from File Explorer',
+    text: 'Right-click a photo, Open with, Prismo: it shows at once, and the filmstrip steps through that folder. Keys work like YouTube’s.',
+    body: (
+      <>
+        <div className="row2"><span>Opened from</span><span>File Explorer</span></div>
+        <div className="row2"><span>Filmstrip</span><span>this folder, 1 of 42</span></div>
+        <div className="row2"><span>Play · back · on</span><span>K · J · L</span></div>
+        <div className="row2"><span>Full screen</span><span>F</span></div>
       </>
     ),
   },
@@ -158,7 +185,7 @@ function Showcase() {
   return (
     <section className="section container" id="features" aria-labelledby="feat-h">
       <div className="show snap-block">
-        <Head id="feat-h" title="Everything a gallery should do." intro="Search, details, videos, offline drives and looks. Use the arrows, swipe, or click the card behind." center />
+        <Head id="feat-h" title="Everything a gallery should do." intro="Search, folders, details, videos, Open with, offline drives and looks. Use the arrows, swipe, or click the card behind." center />
         <div className="stack rise" style={{ '--i': 2 }} tabIndex={0} onKeyDown={onKey} onPointerDown={down} onPointerUp={up} onPointerCancel={() => (x0.current = null)} aria-roledescription="carousel" aria-label="App features">
           {CARDS.map((c, i) => {
             const k = i - at
@@ -233,13 +260,13 @@ function Principles() {
 const STEPS = [
   { h: 'Point it at a folder.', p: 'A folder, a USB drive or a network share. Nothing is imported or copied; your files stay put.' },
   { h: 'It reads and remembers.', p: 'Dates and camera data are read once, in the background, and thumbnails are cached. You can browse while it works.' },
-  { h: 'Then browse like a phone.', p: 'One timeline by day, search, filters, favorites, hidden and trash. New files appear by themselves within a second or two.' },
+  { h: 'Then browse like a phone.', p: 'A timeline by day, or your folders, with search, filters, favorites, hidden and trash. New files appear by themselves within a second or two.' },
 ]
 
 function PinWindow({ on }) {
   return (
     <div className="window" data-ui>
-      <div className="titlebar"><img src="/brand/prismo-mark.png" alt="" /><b>{['Library folders', 'Indexing', 'Timeline'][on]}</b></div>
+      <div className="titlebar"><img src="/brand/prismo-mark.png" alt="" /><b>{['Library folders', 'Indexing', 'Grid'][on]}</b></div>
       <div className="fill" key={on}>
         {on === 0 && (
           <div className="prog">
@@ -362,9 +389,10 @@ const FAQ = [
   ['Does it copy or move my photos?', 'No. It reads them where they are. A file changes only when you rename, move or delete it yourself.'],
   ['Does anything go online?', 'No. There is no cloud, no upload and no telemetry. It works with no internet at all.'],
   ['What about NAS and USB drives?', 'Add them as library folders. If one can’t be reached, its tiles go grey and a banner says so, and everything returns with it. Network folders are checked every 10 minutes instead of watched live.'],
+  ['Can I open just one photo with it?', 'Yes. Right-click a photo or video in File Explorer, Open with, Prismo, or make it the default app. It opens at once in a quick viewer, without loading your library, and the arrows and filmstrip step through that folder.'],
   ['Which files does it open?', 'JPEG, PNG, WebP, GIF, HEIC, and RAW files (CR2, CR3, NEF, ARW, DNG and more) through the preview inside them. Videos: MP4, MOV, MKV, WebM and AVI.'],
   ['Does it run on Linux or Mac?', 'Linux: yes, as a .deb package for Ubuntu, Debian and their relatives. Prismo is built and tested on Windows first; the Linux package is checked automatically (it installs and opens), but has not been used much on a real Linux desktop yet, so expect some rough edges. Mac: not yet.'],
-  ['How do I install it?', 'Windows: run the installer; it needs no admin rights. Windows may warn that the file is not signed: click More info, then Run anyway. Linux: install the .deb with sudo apt install ./prismo_1.0.1_amd64.deb so the libraries it needs come along. Step by step guide in INSTALL.md on GitHub.'],
+  ['How do I install it?', 'Windows: run the installer; it needs no admin rights. Windows may warn that the file is not signed: click More info, then Run anyway. Linux: install the .deb with sudo apt install ./prismo_1.1.0_amd64.deb so the libraries it needs come along. Step by step guide in INSTALL.md on GitHub.'],
 ]
 
 function Faq() {
@@ -409,7 +437,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.png" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.0.1. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.1.0. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />
