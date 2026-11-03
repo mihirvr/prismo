@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class ViewOptionsTest {
@@ -68,8 +69,28 @@ class ViewOptionsTest {
         assertEquals(new ViewOptions(MediaFilter.RAW, MediaSort.SIZE, true),
                 ViewOptions.fromSetting("RAW,SIZE,desc"));
         for (String bad : new String[] {null, "", "PHOTOS", "PHOTOS,NAME", "PHOTOS,NAME,up", "GONE,NAME,asc",
-                "PHOTOS,GONE,desc", "PHOTOS,NAME,asc,extra"}) {
+                "PHOTOS,GONE,desc", "PHOTOS,NAME,asc,jpg,extra"}) {
             assertEquals(ViewOptions.DEFAULT, ViewOptions.fromSetting(bad), String.valueOf(bad));
         }
+    }
+
+    @Test
+    void typesAreKeptNarrowTheSqlAndOldTypeFiltersComeBackAsTypes() {
+        ViewOptions chosen = ViewOptions.DEFAULT.withTypes(Set.of("png", "jpeg", "gone"));
+        assertEquals(Set.of("jpg", "png"), chosen.types(), "jpeg counts as JPG; unknown types are dropped");
+        assertEquals("ALL,DATE_TAKEN,desc,jpg+png", chosen.toSetting());
+        assertEquals(chosen, ViewOptions.fromSetting(chosen.toSetting()));
+        assertEquals("extension IN ('jpg', 'jpeg', 'png')", chosen.sqlCondition());
+        assertEquals("media_type = 'photo' AND extension IN ('jpg', 'jpeg', 'png')",
+                chosen.withFilter(MediaFilter.PHOTOS).sqlCondition());
+        assertEquals("JPG, PNG", chosen.filterLabel());
+        assertEquals("Photos, JPG, PNG", chosen.withFilter(MediaFilter.PHOTOS).filterLabel());
+        assertTrue(chosen.isFiltered());
+        assertFalse(ViewOptions.DEFAULT.isFiltered());
+        assertEquals("All media", ViewOptions.DEFAULT.filterLabel());
+
+        assertEquals(ViewOptions.DEFAULT.withSort(MediaSort.NAME).withTypes(Set.of("heic")),
+                ViewOptions.fromSetting("HEIC,NAME,asc"), "the old HEIC filter, saved by 1.0.x");
+        assertEquals(Set.of("jpg"), ViewOptions.fromSetting("JPEG,DATE_TAKEN,desc").types());
     }
 }

@@ -52,6 +52,12 @@ public final class ThumbnailGenerator {
      * once, so they are tried again. 2 = 1.0.1 (tiled HEIC).
      */
     public static final int REVISION = 2;
+    /**
+     * Raised when video thumbnails are made differently; the video thumbnails already made are then made again once,
+     * because a made thumbnail never fails (so {@link #REVISION}'s markers don't cover it). 1 = 1.1.0: the video's
+     * cover, or a frame at about 10 % checked for brightness, instead of the frame at 1 s.
+     */
+    public static final int VIDEO_REVISION = VideoThumbnailer.REVISION;
     private static final float JPEG_QUALITY = 0.85f;
     private static final Set<String> JPEG = Set.of("jpg", "jpeg", "jpe", "jfif");
     /** An image this small is read whole even in the warm-up's quick pass: it costs about as much as a preview. */

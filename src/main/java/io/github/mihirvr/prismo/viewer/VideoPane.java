@@ -47,8 +47,10 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelFormat;
 import javafx.scene.image.WritableImage;
+import javafx.scene.input.KeyCharacterCombination;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.HBox;
@@ -96,6 +98,10 @@ final class VideoPane extends StackPane {
     /** Left / Right in a video: a shorter skip than J / L. */
     static final long ARROW_SKIP_MICROS = 5_000_000;
     static final long SUBTITLE_DELAY_STEP_MICROS = 100_000;
+    /** [ and ] change the speed by this much (1.1.0); &lt; and &gt; go along {@link #SPEEDS}. */
+    static final double FINE_SPEED_STEP = 0.1;
+    /** Ctrl+Left / Ctrl+Right jump this far (1.1.0, as in VLC). */
+    static final long MINUTE_SKIP_MICROS = 60_000_000;
     private static final double VOLUME_STEP = 0.1;
     private static final long SAVE_EVERY_MICROS = 5_000_000;
     private static final Duration NOTE_TIME = Duration.seconds(1.6);
@@ -127,6 +133,10 @@ final class VideoPane extends StackPane {
     private final Button nextMedia = new Button();
     private final Slider seek = new Slider(0, 1, 0);
     private final Label time = new Label(PlaybackTime.format(0, 0));
+    /** The time label shows the time left instead of the time played (1.1.0). */
+    private final BooleanProperty remainingShown = new SimpleBooleanProperty(false);
+    /** The time under the mouse on the seek bar (1.1.0). */
+    private final Tooltip seekTip = new Tooltip();
     private final MenuButton subtitlesButton = new MenuButton();
     private final MenuButton soundButton = new MenuButton();
     private final MenuButton speedButton = new MenuButton();
@@ -173,6 +183,8 @@ final class VideoPane extends StackPane {
     private List<SubtitleSources.Source> subtitleSources = List.of();
     /** The chosen entry of {@link #subtitleSources}, or -1 for Off. */
     private int subtitleChoice = -1;
+    /** The subtitles C turned off, so C turns the same ones back on; -1 = none yet. */
+    private int lastSubtitleChoice = -1;
     private Subtitles subtitles = Subtitles.NONE;
     /** Positive: subtitles come later than the file says. */
     private long subtitleDelayMicros;
@@ -197,6 +209,30 @@ final class VideoPane extends StackPane {
 
         seek.getStyleClass().add("viewer-seek");
         HBox.setHgrow(seek, Priority.ALWAYS);
+        // Hovering the seek bar shows only the time under the mouse, just above the bar.
+        seek.addEventHandler(MouseEvent.MOUSE_MOVED, event -> {
+            double seconds = secondsAt(event.getX());
+            if (seconds < 0 || player == null) {
+                seekTip.hide();
+                return;
+            }
+            seekTip.setText(PlaybackTime.clock(seconds));
+            seekTip.show(seek, event.getScreenX() - 18, seek.localToScreen(0, 0).getY() - 34);
+        });
+        seek.addEventHandler(MouseEvent.MOUSE_EXITED, _ -> seekTip.hide());
+        seek.addEventHandler(MouseEvent.MOUSE_PRESSED, _ -> seekTip.hide());
+        seekTip.getStyleClass().add("seek-tip");
+        // Clicking the time switches between time played and time left.
+        time.getStyleClass().add("viewer-time-toggle");
+        time.setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.PRIMARY) {
+                remainingShown.set(!remainingShown.get());
+                if (player != null) {
+                    showTimeText(player.position() / 1e6, player.durationMicros() / 1e6);
+                }
+                event.consume();
+            }
+        });
         seek.valueProperty().addListener((_, _, value) -> {
             if (!followingPlayback && player != null) {
                 player.seek(Math.round(value.doubleValue() * 1_000_000));
@@ -219,7 +255,7 @@ final class VideoPane extends StackPane {
                 player.setMuted(on);
             }
         });
-        playPause.setTooltip(new Tooltip("Play / pause (Space)"));
+        playPause.setTooltip(new Tooltip("Play / pause (Space or K)"));
         playPause.setOnAction(_ -> togglePlay());
         showPlaying(true);
         back.setGraphic(Icon.SKIP_BACK.node(ICON_SIZE));
@@ -229,15 +265,15 @@ final class VideoPane extends StackPane {
         forward.setTooltip(new Tooltip("Forward 10 s (L)"));
         forward.setOnAction(_ -> skip(SKIP_MICROS));
         previousMedia.setGraphic(Icon.PREVIOUS_MEDIA.node(ICON_SIZE));
-        previousMedia.setTooltip(new Tooltip("Previous (Page Up)"));
+        previousMedia.setTooltip(new Tooltip("Previous (Page Up or Shift+P)"));
         nextMedia.setGraphic(Icon.NEXT_MEDIA.node(ICON_SIZE));
-        nextMedia.setTooltip(new Tooltip("Next (Page Down)"));
+        nextMedia.setTooltip(new Tooltip("Next (Page Down or Shift+N)"));
 
         subtitlesButton.setGraphic(Icon.SUBTITLES.node(ICON_SIZE));
-        subtitlesButton.setTooltip(new Tooltip("Subtitles (C)"));
+        subtitlesButton.setTooltip(new Tooltip("Subtitles (C on / off, V next)"));
         soundButton.setGraphic(Icon.SOUND_TRACK.node(ICON_SIZE));
-        soundButton.setTooltip(new Tooltip("Sound track (A)"));
-        speedButton.setTooltip(new Tooltip("Speed ([ slower, ] faster)"));
+        soundButton.setTooltip(new Tooltip("Sound track (B)"));
+        speedButton.setTooltip(new Tooltip("Speed (< slower, > faster, = normal)"));
         speedButton.getStyleClass().add("viewer-speed");
         speed.addListener((_, _, value) -> {
             if (player != null) {
@@ -247,7 +283,7 @@ final class VideoPane extends StackPane {
         });
         speedButton.setText(speedText(1));
         loopButton.setGraphic(Icon.LOOP.node(ICON_SIZE));
-        loopButton.setTooltip(new Tooltip("Loop: play again from the start at the end"));
+        loopButton.setTooltip(new Tooltip("Loop (Shift+L)"));
         for (Control control : new Control[] {previousMedia, playPause, nextMedia, back, forward, mute, subtitlesButton,
                 soundButton, loopButton}) {
             control.getStyleClass().add("icon-button");
@@ -471,13 +507,35 @@ final class VideoPane extends StackPane {
         picture.setFitHeight(sideways ? getWidth() : getHeight());
     }
 
+    /** The time label: played or left (clicking it switches), then the length. */
+    private void showTimeText(double current, double total) {
+        time.setText(remainingShown.get() ? PlaybackTime.formatRemaining(current, total)
+                : PlaybackTime.format(current, total));
+    }
+
+    /** True = the time label shows the time left ("-11:25 / 12:30"); clicking the label switches. Saved. */
+    BooleanProperty remainingShownProperty() {
+        return remainingShown;
+    }
+
+    /** The time at {@code x} (in the seek bar's own coordinates), for the hover tooltip; -1 off the track. */
+    private double secondsAt(double x) {
+        javafx.scene.Node track = seek.lookup(".track");
+        if (track == null || seek.getMax() <= 0) {
+            return -1;
+        }
+        javafx.geometry.Bounds bounds = track.getBoundsInParent();
+        double fraction = Math.clamp((x - bounds.getMinX()) / bounds.getWidth(), 0, 1);
+        return seek.getMin() + fraction * (seek.getMax() - seek.getMin());
+    }
+
     private void showTime() {
         if (player == null) {
             return;
         }
         long position = player.position();
         double current = position / 1e6;
-        time.setText(PlaybackTime.format(current, player.durationMicros() / 1e6));
+        showTimeText(current, player.durationMicros() / 1e6);
         if (!seek.isValueChanging()) {
             followingPlayback = true;
             seek.setValue(current);
@@ -504,7 +562,7 @@ final class VideoPane extends StackPane {
 
     // --- Controls (buttons, keys and the right-click menu all come here) ---
 
-    /** Space or the button. At the end, plays again from the start. */
+    /** Space, K or the button. At the end, plays again from the start. */
     void togglePlay() {
         if (player == null) {
             return;
@@ -537,6 +595,28 @@ final class VideoPane extends StackPane {
         }
     }
 
+    /** End: the last moment of the video (1.1.0). */
+    void toEnd() {
+        if (player != null && player.durationMicros() > 0) {
+            player.seek(Math.max(0, player.durationMicros() - END_SLACK_MICROS));
+        }
+    }
+
+    /** 0 to 9: that tenth of the video (0 = the start, 5 = the middle), as on YouTube (1.1.0). */
+    void seekToTenth(int tenth) {
+        if (player != null && player.durationMicros() > 0) {
+            player.seek(player.durationMicros() * Math.clamp(tenth, 0, 9) / 10);
+            showNote(tenth * 10 + "%");
+        }
+    }
+
+    /** T: the time, as a note over the video (1.1.0). */
+    void announceTime() {
+        if (player != null) {
+            showNote(PlaybackTime.format(player.position() / 1e6, player.durationMicros() / 1e6));
+        }
+    }
+
     /** , and . : one picture back or on (pauses). */
     void step(int pictures) {
         if (player != null) {
@@ -565,9 +645,30 @@ final class VideoPane extends StackPane {
         showNote(muted.get() ? "Muted" : "Volume " + Math.round(volume.getValue() * 100) + "%");
     }
 
-    /** [ and ] : the next speed down or up the list. */
+    /** &lt; and &gt; (Shift+, and Shift+.): the next speed down or up the list. */
     void changeSpeed(int steps) {
         setSpeed(nextSpeed(speed.get(), steps));
+    }
+
+    /** [ and ] : a little slower or faster ({@link #FINE_SPEED_STEP}), between 0.5 and 2 (1.1.0). */
+    void fineSpeed(int steps) {
+        setSpeed(fineSpeed(speed.get(), steps));
+    }
+
+    /**
+     * {@code current} moved {@code steps} fine steps to the next multiples of the step in that direction (1.25 up is
+     * 1.3, down is 1.2), kept between 0.5 and 2.
+     */
+    static double fineSpeed(double current, int steps) {
+        double inSteps = current / FINE_SPEED_STEP;
+        double from = steps > 0 ? Math.floor(inSteps + 1e-9) : Math.ceil(inSteps - 1e-9);
+        double next = (from + steps) * FINE_SPEED_STEP;
+        return Math.clamp(Math.round(next * 100) / 100.0, SPEEDS[0], SPEEDS[SPEEDS.length - 1]);
+    }
+
+    /** = : normal speed (1.1.0). */
+    void normalSpeed() {
+        setSpeed(1);
     }
 
     /** The speed {@code steps} along {@link #SPEEDS} from the one nearest {@code current}; stops at the ends. */
@@ -592,7 +693,24 @@ final class VideoPane extends StackPane {
         showNote(loopButton.isSelected() ? "Loop on" : "Loop off");
     }
 
-    /** C: the next subtitles that can be shown, then Off, then round again. */
+    /**
+     * C: captions off, or back on (the ones shown last, else the first that can be shown), as on YouTube (1.1.0).
+     */
+    void toggleCaptions() {
+        if (subtitleChoice >= 0) {
+            lastSubtitleChoice = subtitleChoice;
+            chooseSubtitles(-1, true);
+            return;
+        }
+        if (lastSubtitleChoice >= 0 && lastSubtitleChoice < subtitleSources.size()
+                && subtitleSources.get(lastSubtitleChoice).supported()) {
+            chooseSubtitles(lastSubtitleChoice, true);
+        } else {
+            nextSubtitles();
+        }
+    }
+
+    /** V: the next subtitles that can be shown, then Off, then round again (as in VLC). */
     void nextSubtitles() {
         for (int i = subtitleChoice + 1; i < subtitleSources.size(); i++) {
             if (subtitleSources.get(i).supported()) {
@@ -637,7 +755,7 @@ final class VideoPane extends StackPane {
         }
     }
 
-    /** Z / X: subtitles earlier or later by {@link #SUBTITLE_DELAY_STEP_MICROS}; 0 = back to what the file says. */
+    /** G / H: subtitles earlier or later by {@link #SUBTITLE_DELAY_STEP_MICROS}; 0 = back to what the file says. */
     void shiftSubtitles(long micros) {
         subtitleDelayMicros = micros == 0 ? 0 : subtitleDelayMicros + micros;
         showNote("Subtitle delay " + delayText(subtitleDelayMicros));
@@ -645,7 +763,7 @@ final class VideoPane extends StackPane {
         updateMenus();
     }
 
-    /** A: the next sound track. */
+    /** B: the next sound track. */
     void nextSoundTrack() {
         if (info == null || player == null || info.audioTracks().size() < 2) {
             showNote("This video has one sound track");
@@ -780,19 +898,20 @@ final class VideoPane extends StackPane {
             items.add(choice);
         }
         if (subtitleSources.isEmpty()) {
-            MenuItem none = new MenuItem("None found (an .srt file named like the video works)");
+            MenuItem none = new MenuItem("None found");
             none.setDisable(true);
             items.add(none);
         }
         items.add(Menus.item("Choose subtitle file…", null, null, this::chooseSubtitleFile));
-        items.add(Menus.item("Next subtitles", null, new KeyCodeCombination(KeyCode.C), this::nextSubtitles));
+        items.add(Menus.item("Subtitles on / off", null, new KeyCodeCombination(KeyCode.C), this::toggleCaptions));
+        items.add(Menus.item("Next subtitles", null, new KeyCodeCombination(KeyCode.V), this::nextSubtitles));
         items.add(new SeparatorMenuItem());
         MenuItem delay = new MenuItem("Delay: " + delayText(subtitleDelayMicros));
         delay.setDisable(true);
         items.add(delay);
-        items.add(Menus.item("Earlier by 0.1 s", null, new KeyCodeCombination(KeyCode.Z),
+        items.add(Menus.item("Earlier by 0.1 s", null, new KeyCodeCombination(KeyCode.G),
                 () -> shiftSubtitles(-SUBTITLE_DELAY_STEP_MICROS)));
-        items.add(Menus.item("Later by 0.1 s", null, new KeyCodeCombination(KeyCode.X),
+        items.add(Menus.item("Later by 0.1 s", null, new KeyCodeCombination(KeyCode.H),
                 () -> shiftSubtitles(SUBTITLE_DELAY_STEP_MICROS)));
         MenuItem reset = Menus.item("Reset delay", null, null, () -> shiftSubtitles(0));
         reset.setDisable(subtitleDelayMicros == 0);
@@ -837,7 +956,7 @@ final class VideoPane extends StackPane {
         }
         if (tracks.size() > 1) {
             items.add(new SeparatorMenuItem());
-            items.add(Menus.item("Next sound track", null, new KeyCodeCombination(KeyCode.A), this::nextSoundTrack));
+            items.add(Menus.item("Next sound track", null, new KeyCodeCombination(KeyCode.B), this::nextSoundTrack));
         }
         return items;
     }
@@ -853,16 +972,31 @@ final class VideoPane extends StackPane {
             items.add(choice);
         }
         items.add(new SeparatorMenuItem());
-        items.add(Menus.item("Slower", null, new KeyCodeCombination(KeyCode.OPEN_BRACKET), () -> changeSpeed(-1)));
-        items.add(Menus.item("Faster", null, new KeyCodeCombination(KeyCode.CLOSE_BRACKET), () -> changeSpeed(1)));
+        items.add(Menus.item("Slower", null, new KeyCharacterCombination("<"), () -> changeSpeed(-1)));
+        items.add(Menus.item("Faster", null, new KeyCharacterCombination(">"), () -> changeSpeed(1)));
+        items.add(Menus.item("A little slower", null, new KeyCodeCombination(KeyCode.OPEN_BRACKET),
+                () -> fineSpeed(-1)));
+        items.add(Menus.item("A little faster", null, new KeyCodeCombination(KeyCode.CLOSE_BRACKET),
+                () -> fineSpeed(1)));
+        items.add(Menus.item("Normal speed", null, new KeyCharacterCombination("="), this::normalSpeed));
         return items;
     }
 
-    /** The video's part of the viewer's right-click menu: playback, then subtitles / sound / speed submenus. */
+    /**
+     * The viewer's right-click menu for a video (1.1.0): Playback, Audio and Subtitles submenus, opening on hover.
+     */
     List<MenuItem> menuItems() {
+        Menu playback = Menus.submenu("Playback", Icon.PLAY, playbackItems());
+        Menu audio = Menus.submenu("Audio", Icon.VOLUME, audioItems());
+        Menu subtitles = Menus.submenu("Subtitles", Icon.SUBTITLES, subtitleItems());
+        return List.of(playback, audio, subtitles);
+    }
+
+    /** Play / pause, the jumps, frame steps, speed and loop. */
+    private List<MenuItem> playbackItems() {
         List<MenuItem> items = new ArrayList<>();
         boolean playing = player != null && player.isPlaying();
-        items.add(Menus.item(playing ? "Pause" : "Play", playing ? Icon.PAUSE : Icon.PLAY,
+        items.add(Menus.item(playing ? "Pause" : "Play", playing ? Icon.PAUSE : Icon.PLAY, // also K
                 new KeyCodeCombination(KeyCode.SPACE), this::togglePlay));
         items.add(Menus.item("Back 10 s", Icon.SKIP_BACK, new KeyCodeCombination(KeyCode.J), () -> skip(-SKIP_MICROS)));
         items.add(Menus.item("Forward 10 s", Icon.SKIP_FORWARD, new KeyCodeCombination(KeyCode.L),
@@ -872,23 +1006,33 @@ final class VideoPane extends StackPane {
                 () -> skip(ARROW_SKIP_MICROS)));
         items.add(Menus.item("Previous picture", null, new KeyCodeCombination(KeyCode.COMMA), () -> step(-1)));
         items.add(Menus.item("Next picture", null, new KeyCodeCombination(KeyCode.PERIOD), () -> step(1)));
+        items.add(Menus.item("Back 1 min", null, new KeyCodeCombination(KeyCode.LEFT, KeyCombination.SHORTCUT_DOWN),
+                () -> skip(-MINUTE_SKIP_MICROS)));
+        items.add(Menus.item("Forward 1 min", null, new KeyCodeCombination(KeyCode.RIGHT, KeyCombination.SHORTCUT_DOWN),
+                () -> skip(MINUTE_SKIP_MICROS)));
         items.add(Menus.item("From the start", null, new KeyCodeCombination(KeyCode.HOME), this::restart));
+        items.add(Menus.item("To the end", null, new KeyCodeCombination(KeyCode.END), this::toEnd));
+        items.add(Menus.item("Show the time", null, new KeyCodeCombination(KeyCode.T), this::announceTime));
         items.add(new SeparatorMenuItem());
-        Menu subtitleMenu = new Menu("Subtitles", Icon.SUBTITLES.node(Menus.ICON_SIZE));
-        subtitleMenu.getItems().setAll(subtitleItems());
-        items.add(subtitleMenu);
-        Menu soundMenu = new Menu("Sound track", Icon.SOUND_TRACK.node(Menus.ICON_SIZE));
-        List<MenuItem> sound = soundItems();
-        soundMenu.getItems().setAll(sound);
-        soundMenu.setDisable(sound.size() < 2);
-        items.add(soundMenu);
         Menu speedMenu = new Menu("Speed: " + speedText(speed.get()));
         speedMenu.getItems().setAll(speedItems());
         items.add(speedMenu);
         CheckMenuItem loop = new CheckMenuItem("Loop", Icon.LOOP.node(Menus.ICON_SIZE));
+        loop.setAccelerator(new KeyCodeCombination(KeyCode.L, KeyCombination.SHIFT_DOWN));
         loop.setSelected(loopButton.isSelected());
         loop.setOnAction(_ -> toggleLoop());
         items.add(loop);
+        return items;
+    }
+
+    /** The sound tracks (when there is more than one), mute and volume. */
+    private List<MenuItem> audioItems() {
+        List<MenuItem> items = new ArrayList<>();
+        List<MenuItem> sound = soundItems();
+        if (sound.size() >= 2) {
+            items.addAll(sound);
+            items.add(new SeparatorMenuItem());
+        }
         items.add(Menus.item(muted.get() ? "Unmute" : "Mute", muted.get() ? Icon.VOLUME : Icon.MUTED,
                 new KeyCodeCombination(KeyCode.M), this::toggleMute));
         items.add(Menus.item("Volume up", null, new KeyCodeCombination(KeyCode.UP), this::volumeUp));
@@ -956,6 +1100,7 @@ final class VideoPane extends StackPane {
         showPlaying(true);
         subtitleSources = List.of();
         subtitleChoice = -1;
+        lastSubtitleChoice = -1;
         subtitles = Subtitles.NONE;
         subtitleDelayMicros = 0;
         picked = TrackChoice.Picked.NOTHING;

@@ -38,6 +38,16 @@ public enum MediaType {
         return Optional.ofNullable(BY_EXTENSION.get(extension.toLowerCase(Locale.ROOT)));
     }
 
+    /** Every extension Prismo indexes (lower case, no dot). */
+    public static java.util.Set<String> knownExtensions() {
+        return BY_EXTENSION.keySet();
+    }
+
+    /** True for an extension Prismo indexes (lower case, no dot). */
+    public static boolean isKnown(String extension) {
+        return BY_EXTENSION.containsKey(extension);
+    }
+
     /** The lower-case extension of a file name without the dot, or "" if it has none. */
     public static String extensionOf(String fileName) {
         int dot = fileName.lastIndexOf('.');

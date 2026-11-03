@@ -2,6 +2,10 @@ package io.github.mihirvr.prismo;
 
 import io.github.mihirvr.prismo.platform.AppPaths;
 import io.github.mihirvr.prismo.video.VideoNatives;
+import io.github.mihirvr.prismo.viewer.FolderListing;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
 import javafx.application.Application;
 
 /**
@@ -25,6 +29,25 @@ public final class Launcher {
         // FFmpeg's native files are unpacked into Prismo's cache, not into ~/.javacpp in the home folder.
         VideoNatives.useCacheDir(paths.cacheDir().resolve("native"));
 
-        Application.launch(PrismoApp.class, args);
+        // A photo or video opened from File Explorer ("Open with", or the default app) comes as the first argument:
+        // it opens in the standalone viewer, without the library (1.1.0). Anything else starts the app as before.
+        if (opensAFile(args)) {
+            Application.launch(StandaloneViewer.class, args);
+        } else {
+            Application.launch(PrismoApp.class, args);
+        }
+    }
+
+    /** True if the first argument is a photo or video file that exists. */
+    static boolean opensAFile(String[] args) {
+        if (args.length == 0 || args[0].isBlank()) {
+            return false;
+        }
+        try {
+            Path file = Path.of(args[0]);
+            return Files.isRegularFile(file) && FolderListing.isMedia(file);
+        } catch (InvalidPathException e) {
+            return false;
+        }
     }
 }

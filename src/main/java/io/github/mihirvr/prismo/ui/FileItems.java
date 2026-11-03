@@ -208,8 +208,8 @@ public final class FileItems {
         content.putFiles(items.stream().map(item -> item.ref().path().toFile()).toList());
         Clipboard.getSystemClipboard().setContent(content);
         status.accept(items.size() == 1
-                ? "Copied " + items.getFirst().ref().path().getFileName() + ". Paste it in a folder or another app."
-                : "Copied %,d files. Paste them in a folder or another app.".formatted(items.size()));
+                ? "Copied " + items.getFirst().ref().path().getFileName()
+                : "Copied %,d files".formatted(items.size()));
     }
 
     /** Asks for a new name (the extension stays), then renames the file; the row follows it. */

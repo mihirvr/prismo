@@ -11,6 +11,7 @@ public enum MediaSort {
     DATE_TAKEN("Date taken", "sort_date", Dates.FLOATING, true, "Newest first", "Oldest first"),
     DATE_MODIFIED("Date modified", "date_modified", Dates.INSTANT, true, "Newest first", "Oldest first"),
     DATE_ADDED("Date added", "date_added", Dates.INSTANT, true, "Newest first", "Oldest first"),
+    /** SQL sorts by NOCASE; {@link TimelineQuery#items} then puts the names in natural order (2 before 10). */
     NAME("Name", "file_name COLLATE NOCASE", Dates.NONE, false, "Z to A", "A to Z"),
     SIZE("Size", "size_bytes", Dates.NONE, true, "Largest first", "Smallest first"),
     /** Pixel count; unknown sizes count as 0. */

@@ -29,6 +29,12 @@ public final class ThumbnailCache {
         return shard(mediaId).resolve(mediaId + ".jpg");
     }
 
+    /** Deletes this item's thumbnail and failure marker, so it is made again when next needed. */
+    public void forget(long mediaId) throws IOException {
+        Files.deleteIfExists(fileFor(mediaId));
+        Files.deleteIfExists(failMarkerFor(mediaId));
+    }
+
     Path failMarkerFor(long mediaId) {
         return shard(mediaId).resolve(mediaId + ".fail");
     }

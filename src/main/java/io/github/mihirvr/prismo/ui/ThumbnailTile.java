@@ -4,6 +4,7 @@ import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
+import java.nio.file.Path;
 import java.util.Locale;
 import javafx.beans.value.ChangeListener;
 import javafx.css.PseudoClass;
@@ -13,12 +14,14 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.Node;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Label;
+import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.shape.Rectangle;
+import javafx.util.Duration;
 
 /**
  * One square thumbnail: the image cropped to a centred square (like a phone gallery), or a placeholder
@@ -73,6 +76,11 @@ final class ThumbnailTile extends StackPane {
     private final Region offlineShade = new Region();
     private final StackPane offlineMark = new StackPane(Icon.OFFLINE.node(OFFLINE_ICON_SIZE));
     private boolean offline;
+    /** A slashed eye, top right, on a file with the operating system's Hidden mark (1.1.0). */
+    private final StackPane osHiddenMark = new StackPane(Icon.EYE_OFF.node(OFFLINE_ICON_SIZE));
+    /** File name and short folder path on hover (1.1.0). */
+    private final Tooltip tooltip = new Tooltip();
+    private boolean tooltipShown = true;
     /** The file wasn't there when its thumbnail was asked for (ThumbnailService.Missing): asked again when back. */
     private boolean missing;
     private MediaRef shown;
@@ -127,6 +135,15 @@ final class ThumbnailTile extends StackPane {
         offlineMark.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
         StackPane.setAlignment(offlineMark, Pos.TOP_RIGHT);
         StackPane.setMargin(offlineMark, new Insets(6, 6, 0, 0));
+        osHiddenMark.getStyleClass().add("thumb-os-hidden-mark");
+        osHiddenMark.setMouseTransparent(true);
+        osHiddenMark.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+        osHiddenMark.setVisible(false);
+        StackPane.setAlignment(osHiddenMark, Pos.TOP_RIGHT);
+        StackPane.setMargin(osHiddenMark, new Insets(6, 6, 0, 0));
+        tooltip.setShowDelay(Duration.millis(600));
+        // A tooltip gets the keys first and would take Esc to close itself: Esc must stay the grid's and viewer's.
+        tooltip.setHideOnEscape(false);
         check.getStyleClass().add("thumb-check");
         check.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
         StackPane.setAlignment(check, Pos.TOP_LEFT);
@@ -138,7 +155,7 @@ final class ThumbnailTile extends StackPane {
         clip.setArcHeight(CORNER_RADIUS * 2);
         setClip(clip);
         getChildren().addAll(view, placeholder, offlineShade, hover, selectedTint, favorite, videoBadge, progress,
-                offlineMark, focusRing, check);
+                osHiddenMark, offlineMark, focusRing, check);
     }
 
     /** The file this tile shows, or null if it's empty. */
@@ -195,6 +212,40 @@ final class ThumbnailTile extends StackPane {
         favorite.setVisible(on);
     }
 
+    /** A slashed eye, top right: the file has the operating system's Hidden mark (1.1.0). */
+    void setOsHidden(boolean on) {
+        osHiddenMark.setVisible(on);
+    }
+
+    /** No hover tooltip (the filmstrip: the viewer above already names the file). */
+    void setTooltipShown(boolean on) {
+        tooltipShown = on;
+        updateTooltip();
+    }
+
+    /** The hover tooltip: the file name, then where it is ({@link #tooltipText}). */
+    private void updateTooltip() {
+        if (shown == null || !tooltipShown) {
+            Tooltip.uninstall(this, tooltip);
+        } else {
+            tooltip.setText(tooltipText(shown.path()));
+            Tooltip.install(this, tooltip);
+        }
+    }
+
+    /** "IMG_1.jpg" then its folder, shortened to the last two names: "…\Goa\Day 1". */
+    static String tooltipText(Path path) {
+        Path folder = path.getParent();
+        String name = String.valueOf(path.getFileName());
+        if (folder == null) {
+            return name;
+        }
+        int count = folder.getNameCount();
+        String where = count <= 2 ? folder.toString()
+                : "…" + java.io.File.separator + folder.subpath(count - 2, count);
+        return name + "\n" + where;
+    }
+
     /** A video's length for its badge (0 = unknown: just the play mark). Call after {@link #show}. */
     void setVideoLength(double seconds) {
         if (videoBadge.isVisible()) {
@@ -234,6 +285,7 @@ final class ThumbnailTile extends StackPane {
         }
         clear();
         shown = ref;
+        updateTooltip();
         if (MediaType.fromExtension(ref.extension()).orElse(null) == MediaType.VIDEO) {
             videoBadge.setText("");
             videoBadge.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
@@ -259,6 +311,8 @@ final class ThumbnailTile extends StackPane {
         }
         stopWaiting();
         shown = null;
+        updateTooltip();
+        osHiddenMark.setVisible(false);
         focusRing.setVisible(false);
         setSelected(false);
         missing = false;

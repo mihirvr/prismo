@@ -8,15 +8,12 @@ package io.github.mihirvr.prismo.ui;
  * filter: hidden items are shown only on the Collections page "Hidden" ({@link MediaScope}).
  */
 public enum MediaFilter {
-    ALL("All", null),
+    ALL("All media", null),
     PHOTOS("Photos", "media_type = 'photo'"),
     VIDEOS("Videos", "media_type = 'video'"),
     GIFS("GIF", "media_type = 'gif'"),
     RAW("RAW", "media_type = 'raw'"),
-    JPEG("JPEG", "extension IN ('jpg', 'jpeg')"),
-    PNG("PNG", "extension = 'png'"),
-    HEIC("HEIC", "extension IN ('heic', 'heif')"),
-    WEBP("WEBP", "extension = 'webp'"),
+    // 1.1.0: JPEG, PNG, HEIC and WEBP moved to the Types menu (ViewOptions#extensions), where several can be ticked.
     /** Wider than tall. Square pictures and unknown sizes are in neither Landscape nor Portrait. */
     LANDSCAPE("Landscape", "width > height"),
     PORTRAIT("Portrait", "height > width"),

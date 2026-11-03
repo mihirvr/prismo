@@ -464,12 +464,16 @@
     -fx-text-fill: -prismo-text-muted;
 }
 
-.status-bar {
-    -fx-padding: 5 14 5 14;
-    -fx-font-size: 11px;
-    -fx-text-fill: -prismo-text-muted;
-    -fx-background-color: -prismo-surface;
-    -fx-border-color: -prismo-border transparent transparent transparent;
+/* Floats over the grid's bottom-left corner, only while there is something to say (1.1.0). */
+.status-note {
+    -fx-padding: 6 12 6 12;
+    -fx-font-size: 12px;
+    -fx-text-fill: -prismo-tooltip-text;
+    -fx-background-color: -prismo-tooltip-bg;
+    -fx-background-radius: 8;
+    -fx-translate-x: 12;
+    -fx-translate-y: -12;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 12, 0, 0, 3);
 }
 
 /* --- Empty pages --- */
@@ -639,6 +643,76 @@
     -fx-stroke: #ffffff;
 }
 
+/* 1.1.0: the viewer's filmstrip. The edges fade into the viewer's background. */
+.filmstrip {
+    -fx-background-color: transparent;
+}
+
+.filmstrip-fade-left {
+    -fx-background-color: linear-gradient(to right, -prismo-viewer-bg, transparent);
+}
+
+.filmstrip-fade-right {
+    -fx-background-color: linear-gradient(to left, -prismo-viewer-bg, transparent);
+}
+
+.filmstrip-tile {
+    -fx-cursor: hand;
+}
+
+.filmstrip .thumb-check,
+.filmstrip .thumb-tile:hover .thumb-check {
+    -fx-opacity: 0;
+}
+
+.filmstrip .thumb-focus-ring {
+    -fx-border-width: 2;
+}
+
+/* Full screen: the strip floats over the photo on a soft dark band that starts at the bottom edge (behind a
+   video's control bar too), so it has no hard edge anywhere. */
+.filmstrip-band {
+    -fx-background-color: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.4) 45%, rgba(0, 0, 0, 0.12) 80%, transparent);
+}
+
+.filmstrip.floating .filmstrip-fade {
+    -fx-background-color: transparent;
+}
+
+/* 1.1.0: next to the scroll bar while it is dragged or hovered: the letter, date or folder there. */
+.scrub-label {
+    -fx-background-color: -prismo-card;
+    -fx-background-radius: 8;
+    -fx-border-color: -prismo-border;
+    -fx-border-radius: 8;
+    -fx-padding: 6 12 6 12;
+    -fx-font-size: 14px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.35), 10, 0, 0, 2);
+}
+
+/* 1.1.0: the video time switches between played and left on a click. */
+.viewer-time-toggle {
+    -fx-cursor: hand;
+}
+
+/* 1.1.0: just the time under the mouse on the seek bar. */
+.seek-tip {
+    -fx-font-size: 12px;
+    -fx-padding: 3 7 3 7;
+}
+
+/* 1.1.0: a slashed eye on files with File Explorer's Hidden mark (shown when Settings lets them out of Hidden). */
+.thumb-os-hidden-mark {
+    -fx-background-color: rgba(0, 0, 0, 0.62);
+    -fx-background-radius: 5;
+    -fx-padding: 3;
+}
+
+.thumb-os-hidden-mark .icon-path {
+    -fx-stroke: #ffffff;
+}
 .offline-banner {
     -fx-background-color: -prismo-warning-tint;
     -fx-border-color: -prismo-border transparent -prismo-border transparent;
@@ -806,6 +880,17 @@
     -fx-background-color: -prismo-accent-tint;
     -fx-text-fill: -prismo-accent-text;
     -fx-font-weight: bold;
+}
+
+/* 1.1.0: the folder tree's thread lines with rounded elbows (CollectionsPage.FolderCell), and room for them. */
+.collections .tree-view .tree-cell {
+    -fx-indent: 16;
+}
+
+.tree-guide {
+    -fx-stroke: -prismo-border-strong;
+    -fx-stroke-width: 1;
+    -fx-fill: transparent;
 }
 
 /* Empty rows under the pages or the folders: no stripes, no hover. */
@@ -1604,9 +1689,4 @@
 
 .date-jump-cell:disabled {
     -fx-opacity: 0.35;
-}
-
-.date-jump-hint {
-    -fx-font-size: 11px;
-    -fx-text-fill: -prismo-text-faint;
 }

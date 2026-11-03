@@ -15,6 +15,13 @@ final class PlaybackTime {
         return clock(currentSeconds, hours) + " / " + clock(totalSeconds, hours);
     }
 
+    /** Like {@link #format}, with the time left instead of the time played: "-11:25 / 12:30" (1.1.0). */
+    static String formatRemaining(double currentSeconds, double totalSeconds) {
+        boolean hours = Double.isFinite(totalSeconds) && totalSeconds >= 3600;
+        double left = Double.isFinite(totalSeconds) ? Math.max(0, totalSeconds - Math.max(0, currentSeconds)) : 0;
+        return "-" + clock(left, hours) + " / " + clock(totalSeconds, hours);
+    }
+
     /** One time on its own ("1:23", or "1:02:03" from an hour on), e.g. "Resumed at 1:23". */
     static String clock(double seconds) {
         return clock(seconds, Double.isFinite(seconds) && seconds >= 3600);

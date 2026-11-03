@@ -4,17 +4,19 @@ import java.util.ArrayList;
 import java.util.List;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
+import javafx.scene.input.KeyEvent;
 import javafx.scene.input.KeyCombination;
 
 /**
  * What the user can do to one item: the same list in the viewer's top bar, the right-click menu and the keys
- * (F favorite, H hide, Delete to Trash; in Trash, Delete = delete permanently). Each changes only Prismo's own
+ * (Ctrl+D favorite, Ctrl+H hide, Delete to Trash; in Trash, Delete = delete permanently. 1.1.0: F and H became
+ * full screen and the subtitle delay, as in YouTube and VLC). Each changes only Prismo's own
  * database, except {@link #DELETE_PERMANENTLY}, the one action that removes the file (PROJECT.md "Trash"), and
  * the File Explorer pair, which set or clear the file's Hidden attribute (P6; Windows only).
  */
 public enum ItemAction {
-    FAVORITE("Add to Favorites", Icon.HEART, null, KeyCode.F),
-    UNFAVORITE("Remove from Favorites", Icon.HEART_FILLED, null, KeyCode.F),
+    FAVORITE("Add to Favorites", Icon.HEART, null, KeyCode.D),
+    UNFAVORITE("Remove from Favorites", Icon.HEART_FILLED, null, KeyCode.D),
     HIDE("Hide", Icon.EYE_OFF, null, KeyCode.H),
     UNHIDE("Unhide", Icon.EYE, null, KeyCode.H),
     /** Sets the file's Hidden attribute (File Explorer then hides it too). */
@@ -84,10 +86,28 @@ public enum ItemAction {
         return forKey(code, item, false);
     }
 
-    /** The action a key does to {@code item}, or null if that key does nothing to it. */
+    /**
+     * The action key of a key press: {@code D} for Ctrl+D, {@code H} for Ctrl+H (Cmd on macOS), {@code DELETE} for
+     * Delete alone; null for anything else. Pass it to {@link #forKey} or {@link #forSelectionKey}.
+     */
+    public static KeyCode keyOf(KeyEvent event) {
+        if (event.isAltDown() || event.isShiftDown()) {
+            return null;
+        }
+        KeyCode code = event.getCode();
+        if (code == KeyCode.DELETE) {
+            return event.isShortcutDown() ? null : code;
+        }
+        return (code == KeyCode.D || code == KeyCode.H) && event.isShortcutDown() ? code : null;
+    }
+
+    /**
+     * The action an action key ({@link #keyOf}: D, H or DELETE) does to {@code item}, or null if that key does
+     * nothing to it.
+     */
     public static ItemAction forKey(KeyCode code, TimelineItem item, boolean osHiddenShown) {
         return switch (code) {
-            case F -> item.trashed() ? null : item.favorite() ? UNFAVORITE : FAVORITE;
+            case D -> item.trashed() ? null : item.favorite() ? UNFAVORITE : FAVORITE;
             case H -> item.trashed() ? null : eye(item, osHiddenShown);
             case DELETE -> item.trashed() ? DELETE_PERMANENTLY : TRASH;
             default -> null;
@@ -111,7 +131,7 @@ public enum ItemAction {
         return List.of(allFavorite ? UNFAVORITE : FAVORITE, allHidden ? UNHIDE : HIDE, TRASH);
     }
 
-    /** The key's action for a selection ({@link #forSelection}), or null: F, H and Delete. */
+    /** The action key's action for a selection ({@link #forSelection}), or null: Ctrl+D, Ctrl+H and Delete. */
     public static ItemAction forSelectionKey(KeyCode code, List<TimelineItem> items, boolean osHiddenShown) {
         for (ItemAction action : forSelection(items, osHiddenShown)) {
             if (action.key == code) {
@@ -185,22 +205,28 @@ public enum ItemAction {
         return buttonText;
     }
 
-    /** The key shown next to it in menus (F, H, Delete), or null. */
+    /** The key shown next to it in menus (Ctrl+D, Ctrl+H, Delete), or null. */
     public KeyCombination shortcut() {
-        return key == null ? null : new KeyCodeCombination(key);
+        return key == null ? null : combination(key);
     }
 
-    /** "Add to Favorites (F)". */
+    /** D and H go with Ctrl (Cmd on macOS); Delete alone. */
+    private static KeyCombination combination(KeyCode key) {
+        return key == KeyCode.DELETE ? new KeyCodeCombination(key)
+                : new KeyCodeCombination(key, KeyCombination.SHORTCUT_DOWN);
+    }
+
+    /** "Add to Favorites (Ctrl+D)". */
     public String tooltip() {
-        return key == null ? menuText : menuText + " (" + key.getName() + ")";
+        return key == null ? menuText : menuText + " (" + shortcut().getDisplayText() + ")";
     }
 
     /**
-     * The key shown next to it for {@code item}: its own ({@link #shortcut()}), or H when H does this to that item
+     * The key shown next to it for {@code item}: its own ({@link #shortcut()}), or Ctrl+H when it does this to that item
      * (the eye of a file only hidden in File Explorer is "Unhide in File Explorer").
      */
     public KeyCombination shortcut(TimelineItem item, boolean osHiddenShown) {
-        return key == null && forKey(KeyCode.H, item, osHiddenShown) == this ? new KeyCodeCombination(KeyCode.H)
+        return key == null && forKey(KeyCode.H, item, osHiddenShown) == this ? combination(KeyCode.H)
                 : shortcut();
     }
 

@@ -259,11 +259,11 @@ public final class ItemActions implements ItemAction.Handler {
         return switch (action) {
             case FAVORITE -> "Added " + items + " to Favorites.";
             case UNFAVORITE -> "Removed " + items + " from Favorites.";
-            case HIDE -> "Hid " + items + ". Hidden items are only in Collections › Hidden.";
+            case HIDE -> "Hid " + items + ".";
             case UNHIDE -> (count == 1 ? "1 item is" : items + " are") + " no longer hidden.";
             case HIDE_IN_EXPLORER -> "Marked " + items + " Hidden in File Explorer.";
             case UNHIDE_IN_EXPLORER -> "Cleared the Hidden mark of " + items + " in File Explorer.";
-            case TRASH -> "Moved " + items + " to Trash (still on disk). Restore them from Collections › Trash.";
+            case TRASH -> "Moved " + items + " to Trash.";
             case RESTORE -> "Restored " + items + ".";
             case DELETE_PERMANENTLY -> "Deleted " + items + ".";
         };

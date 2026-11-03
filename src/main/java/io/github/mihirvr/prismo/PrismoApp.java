@@ -15,6 +15,7 @@ import io.github.mihirvr.prismo.index.FileOperations;
 import io.github.mihirvr.prismo.index.IgnoreRules;
 import io.github.mihirvr.prismo.index.IndexProgress;
 import io.github.mihirvr.prismo.index.Indexer;
+import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.index.MetadataReader;
 import io.github.mihirvr.prismo.platform.AppPaths;
 import io.github.mihirvr.prismo.platform.NetworkDrives;
@@ -37,6 +38,7 @@ import io.github.mihirvr.prismo.ui.Grouping;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.OfflineFolders;
+import io.github.mihirvr.prismo.ui.StatusNote;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.Theme;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
@@ -45,6 +47,10 @@ import io.github.mihirvr.prismo.ui.TimelineQuery;
 import io.github.mihirvr.prismo.ui.TimelineView;
 import io.github.mihirvr.prismo.ui.ViewOptions;
 import io.github.mihirvr.prismo.ui.ViewOptionsBar;
+import io.github.mihirvr.prismo.ui.GridView;
+import io.github.mihirvr.prismo.ui.Menus;
+import io.github.mihirvr.prismo.ui.FolderArrange;
+import io.github.mihirvr.prismo.ui.FolderSections;
 import io.github.mihirvr.prismo.ui.WindowPlacement;
 import io.github.mihirvr.prismo.video.TrackChoice;
 import io.github.mihirvr.prismo.viewer.MediaViewer;
@@ -55,9 +61,13 @@ import io.github.mihirvr.prismo.watch.FileWatcher;
 import java.io.IOException;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -95,6 +105,7 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.Slider;
+import javafx.scene.control.TextInputControl;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -133,9 +144,11 @@ public final class PrismoApp extends Application {
     private static final String THUMBNAIL_THREADS_SETTING = "thumbnails.threads";
     /** The {@link ThumbnailGenerator#REVISION} whose failure markers the cache holds. */
     private static final String THUMBNAILS_REVISION_SETTING = "thumbnails.revision";
+    private static final String VIDEO_THUMBNAILS_REVISION_SETTING = "thumbnails.video_revision";
     private static final String VOLUME_SETTING = "video.volume";
     private static final String MUTED_SETTING = "video.muted";
     private static final String SPEED_SETTING = "video.speed";
+    private static final String TIME_LEFT_SETTING = "video.time_left";
     /** Settings › Video: the box behind subtitles (P8). */
     private static final String SUBTITLE_BACKGROUND_SETTING = "video.subtitle_background";
     /** The sound and subtitle languages picked last ("English"; subtitles also "off"), for videos with no pick (P8). */
@@ -143,14 +156,14 @@ public final class PrismoApp extends Application {
     private static final String SUBTITLE_LANGUAGE_SETTING = "video.subtitle_language";
     /** Filters + Sort and Folders' "Include subfolders", kept across restarts (P7). */
     private static final String VIEW_SETTING = "timeline.view";
+    private static final String GRID_VIEW_SETTING = "grid.view";
+    private static final String ARRANGE_SETTING = "folders.arrange";
     private static final String INCLUDE_SUBFOLDERS_SETTING = "collections.include_subfolders";
     /** The app icon in these sizes; the system picks the one closest to what it needs (title bar, taskbar). */
     private static final int[] ICON_SIZES = {16, 20, 24, 32, 40, 48, 64, 128, 256};
     private static final double TOP_BAR_ICON_SIZE = 18;
-    /** Files still to index or to make thumbnails for from which the status bar says a big setup is running. */
+    /** Thumbnails still to make from which the status note says a big setup is running. */
     private static final int BIG_SETUP_FILES = 1000;
-    private static final String BIG_SETUP_NOTE =
-            "Setting up a big library: photos and videos may open slowly or stutter until this finishes";
     /** While indexing, show newly found files at most this often. */
     private static final long TIMELINE_RELOAD_NANOS = 3_000_000_000L;
     /** Watcher events are handled once a path has been quiet this long, but no later than MAX_WAIT. */
@@ -193,6 +206,8 @@ public final class PrismoApp extends Application {
     private double savedVolume = 1;
     private boolean savedMuted;
     private double savedSpeed = 1;
+    /** The video time shows the time left (1.1.0). */
+    private boolean savedTimeLeft;
     private boolean savedIncludeSubfolders = true;
     /** Settings › Hidden items. UI thread. */
     private final ObjectProperty<HiddenMode> hiddenMode = new SimpleObjectProperty<>(HiddenMode.DEFAULT);
@@ -247,10 +262,16 @@ public final class PrismoApp extends Application {
     private final AtomicLong latestTimelineLoad = new AtomicLong();
     /** The Filters + Sort choice. Set on the UI thread, read by the load thread. */
     private volatile ViewOptions viewOptions = ViewOptions.DEFAULT;
+    /** The View (Timeline, Folders, All files) of the Grid and Collections › Folders. UI thread. */
+    private GridView gridView = GridView.DEFAULT;
+    /** The Folders view's Arrange. UI thread. */
+    private FolderArrange folderArrange = FolderArrange.DEFAULT;
+    /** The enabled library folders, read with each Grid load: the Folders view's top folders. */
+    private volatile List<Path> gridRoots = List.of();
     /** UI thread only: the options of the items the Timeline shows now (null before the first load). */
     private ViewOptions shownOptions;
 
-    private final Label status = new Label("Starting…");
+    private final StatusNote status = new StatusNote();
     private final EmptyState timelinePlaceholder = new EmptyState();
     /** The "Library folders…" dialog; set in start(), also used by the empty Timeline's button. */
     private Runnable openLibraryFolders = () -> { };
@@ -261,7 +282,7 @@ public final class PrismoApp extends Application {
     private MediaViewer viewer;
     private CollectionsPage collections;
     private ViewOptionsBar viewBar;
-    private final ToggleButton timelineTab = new ToggleButton("Timeline");
+    private final ToggleButton timelineTab = new ToggleButton("Grid");
     private final ToggleButton collectionsTab = new ToggleButton("Collections");
 
     /** Runs on the JavaFX-Launcher thread, before any window exists, so slow setup here never freezes the UI. */
@@ -281,6 +302,7 @@ public final class PrismoApp extends Application {
         thumbnailCache = new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE);
         thumbnails = new ThumbnailService(thumbnailCache, new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
         forgetOldThumbnailFailures();
+        remakeOldVideoThumbnails();
         searcher = new Searcher(database);
         playbackPositions = new PlaybackPositions(database);
         trackChoices = new TrackChoices(database);
@@ -298,9 +320,12 @@ public final class PrismoApp extends Application {
         hiddenMode.set(HiddenMode.fromSetting(settings.get(HIDDEN_MODE_SETTING).orElse(null)));
         osHiddenShown.set(settings.get(OS_HIDDEN_SHOWN_SETTING).map(Boolean::parseBoolean).orElse(false));
         viewOptions = ViewOptions.fromSetting(settings.get(VIEW_SETTING).orElse(null)).withOsHiddenShown(osHiddenShown.get());
+        gridView = GridView.fromSetting(settings.get(GRID_VIEW_SETTING).orElse(null));
+        folderArrange = FolderArrange.fromSetting(settings.get(ARRANGE_SETTING).orElse(null));
         savedIncludeSubfolders = settings.get(INCLUDE_SUBFOLDERS_SETTING).map(Boolean::parseBoolean).orElse(true);
         savedVolume = number(VOLUME_SETTING, 0, 1, 1);
         savedSpeed = number(SPEED_SETTING, 0.5, 2, 1);
+        savedTimeLeft = settings.get(TIME_LEFT_SETTING).map(Boolean::parseBoolean).orElse(false);
         savedMuted = settings.get(MUTED_SETTING).map(Boolean::parseBoolean).orElse(false);
         ignoredFolders.set(IgnoreRules.fromSetting(settings.get(IGNORED_SETTING).orElse(null)));
         ignoreRulesNow = ignoredFolders.get();
@@ -436,7 +461,7 @@ public final class PrismoApp extends Application {
         timeline.setThumbnailSize(savedThumbnailSize);
         timeline.setPlaceholder(timelinePlaceholder);
         // HostServices opens a file in the system's default app (HEIC, RAW, "Open with default app").
-        FileItems fileItems = new FileItems(database, getHostServices()::showDocument, status::setText);
+        FileItems fileItems = new FileItems(database, getHostServices()::showDocument, status::say);
         timeline.setFileItems(fileItems);
         viewer = new MediaViewer(thumbnailLoader, playbackMemory(), fileItems);
         // Rename / Move: a folder counts as in the library if it's inside a library folder that is on.
@@ -451,6 +476,9 @@ public final class PrismoApp extends Application {
         viewer.videoVolumeProperty().set(savedVolume);
         viewer.videoMutedProperty().set(savedMuted);
         viewer.videoSpeedProperty().set(savedSpeed);
+        viewer.videoRemainingShownProperty().set(savedTimeLeft);
+        viewer.videoRemainingShownProperty().addListener((_, _, on) ->
+                settings.put(TIME_LEFT_SETTING, Boolean.toString(on)));
         viewer.setTrackMemory(trackMemory());
         viewer.subtitleBackgroundProperty().bindBidirectional(subtitleBackground);
         subtitleBackground.addListener((_, _, chosen) ->
@@ -485,7 +513,7 @@ public final class PrismoApp extends Application {
         // Favorite / hide / Trash / restore / delete, the same from every grid and the viewer.
         FileRemover remover = FileRemover.forThisComputer();
         ItemActions actions = new ItemActions(new MediaFlags(database), remover, thumbnailCache::fileFor,
-                items -> confirmDelete(stage, remover, items), Platform::runLater, status::setText,
+                items -> confirmDelete(stage, remover, items), Platform::runLater, status::say,
                 this::libraryChanged, hiddenMode::get);
         timeline.setOnAction(actions);
         searchResults.setOnAction(actions);
@@ -533,8 +561,8 @@ public final class PrismoApp extends Application {
         ToggleGroup tabs = new ToggleGroup();
         timelineTab.setToggleGroup(tabs);
         collectionsTab.setToggleGroup(tabs);
-        timelineTab.setTooltip(new Tooltip("Everything, by date (Ctrl+1)"));
-        collectionsTab.setTooltip(new Tooltip("Folders, Albums, Favorites, Recently Added, Hidden, Trash (Ctrl+2)"));
+        timelineTab.setTooltip(new Tooltip("Ctrl+1"));
+        collectionsTab.setTooltip(new Tooltip("Ctrl+2"));
         // Mouse clicks don't move keyboard focus to a tab (Ctrl+1 / Ctrl+2 switch them), so no focus ring
         // stays on the tab that isn't open.
         timelineTab.setFocusTraversable(false);
@@ -558,7 +586,19 @@ public final class PrismoApp extends Application {
         });
         HBox tabBar = new HBox(timelineTab, collectionsTab);
         tabBar.getStyleClass().add("tabs");
-        viewBar = new ViewOptionsBar(viewOptions.withOsHiddenShown(false));
+        viewBar = new ViewOptionsBar(viewOptions.withOsHiddenShown(false), gridView, folderArrange);
+        applyGridLayout();
+        viewBar.gridViewProperty().addListener((_, _, chosen) -> {
+            settings.put(GRID_VIEW_SETTING, chosen.settingValue());
+            gridView = chosen;
+            applyGridLayout();
+        });
+        viewBar.arrangeProperty().addListener((_, _, chosen) -> {
+            settings.put(ARRANGE_SETTING, chosen.toSetting());
+            folderArrange = chosen;
+            applyGridLayout();
+        });
+        collections.pageProperty().addListener((_, _, _) -> updateViewShown());
         viewBar.optionsProperty().addListener((_, _, options) -> {
             settings.put(VIEW_SETTING, options.toSetting());
             viewOptions = options.withOsHiddenShown(osHiddenShown.get());
@@ -621,9 +661,7 @@ public final class PrismoApp extends Application {
         goToDate.setTooltip(new Tooltip("Jump to a day or a month"));
         goToDate.setMinWidth(Region.USE_PREF_SIZE);
         goToDate.setOnAction(_ -> DateJump.show(goToDate, currentGrid()));
-        viewBar.getChildren().addAll(goToDate, viewSpacer, new Label("Size"), size);
-        status.getStyleClass().add("status-bar");
-        status.setMaxWidth(Double.MAX_VALUE);
+        viewBar.getChildren().addAll(goToDate, viewSpacer, size);
 
         // Shown while a library folder can't be reached: which one, and that nothing is lost.
         offlineBanner.getStyleClass().add("offline-banner");
@@ -639,8 +677,10 @@ public final class PrismoApp extends Application {
         offlineBanner.setVisible(false);
         offlineBanner.setManaged(false);
 
-        BorderPane main = new BorderPane(new StackPane(timeline, collections, searchResults),
-                new VBox(topBar, viewBar, offlineBanner), null, status, null);
+        // The status note floats over the grids' bottom-left corner, only while it has something to say.
+        StackPane grids = new StackPane(timeline, collections, searchResults, status);
+        StackPane.setAlignment(status, Pos.BOTTOM_LEFT);
+        BorderPane main = new BorderPane(grids, new VBox(topBar, viewBar, offlineBanner), null, null, null);
         // The viewer is an overlay over the whole window, hidden until a photo is opened.
         StackPane root = new StackPane(main, viewer);
         // A first start (or a saved place that no longer fits any screen) opens at the default size, made smaller
@@ -657,12 +697,19 @@ public final class PrismoApp extends Application {
         stage.setMinHeight(WindowPlacement.MIN_HEIGHT);
         placeWindow(stage);
         stage.setScene(scene);
+        Menus.closeOnScrollAndBlur(stage); // besides outside click and Esc: every menu, one rule
         navigation.install(scene); // the mouse's side buttons and Alt+Left / Alt+Right
         // The viewer handles Esc itself (leave full screen first, then close), so JavaFX's own Esc is turned off.
         stage.setFullScreenExitKeyCombination(KeyCombination.NO_MATCH);
-        stage.setFullScreenExitHint("Press F11 or Esc to leave full screen");
+        stage.setFullScreenExitHint("Press F or Esc to leave full screen");
         scene.getAccelerators().put(new KeyCodeCombination(KeyCode.F, KeyCombination.SHORTCUT_DOWN), () -> {
             if (!viewer.isOpen()) {
+                searchBar.focusField();
+            }
+        });
+        // "/" goes to search too, as on YouTube (1.1.0); not while typing in a text box.
+        scene.getAccelerators().put(new KeyCodeCombination(KeyCode.SLASH), () -> {
+            if (!viewer.isOpen() && !(scene.getFocusOwner() instanceof TextInputControl)) {
                 searchBar.focusField();
             }
         });
@@ -781,7 +828,29 @@ public final class PrismoApp extends Application {
         searchResults.setVisible(searching);
         timeline.setVisible(!searching && timelineTab.isSelected());
         collections.setVisible(!searching && collectionsTab.isSelected());
+        updateViewShown();
         updateSortLock();
+    }
+
+    /** The View menu goes with the Grid and Collections › Folders; elsewhere it is hidden. */
+    private void updateViewShown() {
+        viewBar.setViewShown(timeline.isVisible()
+                || collections.isVisible() && collections.page() == CollectionsPage.Page.FOLDERS);
+    }
+
+    /**
+     * Puts the View and Arrange on the Grid and Collections › Folders, on the items they already show (same photo,
+     * no reload). UI thread.
+     */
+    private void applyGridLayout() {
+        GridView view = gridView;
+        FolderArrange arrange = folderArrange;
+        timeline.setSectioner(view != GridView.FOLDERS ? null
+                : items -> FolderSections.build(items, gridRoots, true, arrange));
+        if (shownOptions != null) {
+            timeline.setHeaders(view.headers(shownOptions), view.dateOrdered(shownOptions));
+        }
+        collections.setLayout(view, arrange);
     }
 
     /** Recently Added has a fixed order: the Sort controls show it, locked, while that page is on screen. */
@@ -913,7 +982,7 @@ public final class PrismoApp extends Application {
                 loadTimeline();
                 var roots = libraryRoots.enabledRoots();
                 if (roots.isEmpty()) {
-                    Platform.runLater(() -> status.setText("No library folders yet. Click \"Library folders…\" to add one."));
+                    Platform.runLater(() -> status.progress(null)); // the empty grid says what to do
                     return;
                 }
                 watchNewRoots(roots); // before the walk, so nothing that changes during it is missed
@@ -921,8 +990,9 @@ public final class PrismoApp extends Application {
                 long[] lastLoad = {System.nanoTime() - TIMELINE_RELOAD_NANOS}; // the first photos show at once
                 int[] shownIndexed = {0};
                 IndexProgress indexed = indexer.index(roots, progress -> {
-                    Platform.runLater(() -> status.setText(withSetupNote(describe(progress),
-                            !progress.done() && progress.indexed() >= BIG_SETUP_FILES)));
+                    if (!progress.done()) {
+                        Platform.runLater(() -> status.progress(StatusNote.indexing(progress.found())));
+                    }
                     // A first index of a big folder takes a while: show what's found so far every few seconds.
                     if (progress.saved() > shownIndexed[0]
                             && System.nanoTime() - lastLoad[0] >= TIMELINE_RELOAD_NANOS) {
@@ -935,13 +1005,16 @@ public final class PrismoApp extends Application {
                     libraryChanged(); // also when the last count was shown before its rows were written
                 }
                 rescanTimer.execute(this::checkReachable);
-                startWarmUp(describe(indexed));
+                startWarmUp();
             } catch (InterruptedException e) {
                 // A library folder change stopped it (it starts a new run), or the app is shutting down.
                 log.info("Index run stopped");
             } catch (SQLException | RuntimeException e) {
                 log.error("Indexing failed", e);
-                Platform.runLater(() -> status.setText("Indexing failed: " + e.getMessage()));
+                Platform.runLater(() -> {
+                    status.progress(null);
+                    status.say("Indexing failed: " + e.getMessage());
+                });
             } finally {
                 synchronized (indexRunLock) {
                     indexRunThread = null;
@@ -977,14 +1050,34 @@ public final class PrismoApp extends Application {
             ViewOptions options = viewOptions;
             try {
                 long start = System.nanoTime();
+                gridRoots = libraryRoots.enabledRoots();
+                List<String> extensions = database.read(PrismoApp::extensionsInLibrary);
                 List<TimelineItem> items = database.read(c -> TimelineQuery.load(c, options, ZoneId.systemDefault()));
+                Platform.runLater(() -> {
+                    if (viewBar != null) {
+                        viewBar.setAvailableTypes(extensions);
+                    }
+                });
                 log.info("Timeline loaded: {} items in {} ms", items.size(), (System.nanoTime() - start) / 1_000_000);
                 Platform.runLater(() -> showTimeline(items, options));
             } catch (SQLException | RuntimeException e) {
                 log.warn("Could not load the timeline", e);
-                Platform.runLater(() -> status.setText("Could not load the timeline: " + e.getMessage()));
+                Platform.runLater(() -> status.say("Could not load the photos: " + e.getMessage()));
             }
         });
+    }
+
+    /** The extensions of the files in the library (not in Trash), for the Types menu. */
+    private static List<String> extensionsInLibrary(Connection connection) throws SQLException {
+        List<String> extensions = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT DISTINCT extension FROM media WHERE trashed_at IS NULL");
+                ResultSet rows = select.executeQuery()) {
+            while (rows.next()) {
+                extensions.add(rows.getString(1));
+            }
+        }
+        return extensions;
     }
 
     /** UI thread: shows a loaded Timeline, unless the options changed while it loaded (that load is queued). */
@@ -996,15 +1089,16 @@ public final class PrismoApp extends Application {
             timeline.setItems(items); // new data (or the File Explorer switch), same view: stay on the same photo
             searchBar.refresh(); // new or changed files may match the search on screen
         } else {
-            timeline.showFromTop(items, options.grouped()); // a different filter or sort: start at the top
+            // A different filter or sort: start at the top.
+            timeline.showFromTop(items, gridView.headers(options), gridView.dateOrdered(options));
         }
         shownOptions = options;
-        if (options.filter() == ViewOptions.DEFAULT.filter()) {
+        if (!options.isFiltered()) {
             timelinePlaceholder.show(true, "No photos or videos yet",
                     "Add the folders that hold your photos and videos. Prismo only reads them: your files are never changed.",
                     "Add library folders…", openLibraryFolders);
         } else {
-            timelinePlaceholder.show(false, "Nothing to show", "Nothing here matches \"" + options.filter() + "\".",
+            timelinePlaceholder.show(false, "Nothing to show", "Nothing here matches \"" + options.filterLabel() + "\".",
                     null, null);
         }
     }
@@ -1014,7 +1108,7 @@ public final class PrismoApp extends Application {
      * is stopped first; the new one starts over the list it reads now (thumbnails already made are skipped at once).
      * Any thread.
      */
-    private void startWarmUp(String indexSummary) {
+    private void startWarmUp() {
         synchronized (warmUpLock) {
             warmUp.cancel(true);
             long number = ++warmUpNumber;
@@ -1024,19 +1118,16 @@ public final class PrismoApp extends Application {
                         var media = database.read(c -> MediaRefs.newestToThumbnail(c));
                         thumbnails.warmUp(media, p -> Platform.runLater(() -> {
                             if (isLatestWarmUp(number)) { // a stopped one's last jobs may still report
-                                int left = p.total() - p.ready() - p.unsupported() - p.failed() - p.missing();
-                                status.setText(withSetupNote(indexSummary
-                                        + "  ·  Thumbnails %s %,d / %,d (%,d unsupported, %,d failed%s)".formatted(
-                                                p.done() ? "ready:" : "…", p.ready(), p.total(), p.unsupported(),
-                                                p.failed(), p.missing() == 0 ? ""
-                                                        : ", %,d not available".formatted(p.missing())),
-                                        !p.done() && left >= BIG_SETUP_FILES));
+                                int handled = p.ready() + p.unsupported() + p.failed() + p.missing();
+                                status.progress(p.done() ? null : StatusNote.thumbnails(handled, p.total(),
+                                        p.total() - handled >= BIG_SETUP_FILES));
                             }
                         }));
                     } catch (InterruptedException e) {
                         // replaced by a newer warm-up, or the app is closing
                     } catch (SQLException | RuntimeException e) {
                         log.warn("Making thumbnails failed", e);
+                        Platform.runLater(() -> status.progress(null));
                     }
                 });
             } catch (RejectedExecutionException e) {
@@ -1071,6 +1162,40 @@ public final class PrismoApp extends Application {
     }
 
     /**
+     * Once after an update that makes video thumbnails differently ({@link ThumbnailGenerator#VIDEO_REVISION}; 1.1.0:
+     * cover or a well-lit frame instead of the frame at 1 s): forgets every video's thumbnail, so the warm-up makes
+     * them again the new way. Runs before the window shows, so no grid loads an old one first. A new library has no
+     * videos yet: then only the setting is written.
+     */
+    private void remakeOldVideoThumbnails() {
+        String now = Integer.toString(ThumbnailGenerator.VIDEO_REVISION);
+        try {
+            if (settings.get(VIDEO_THUMBNAILS_REVISION_SETTING).filter(now::equals).isPresent()) {
+                return;
+            }
+            List<Long> videos = database.read(c -> {
+                List<Long> ids = new ArrayList<>();
+                try (PreparedStatement select = c.prepareStatement("SELECT id FROM media WHERE media_type = ?")) {
+                    select.setString(1, MediaType.VIDEO.dbValue());
+                    try (ResultSet rows = select.executeQuery()) {
+                        while (rows.next()) {
+                            ids.add(rows.getLong(1));
+                        }
+                    }
+                }
+                return ids;
+            });
+            for (long id : videos) {
+                thumbnailCache.forget(id);
+            }
+            log.info("Video thumbnail revision {}: {} video thumbnails will be made again", now, videos.size());
+            settings.put(VIDEO_THUMBNAILS_REVISION_SETTING, now);
+        } catch (IOException | SQLException | RuntimeException e) {
+            log.warn("Could not remake the old video thumbnails", e);
+        }
+    }
+
+    /**
      * Indexing thread: starts watching library folders not watched yet. A failure leaves the periodic rescan. A network
      * folder is never watched (P7): it is rescanned every {@link NetworkDrives#RESCAN_MINUTES} minutes instead.
      */
@@ -1101,7 +1226,7 @@ public final class PrismoApp extends Application {
                     continue;
                 }
                 log.warn("Can't watch {} for changes: {}", root, e.toString());
-                Platform.runLater(() -> status.setText("Live updates are off for " + root + " (" + e.getMessage()
+                Platform.runLater(() -> status.say("Live updates are off for " + root + " (" + e.getMessage()
                         + "); it is rescanned every " + RESCAN_MINUTES + " minutes instead."));
             }
         }
@@ -1115,7 +1240,7 @@ public final class PrismoApp extends Application {
             batch.stopped().forEach((root, reason) -> {
                 watchedRoots.remove(root); // watched again at the next rescan if it's back
                 log.warn("Stopped watching {}: {}", root, reason);
-                Platform.runLater(() -> status.setText("Not watching " + root + ": " + reason
+                Platform.runLater(() -> status.say("Not watching " + root + ": " + reason
                         + ". It is rescanned every " + RESCAN_MINUTES + " minutes."));
             });
             boolean changed = false;
@@ -1127,11 +1252,7 @@ public final class PrismoApp extends Application {
                 changed = indexer.index(rescan, _ -> { }).changedAnything();
             }
             if (!paths.isEmpty()) {
-                IndexProgress result = indexer.update(paths, _ -> { });
-                changed |= result.changedAnything();
-                if (result.changedAnything()) {
-                    Platform.runLater(() -> status.setText(describeUpdate(result)));
-                }
+                changed |= indexer.update(paths, _ -> { }).changedAnything(); // the grids show it
             }
             if (changed) {
                 libraryChanged(); // also re-runs the search on screen
@@ -1140,32 +1261,8 @@ public final class PrismoApp extends Application {
             Thread.currentThread().interrupt(); // app is shutting down
         } catch (SQLException | RuntimeException e) {
             log.error("Applying file changes failed", e);
-            Platform.runLater(() -> status.setText("Updating from file changes failed: " + e.getMessage()));
+            Platform.runLater(() -> status.say("Updating from file changes failed: " + e.getMessage()));
         }
-    }
-
-    private static String describeUpdate(IndexProgress p) {
-        return "Updated from file changes: %,d new or changed · %,d moved or renamed · %,d removed"
-                .formatted(p.indexed(), p.moved(), p.removed());
-    }
-
-    /**
-     * The status text, led by a note while a big first setup runs (1.0.1): indexing and making thumbnails keep the
-     * disk busy, so photos open slowly and videos stutter meanwhile; seen on a 40,000-item library on a hard disk.
-     */
-    private static String withSetupNote(String text, boolean bigSetup) {
-        return bigSetup ? BIG_SETUP_NOTE + "  ·  " + text : text;
-    }
-
-    private static String describe(IndexProgress p) {
-        String counts = "%,d files · %,d new or changed · %,d unchanged · %,d unreadable"
-                .formatted(p.found(), p.indexed(), p.unchanged(), p.failed());
-        if (p.moved() > 0 || p.removed() > 0) {
-            counts += " · %,d moved · %,d removed".formatted(p.moved(), p.removed());
-        }
-        return p.done()
-                ? "Library up to date (%.1f s): %s".formatted(p.elapsed().toMillis() / 1000.0, counts)
-                : "Indexing… " + counts;
     }
 
     /** Runs on the JavaFX Application Thread after the last window closes. */

@@ -86,8 +86,7 @@ public final class LibraryFoldersDialog {
         stage.initModality(Modality.WINDOW_MODAL);
         stage.setTitle("Library folders");
 
-        Label intro = new Label("Prismo shows the photos and videos in these folders and every folder inside them."
-                + " It only reads them: your files are never changed.");
+        Label intro = new Label("Prismo only reads these folders: your files are never changed.");
         intro.setWrapText(true);
         rows.getStyleClass().add("library-rows");
         intro.getStyleClass().add("library-intro");
@@ -162,8 +161,7 @@ public final class LibraryFoldersDialog {
         Path path = row.root().path();
         CheckBox enabled = new CheckBox();
         enabled.setSelected(row.root().enabled());
-        enabled.setTooltip(new Tooltip("On: shown, watched and kept up to date. Off: hidden everywhere and not"
-                + " watched; nothing is forgotten (favorites, Trash…), and turning it on again brings it all back."));
+        enabled.setTooltip(new Tooltip("Off: hidden for now; nothing is forgotten"));
         enabled.setOnAction(_ -> run(operations.setEnabled(path, enabled.isSelected()),
                 _ -> (enabled.isSelected() ? "Turned on " : "Turned off ") + path + "."));
         // The folder's own name first, then where it is and what's in it.

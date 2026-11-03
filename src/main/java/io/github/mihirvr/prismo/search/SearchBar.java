@@ -2,7 +2,6 @@ package io.github.mihirvr.prismo.search;
 
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.TimelineItem;
-import io.github.mihirvr.prismo.ui.MediaFilter;
 import io.github.mihirvr.prismo.ui.TimelineView;
 import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.sql.SQLException;
@@ -89,7 +88,8 @@ public final class SearchBar extends HBox {
         getChildren().setAll(box, count);
         getStyleClass().add("search-bar");
         field.getStyleClass().add("search-field");
-        field.setPromptText("Search name, folder, camera, date…  (Ctrl+F)");
+        field.setPromptText("Search");
+        field.setTooltip(new Tooltip("Name, folder, camera or date (Ctrl+F or /)"));
         count.getStyleClass().add("search-count");
         noMatches.getStyleClass().add("search-no-matches");
         results.setPlaceholder(noMatches);
@@ -185,16 +185,16 @@ public final class SearchBar extends HBox {
             // Same search, newer data (indexing, or the File Explorer switch): stay where the user is.
             results.setItems(result.items());
         } else {
-            results.showFromTop(result.items(), result.options().grouped());
+            results.showFromTop(result.items(), result.options().headers(), result.options().grouped());
         }
         boolean otherText = !result.text().equals(shownText);
         shownText = result.text();
         shownOptions = result.options();
         int n = result.items().size();
         count.setText(n == 1 ? "1 result" : "%,d results".formatted(n));
-        MediaFilter filter = result.options().filter();
+        ViewOptions options = result.options();
         noMatches.setText("No matches for “" + result.text().strip() + "”"
-                + (filter == MediaFilter.ALL ? "" : " in " + filter));
+                + (options.isFiltered() ? " in " + options.filterLabel() : ""));
         active.set(true);
         if (otherText) {
             onSearchChanged.run();

@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo.viewer;
 import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.ui.FileItems;
+import io.github.mihirvr.prismo.ui.Filmstrip;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.Menus;
@@ -78,15 +79,17 @@ import org.slf4j.LoggerFactory;
  * neighbours are decoded ahead ({@link FullImages}). Anything that finishes for a photo that's no longer
  * shown is dropped.
  *
- * <p><b>Keys:</b> Left / Right previous / next (in a video: back / forward 5 s), Page Up / Page Down previous /
- * next (photos and videos alike), Esc back (closing the Info panel first, then leaving full screen), F11 full
- * screen, R rotate (view only), + / − / 0 zoom in / out / fit, Space play / pause a video or start / stop the
- * slideshow, F favorite, H hide, Delete to Trash (in Trash: delete permanently), Ctrl+C copy the file, I the Info
- * panel ({@link InfoPanel}, on the right).
+ * <p><b>Keys</b> (1.1.0: YouTube's first, VLC's where YouTube has none; the list in Settings is
+ * {@code settings.Shortcuts}): Left / Right previous / next (in a video: back / forward 5 s), Page Up / Page Down
+ * and Shift+P / Shift+N previous / next (photos and videos alike), Esc back (closing the Info panel first, then
+ * leaving full screen), F or F11 full screen, R rotate (view only), + / − / 0 zoom in / out / fit, Space play /
+ * pause a video or start / stop the slideshow, Ctrl+D favorite, Ctrl+H hide, Delete to Trash (in Trash: delete
+ * permanently), Ctrl+C copy the file, I the Info panel ({@link InfoPanel}, on the right).
  * An action that takes the item out of the list it was opened on (hide, Trash, restore, delete) moves on to the
- * next one; favoriting keeps it. A video adds J / L back / forward 10 s, Up / Down volume, M mute, [ / ] speed,
- * C subtitles, Z / X subtitles earlier / later, A sound track, comma / period one picture back / on, Home from
- * the start ({@link VideoPane}).
+ * next one; favoriting keeps it. A video adds K play / pause, J / L back / forward 10 s, Ctrl+Left / Right a
+ * minute, 0 to 9 a tenth of the way in, Home / End, Up / Down volume, M mute, &lt; / &gt; speed, [ / ] a little
+ * slower / faster, = normal speed, Shift+L loop, C subtitles on / off, V next subtitles, G / H subtitles earlier /
+ * later, B sound track, comma / period one picture back / on, T the time ({@link VideoPane}).
  * <b>Mouse:</b> wheel zooms around the cursor, drag pans, double-click toggles fit / 100% (a video: full screen),
  * trackpad pinch zooms. Right-click opens a menu with all of the above, each entry with its key; the top bar's
  * "More" button has the file items, the "i" button opens the Info panel.
@@ -152,6 +155,22 @@ public final class MediaViewer extends StackPane {
     /** Full screen: hides the controls and pointer after {@link #IDLE_TIME} without a mouse move. */
     private final PauseTransition idle = new PauseTransition(IDLE_TIME);
     private boolean chromeHidden;
+    /** The filmstrip (1.1.0): its own row in a window, floating over the photo in full screen. */
+    private final Filmstrip filmstrip;
+    private final StackPane stripRow = new StackPane();
+    /**
+     * Full screen: one dark band from the bottom edge up past the floating strip, behind the strip and a video's
+     * control bar. (The strip used to carry its own band: over a video it ended in a hard line on top of the control
+     * bar's own shading.) Fades with the strip; lets every click through.
+     */
+    private final Region stripBand = new Region();
+    /** How far the band fades out above the strip. */
+    private static final double BAND_FADE = 64;
+    /** The filmstrip hides after {@link #IDLE_TIME} without a mouse move, in a window and in full screen alike. */
+    private final PauseTransition stripIdle = new PauseTransition(IDLE_TIME);
+    private boolean stripHidden;
+    /** False in the standalone viewer: no Favorite / Hide / Trash, as there is no library. */
+    private boolean itemActionsShown = true;
 
     private List<TimelineItem> items = List.of();
     private int index = -1;
@@ -219,8 +238,31 @@ public final class MediaViewer extends StackPane {
                 stepButton(previous, Icon.CHEVRON_LEFT, -1, Pos.CENTER_LEFT),
                 stepButton(next, Icon.CHEVRON_RIGHT, +1, Pos.CENTER_RIGHT), topBar);
         stageArea.setMinSize(0, 0);
-        HBox.setHgrow(stageArea, Priority.ALWAYS);
-        HBox layout = new HBox(stageArea, info);
+        // The filmstrip has its own row under the photo, so the photo never moves when the strip fades in or out;
+        // in full screen it floats over the bottom of the photo instead (placeFilmstrip).
+        filmstrip = new Filmstrip(thumbnails);
+        filmstrip.setOnPick(at -> {
+            show(at);
+            slideshow.restart();
+        });
+        stripRow.getStyleClass().add("filmstrip-row");
+        stripRow.setMinHeight(Filmstrip.HEIGHT);
+        stripRow.getChildren().add(filmstrip);
+        stripBand.getStyleClass().add("filmstrip-band");
+        stripBand.setMouseTransparent(true);
+        stripBand.setMaxHeight(USE_PREF_SIZE);
+        stripBand.opacityProperty().bind(filmstrip.opacityProperty());
+        StackPane.setAlignment(stripBand, Pos.BOTTOM_CENTER);
+        // The control bar gets its real height only once laid out: the floating strip and its band follow it.
+        video.controls().heightProperty().addListener((_, _, _) -> {
+            TimelineItem shown = current();
+            floatFilmstripAbove(shown != null && ViewMode.of(shown.ref().extension()) == ViewMode.VIDEO);
+        });
+        VBox column = new VBox(stageArea, stripRow);
+        column.setMinSize(0, 0);
+        VBox.setVgrow(stageArea, Priority.ALWAYS);
+        HBox.setHgrow(column, Priority.ALWAYS);
+        HBox layout = new HBox(column, info);
         layout.setMinSize(0, 0);
         getChildren().add(layout);
         clearStage();
@@ -270,6 +312,8 @@ public final class MediaViewer extends StackPane {
         setVisible(true);
         requestFocus();
         show(index);
+        showStrip();
+        stripIdle.playFromStart(); // the strip shows on opening, then fades once the mouse rests
     }
 
     /** Opens on {@code items.get(index)} with the Info panel open (the grids' Info item and I key). */
@@ -357,6 +401,25 @@ public final class MediaViewer extends StackPane {
         };
     }
 
+    /**
+     * Puts a longer list around the item on screen without showing it again (1.1.0, the standalone viewer: the file
+     * opens at once, its folder is listed after). Nothing happens if the item on screen isn't {@code newItems.get(at)}.
+     */
+    public void extendList(List<TimelineItem> newItems, int at) {
+        TimelineItem shown = current();
+        if (!isOpen() || shown == null || at < 0 || at >= newItems.size()
+                || newItems.get(at).ref().id() != shown.ref().id()) {
+            return;
+        }
+        items = List.copyOf(newItems);
+        index = at;
+        counter.setText("%,d / %,d".formatted(index + 1, items.size()));
+        previous.setVisible(index > 0);
+        next.setVisible(index < items.size() - 1);
+        video.setNeighbours(index > 0, index < items.size() - 1);
+        filmstrip.show(items, index);
+    }
+
     // --- Showing one item ---
 
     private void show(int newIndex) {
@@ -365,6 +428,8 @@ public final class MediaViewer extends StackPane {
         TimelineItem item = items.get(index);
         MediaRef ref = item.ref();
         ViewMode mode = ViewMode.of(ref.extension());
+        filmstrip.show(items, index);
+        floatFilmstripAbove(mode == ViewMode.VIDEO);
         if (slideshow.isRunning() && !mode.inSlideshow()) {
             slideshow.stop(); // stepped onto a video by hand: don't move on from under it
         }
@@ -490,8 +555,14 @@ public final class MediaViewer extends StackPane {
 
     private void showImage(Image image, boolean full) {
         if (!sizeKnown) {
-            // No indexed size: take the shape from what arrived (the thumbnail has the right proportions).
-            whenLoaded(image, () -> useRealSize((int) image.getWidth(), (int) image.getHeight()));
+            // No indexed size: take the shape from what arrived (the thumbnail has the right proportions). Only if
+            // that image is still the one on screen when it has loaded: a full image that came first has the real
+            // size, and a thumbnail finishing late must not shrink it back (1.1.0, the standalone viewer has no sizes).
+            whenLoaded(image, () -> {
+                if (imageView.getImage() == image) {
+                    useRealSize((int) image.getWidth(), (int) image.getHeight());
+                }
+            });
         }
         imageView.setImage(image);
         fullShown |= full;
@@ -588,10 +659,25 @@ public final class MediaViewer extends StackPane {
 
     // --- Item actions ---
 
+    /**
+     * Turns the library's item actions (Favorite, Hide, Trash…) off or on: the standalone viewer has no library, so
+     * it shows only what works on a plain file (1.1.0).
+     */
+    public void setItemActionsShown(boolean shown) {
+        itemActionsShown = shown;
+        updateActionButtons();
+    }
+
+    /** The item actions for the menu, or none in the standalone viewer. */
+    private List<ItemAction> menuActions(TimelineItem item) {
+        return itemActionsShown ? ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, osHiddenShown.getAsBoolean())
+                : List.of();
+    }
+
     private void updateActionButtons() {
         TimelineItem item = current();
         actionButtons.getChildren().clear();
-        if (item == null) {
+        if (item == null || !itemActionsShown) {
             return;
         }
         for (ItemAction action : ItemAction.available(item, osHiddenShown.getAsBoolean())) {
@@ -615,7 +701,7 @@ public final class MediaViewer extends StackPane {
     private void act(ItemAction action) {
         TimelineItem item = current();
         boolean shown = osHiddenShown.getAsBoolean();
-        if (item == null || !ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, shown).contains(action)
+        if (item == null || !itemActionsShown || !ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, shown).contains(action)
                 || !onAction.perform(action, item)) {
             return;
         }
@@ -808,6 +894,27 @@ public final class MediaViewer extends StackPane {
             event.consume(); // Ctrl+C
             return;
         }
+        // 1.1.0 key map: YouTube's keys first, VLC's where YouTube has none.
+        KeyCode actionKey = ItemAction.keyOf(event); // Ctrl+D favorite, Ctrl+H hide, Delete
+        if (actionKey != null) {
+            ItemAction action = current() == null || !itemActionsShown ? null
+                    : ItemAction.forKey(actionKey, current(), osHiddenShown.getAsBoolean());
+            if (action != null) {
+                act(action);
+            }
+            event.consume();
+            return;
+        }
+        if (event.isShiftDown() && !event.isShortcutDown() && !event.isAltDown()
+                && (event.getCode() == KeyCode.N || event.getCode() == KeyCode.P)) {
+            step(event.getCode() == KeyCode.N ? +1 : -1); // Shift+N / Shift+P, as on YouTube
+            event.consume();
+            return;
+        }
+        if (isVideo() && !event.isAltDown() && videoKey(event)) {
+            event.consume();
+            return;
+        }
         Move move = event.isShortcutDown() || event.isAltDown() ? null : Move.forKey(event.getCode(), isVideo());
         if (move != null) {
             switch (move) {
@@ -819,14 +926,18 @@ public final class MediaViewer extends StackPane {
             event.consume();
             return;
         }
-        if (isVideo() && !event.isShortcutDown() && !event.isAltDown() && videoKey(event.getCode())) {
-            event.consume();
-            return;
-        }
         boolean handled = true;
+        boolean plain = !event.isShortcutDown() && !event.isAltDown() && !event.isShiftDown();
         switch (event.getCode()) {
             case ESCAPE -> escape();
             case F11 -> toggleFullScreen();
+            case F -> {
+                if (plain) {
+                    toggleFullScreen(); // F, as in YouTube and VLC
+                } else {
+                    handled = false;
+                }
+            }
             case R -> rotate();
             case SPACE -> {
                 // By type, not by what's on screen: a video that failed to play must not start the slideshow.
@@ -847,13 +958,6 @@ public final class MediaViewer extends StackPane {
                     handled = false;
                 } else {
                     toggleInfo();
-                }
-            }
-            case F, H, DELETE -> {
-                ItemAction action = current() == null || event.isShortcutDown() || event.isAltDown()
-                        ? null : ItemAction.forKey(event.getCode(), current(), osHiddenShown.getAsBoolean());
-                if (action != null) {
-                    act(action);
                 }
             }
             default -> handled = false;
@@ -882,23 +986,59 @@ public final class MediaViewer extends StackPane {
         }
     }
 
-    /** The keys that only mean something for a video. True if {@code code} was one. */
-    private boolean videoKey(KeyCode code) {
+    /**
+     * The keys that only mean something for a video (1.1.0 map: YouTube first, then VLC). True if the key was one.
+     * Ctrl+Left / Right jump a minute; Shift+L loops; &lt; and &gt; (Shift+, and Shift+.) change the speed a step.
+     */
+    private boolean videoKey(KeyEvent event) {
+        KeyCode code = event.getCode();
+        if (event.isShortcutDown()) {
+            switch (code) {
+                case LEFT -> video.skip(-VideoPane.MINUTE_SKIP_MICROS);
+                case RIGHT -> video.skip(VideoPane.MINUTE_SKIP_MICROS);
+                default -> {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (event.isShiftDown()) {
+            switch (code) {
+                case L -> video.toggleLoop();
+                case COMMA -> video.changeSpeed(-1);
+                case PERIOD -> video.changeSpeed(1);
+                default -> {
+                    return false;
+                }
+            }
+            return true;
+        }
+        if (code.isDigitKey()) {
+            video.seekToTenth(Integer.parseInt(code.getChar())); // 0 to 9: that tenth of the video
+            return true;
+        }
         switch (code) {
+            case K -> video.togglePlay();
             case J -> video.skip(-VideoPane.SKIP_MICROS);
             case L -> video.skip(VideoPane.SKIP_MICROS);
             case UP -> video.volumeUp();
             case DOWN -> video.volumeDown();
             case M -> video.toggleMute();
-            case OPEN_BRACKET -> video.changeSpeed(-1);
-            case CLOSE_BRACKET -> video.changeSpeed(1);
-            case C -> video.nextSubtitles();
-            case Z -> video.shiftSubtitles(-VideoPane.SUBTITLE_DELAY_STEP_MICROS);
-            case X -> video.shiftSubtitles(VideoPane.SUBTITLE_DELAY_STEP_MICROS);
-            case A -> video.nextSoundTrack();
+            case LESS -> video.changeSpeed(-1); // keyboards with their own < and > keys
+            case GREATER -> video.changeSpeed(1);
+            case OPEN_BRACKET -> video.fineSpeed(-1);
+            case CLOSE_BRACKET -> video.fineSpeed(1);
+            case EQUALS -> video.normalSpeed();
+            case C -> video.toggleCaptions();
+            case V -> video.nextSubtitles();
+            case G -> video.shiftSubtitles(-VideoPane.SUBTITLE_DELAY_STEP_MICROS);
+            case H -> video.shiftSubtitles(VideoPane.SUBTITLE_DELAY_STEP_MICROS);
+            case B -> video.nextSoundTrack();
             case COMMA -> video.step(-1);
             case PERIOD -> video.step(1);
             case HOME -> video.restart();
+            case END -> video.toEnd();
+            case T -> video.announceTime();
             default -> {
                 return false;
             }
@@ -919,7 +1059,7 @@ public final class MediaViewer extends StackPane {
     }
 
     private HBox buildTopBar() {
-        Button back = button(Icon.BACK, "Back (Esc, Alt+Left or the mouse's back button)", this::close);
+        Button back = button(Icon.BACK, "Back (Esc)", this::close);
         Button rotate = button(Icon.ROTATE, "Rotate the view (R); the file isn't changed", this::rotate);
         slideshowButton.setGraphic(Icon.SLIDESHOW.node(ICON_SIZE));
         slideshowButton.getStyleClass().add("icon-button");
@@ -933,8 +1073,8 @@ public final class MediaViewer extends StackPane {
                 .flatMap(w -> w instanceof Stage s ? s.fullScreenProperty() : null).orElse(false);
         fullScreen.graphicProperty().bind(inFullScreen.map(on -> (on ? Icon.EXIT_FULL_SCREEN : Icon.FULL_SCREEN)
                 .node(ICON_SIZE)));
-        fullScreen.getTooltip().textProperty().bind(inFullScreen.map(on -> on ? "Leave full screen (F11 or Esc)"
-                : "Full screen (F11)"));
+        fullScreen.getTooltip().textProperty().bind(inFullScreen.map(on -> on ? "Leave full screen (F or Esc)"
+                : "Full screen (F)"));
         fileName.getStyleClass().add("viewer-file-name");
         fileName.setMinWidth(0); // a long name shortens; the buttons keep their size
         counter.getStyleClass().add("viewer-counter");
@@ -947,7 +1087,7 @@ public final class MediaViewer extends StackPane {
         more.setGraphic(Icon.MORE.node(ICON_SIZE));
         more.getStyleClass().add("icon-button");
         more.setMinWidth(USE_PREF_SIZE);
-        configure(more, "More: show in folder, open with another app, copy", this::showMoreMenu);
+        configure(more, "More", this::showMoreMenu);
         HBox bar = new HBox(8, back, fileName, counter, spacer, zoom, actionButtons, divider(), rotate,
                 slideshowButton, fullScreen, infoButton, more);
         bar.getStyleClass().add("viewer-top-bar");
@@ -1002,25 +1142,43 @@ public final class MediaViewer extends StackPane {
         if (item == null) {
             return List.of();
         }
+        // 1.1.0: grouped in submenus that open on hover (as in VLC): Playback, Audio, Subtitles (videos), View, File;
+        // then the item actions and Info, then Previous / Next.
         List<MenuItem> entries = new ArrayList<>();
         ViewMode mode = ViewMode.of(item.ref().extension());
         if (mode == ViewMode.VIDEO && video.player() != null) {
             entries.addAll(video.menuItems());
-            entries.add(new SeparatorMenuItem());
-        } else if (mode.inSlideshow() && imageView.getImage() != null) {
-            entries.add(Menus.item(slideshow.isRunning() ? "Stop the slideshow" : "Slideshow", Icon.SLIDESHOW,
-                    new KeyCodeCombination(KeyCode.SPACE), this::toggleSlideshow));
-            entries.add(Menus.item("Rotate", Icon.ROTATE, new KeyCodeCombination(KeyCode.R), this::rotate));
-            entries.add(Menus.item("Zoom in", Icon.ZOOM_IN, new KeyCharacterCombination("+"),
+        }
+        List<MenuItem> view = new ArrayList<>();
+        if (mode != ViewMode.VIDEO && imageView.getImage() != null) {
+            view.add(Menus.item("Zoom in", Icon.ZOOM_IN, new KeyCharacterCombination("+"),
                     () -> zoomBy(KEY_ZOOM_STEP)));
-            entries.add(Menus.item("Zoom out", Icon.ZOOM_OUT, new KeyCharacterCombination("-"),
+            view.add(Menus.item("Zoom out", Icon.ZOOM_OUT, new KeyCharacterCombination("-"),
                     () -> zoomBy(1 / KEY_ZOOM_STEP)));
-            entries.add(Menus.item("Fit to window", null, new KeyCharacterCombination("0"), () -> {
+            view.add(Menus.item("Fit to window", null, new KeyCharacterCombination("0"), () -> {
                 transform.fit();
                 applyTransform();
             }));
-            entries.add(new SeparatorMenuItem());
+            view.add(Menus.item("Rotate", Icon.ROTATE, new KeyCodeCombination(KeyCode.R), this::rotate));
         }
+        boolean full = stage() instanceof Stage stage && stage.isFullScreen();
+        view.add(Menus.item(full ? "Leave full screen" : "Full screen",
+                full ? Icon.EXIT_FULL_SCREEN : Icon.FULL_SCREEN, new KeyCodeCombination(KeyCode.F),
+                this::toggleFullScreen));
+        if (mode.inSlideshow() && imageView.getImage() != null) {
+            view.add(Menus.item(slideshow.isRunning() ? "Stop the slideshow" : "Slideshow", Icon.SLIDESHOW,
+                    new KeyCodeCombination(KeyCode.SPACE), this::toggleSlideshow));
+        }
+        entries.add(Menus.submenu("View", Icon.IMAGE, view));
+        entries.add(Menus.submenu("File", Icon.FOLDER, fileItems.menuItems(item)));
+        entries.add(new SeparatorMenuItem());
+        for (ItemAction action : menuActions(item)) {
+            entries.add(Menus.item(action.menuText(), action.icon(),
+                    action.shortcut(item, osHiddenShown.getAsBoolean()), () -> act(action)));
+        }
+        entries.add(Menus.item(infoOpen ? "Close the info" : "Info", Icon.INFO, new KeyCodeCombination(KeyCode.I),
+                this::toggleInfo));
+        entries.add(new SeparatorMenuItem());
         boolean video = mode == ViewMode.VIDEO;
         MenuItem previousItem = Menus.item("Previous", Icon.PREVIOUS_MEDIA,
                 new KeyCodeCombination(video ? KeyCode.PAGE_UP : KeyCode.LEFT), () -> step(-1));
@@ -1030,19 +1188,6 @@ public final class MediaViewer extends StackPane {
         nextItem.setDisable(index >= items.size() - 1);
         entries.add(previousItem);
         entries.add(nextItem);
-        boolean full = stage() instanceof Stage stage && stage.isFullScreen();
-        entries.add(Menus.item(full ? "Leave full screen" : "Full screen",
-                full ? Icon.EXIT_FULL_SCREEN : Icon.FULL_SCREEN, new KeyCodeCombination(KeyCode.F11),
-                this::toggleFullScreen));
-        entries.add(new SeparatorMenuItem());
-        for (ItemAction action : ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, osHiddenShown.getAsBoolean())) {
-            entries.add(Menus.item(action.menuText(), action.icon(),
-                    action.shortcut(item, osHiddenShown.getAsBoolean()), () -> act(action)));
-        }
-        entries.add(new SeparatorMenuItem());
-        entries.addAll(fileItems.menuItems(item));
-        entries.add(Menus.item(infoOpen ? "Close the info" : "Info", Icon.INFO, new KeyCodeCombination(KeyCode.I),
-                this::toggleInfo));
         return entries;
     }
 
@@ -1090,12 +1235,14 @@ public final class MediaViewer extends StackPane {
 
     private void setUpAutoHide() {
         idle.setOnFinished(_ -> hideChromeIfIdle());
+        stripIdle.setOnFinished(_ -> hideStripIfIdle());
         addEventFilter(MouseEvent.MOUSE_MOVED, _ -> mouseActive());
         addEventFilter(MouseEvent.MOUSE_DRAGGED, _ -> mouseActive());
         addEventFilter(MouseEvent.MOUSE_PRESSED, _ -> mouseActive());
         sceneProperty().flatMap(Scene::windowProperty)
                 .flatMap(w -> w instanceof Stage s ? s.fullScreenProperty() : null).orElse(false)
                 .subscribe(full -> {
+                    placeFilmstrip(full);
                     if (full) {
                         idle.playFromStart();
                     } else {
@@ -1110,6 +1257,63 @@ public final class MediaViewer extends StackPane {
             showChrome();
         }
         restartIdle();
+        showStrip();
+        stripIdle.playFromStart();
+    }
+
+    /** In a window: the strip in its own row under the photo. In full screen: floating over the photo's bottom. */
+    private void placeFilmstrip(boolean full) {
+        stageArea.getChildren().removeAll(filmstrip, stripBand);
+        stripRow.getChildren().remove(filmstrip);
+        filmstrip.getStyleClass().remove("floating");
+        stripRow.setVisible(!full);
+        stripRow.setManaged(!full);
+        if (full) {
+            filmstrip.getStyleClass().add("floating");
+            StackPane.setAlignment(filmstrip, Pos.BOTTOM_CENTER);
+            stageArea.getChildren().addAll(stripBand, filmstrip);
+            TimelineItem shown = current();
+            floatFilmstripAbove(shown != null && ViewMode.of(shown.ref().extension()) == ViewMode.VIDEO);
+        } else {
+            StackPane.setMargin(filmstrip, null);
+            stripRow.getChildren().add(filmstrip);
+        }
+    }
+
+    /** In full screen, a video's strip floats just above its control bar; a photo's at the bottom edge. */
+    private void floatFilmstripAbove(boolean videoControls) {
+        if (filmstrip.getParent() == stageArea) {
+            double bottom = videoControls ? video.controls().getHeight() + 4 : 0;
+            StackPane.setMargin(filmstrip, new Insets(0, 0, bottom, 0));
+            stripBand.setPrefHeight(bottom + Filmstrip.HEIGHT + BAND_FADE);
+        }
+    }
+
+    private void showStrip() {
+        if (!stripHidden) {
+            return;
+        }
+        stripHidden = false;
+        filmstrip.setMouseTransparent(false);
+        FadeTransition fade = new FadeTransition(FADE_TIME.divide(2), filmstrip);
+        fade.setToValue(1);
+        fade.play();
+    }
+
+    /** The strip fades out once the mouse rests, unless the pointer is on it or a menu is open. */
+    private void hideStripIfIdle() {
+        if (!isOpen() || stripHidden) {
+            return;
+        }
+        if (menuShowing() || filmstrip.isHover()) {
+            stripIdle.playFromStart();
+            return;
+        }
+        stripHidden = true;
+        filmstrip.setMouseTransparent(true);
+        FadeTransition fade = new FadeTransition(FADE_TIME, filmstrip);
+        fade.setToValue(0);
+        fade.play();
     }
 
     /** Counts the idle time again from now, in full screen only. */
@@ -1182,6 +1386,11 @@ public final class MediaViewer extends StackPane {
 
     public BooleanProperty videoMutedProperty() {
         return video.mutedProperty();
+    }
+
+    /** The video time shows the time left (clicking the time switches it); saved by the app. */
+    public BooleanProperty videoRemainingShownProperty() {
+        return video.remainingShownProperty();
     }
 
     /** Playback speed, 0.5..2. */

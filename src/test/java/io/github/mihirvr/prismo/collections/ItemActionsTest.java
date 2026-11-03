@@ -379,7 +379,7 @@ class ItemActionsTest {
             assertEquals(3, page(database, MediaScope.FAVORITES).size());
 
             assertTrue(runAll(actions, ItemAction.HIDE, page(database, MediaScope.LIBRARY)));
-            assertEquals("Hid 3 items. Hidden items are only in Collections › Hidden.", messages.getLast());
+            assertEquals("Hid 3 items.", messages.getLast());
             assertEquals(List.of(), page(database, MediaScope.LIBRARY));
             assertTrue(runAll(actions, ItemAction.TRASH, page(database, MediaScope.HIDDEN)));
             assertEquals(3, page(database, MediaScope.TRASH).size());
@@ -461,7 +461,7 @@ class ItemActionsTest {
             List<TimelineItem> hidden = page(database, MediaScope.HIDDEN);
             assertEquals(List.of(true, false, true), hidden.stream().map(TimelineItem::osHidden).toList());
             assertTrue(hidden.stream().allMatch(TimelineItem::hidden), "p2 is hidden in Prismo at least");
-            assertEquals("Hid 3 items. Hidden items are only in Collections › Hidden. Could not change the File"
+            assertEquals("Hid 3 items. Could not change the File"
                     + " Explorer mark of 1 item (Access is denied).", messages.getLast());
         }
     }
@@ -487,7 +487,7 @@ class ItemActionsTest {
     void selectionTextsCountItems() {
         assertEquals("1 item", ItemActions.itemCount(1));
         assertEquals("1,200 items", ItemActions.itemCount(1200));
-        assertEquals("Moved 2 items to Trash (still on disk). Restore them from Collections › Trash.",
+        assertEquals("Moved 2 items to Trash.",
                 ItemActions.selectionText(ItemAction.TRASH, 2));
         assertEquals("1 item is no longer hidden.", ItemActions.selectionText(ItemAction.UNHIDE, 1));
         assertEquals("Removed 4 items from Favorites.", ItemActions.selectionText(ItemAction.UNFAVORITE, 4));

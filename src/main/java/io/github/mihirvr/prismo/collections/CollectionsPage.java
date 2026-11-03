@@ -1,9 +1,12 @@
 package io.github.mihirvr.prismo.collections;
 
 import io.github.mihirvr.prismo.db.Database;
-import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import io.github.mihirvr.prismo.ui.Album;
 import io.github.mihirvr.prismo.ui.AlbumGrid;
+import io.github.mihirvr.prismo.ui.FolderArrange;
+import io.github.mihirvr.prismo.ui.FolderSections;
+import io.github.mihirvr.prismo.ui.GridView;
+import io.github.mihirvr.prismo.ui.Headers;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.MediaScope;
@@ -16,6 +19,7 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -26,6 +30,7 @@ import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanWrapper;
+import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
@@ -39,10 +44,16 @@ import javafx.scene.control.Tooltip;
 import javafx.scene.control.TreeCell;
 import javafx.scene.control.TreeItem;
 import javafx.scene.control.TreeView;
+import javafx.scene.control.skin.TreeCellSkin;
+import javafx.scene.Node;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.Region;
+import javafx.scene.shape.ArcTo;
+import javafx.scene.shape.LineTo;
+import javafx.scene.shape.MoveTo;
+import javafx.scene.shape.PathElement;
 import javafx.scene.layout.StackPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +78,8 @@ public final class CollectionsPage extends BorderPane {
     private static final Logger log = LoggerFactory.getLogger(CollectionsPage.class);
     private static final double PAGE_ICON_SIZE = 18;
     private static final double FOLDER_ICON_SIZE = 16;
+    /** How round the folder tree's elbows are. */
+    private static final double ELBOW_RADIUS = 10;
 
     /** The pages, in the order of the list on the left. */
     public enum Page {
@@ -122,6 +135,9 @@ public final class CollectionsPage extends BorderPane {
     private final ReadOnlyBooleanWrapper sortLocked = new ReadOnlyBooleanWrapper();
 
     private ViewOptions options = ViewOptions.DEFAULT;
+    /** The View and Arrange of the Folders page (shared with the Grid). */
+    private GridView view = GridView.DEFAULT;
+    private FolderArrange arrange = FolderArrange.DEFAULT;
     /** The folder chosen in the tree (its {@code media.folder} path), or null for the first library folder. */
     private String folder;
     /** The album open on the Albums page, or null for the list of albums. */
@@ -137,6 +153,8 @@ public final class CollectionsPage extends BorderPane {
     /** What the grid shows now (scope + options), to tell a reload (stay put) from a new view (to the top). */
     private Object shownKey;
     private boolean stale = true;
+    /** The width of the tree's expand arrows (measured from a row that has one), for the guide lines. */
+    private double arrowWidth = 20;
     /** The layout on screen (page, album open or not), so it is only rebuilt when that changes. */
     private Object shownLayout;
 
@@ -153,7 +171,7 @@ public final class CollectionsPage extends BorderPane {
         placeholder.setWrapText(true);
         albumGrid = new AlbumGrid(loader);
         albumGrid.thumbnailSizeProperty().bind(grid.thumbnailSizeProperty());
-        Label noAlbums = new Label("No albums yet. Albums are made from the folders that hold photos or videos.");
+        Label noAlbums = new Label("No albums yet");
         noAlbums.getStyleClass().add("collections-placeholder");
         albumGrid.setPlaceholder(noAlbums);
         albumGrid.setOnOpen(album -> {
@@ -384,47 +402,76 @@ public final class CollectionsPage extends BorderPane {
             folder = loaded.folder();
             showTree(loaded.tree());
             Path name = folder == null ? null : Path.of(folder).getFileName();
-            title.setText(folder == null ? "Folders"
-                    : "%s · %,d".formatted(name == null ? folder : name, loaded.items().size()));
+            // No count here: the tree shows it next to the folder.
+            title.setText(folder == null ? "Folders" : String.valueOf(name == null ? folder : name));
             hint.setText(folder == null ? "" : folder);
         }
         if (loaded.albums() != null) {
             albumGrid.setAlbums(loaded.albums());
-            title.setText("Albums · %,d".formatted(loaded.albums().size()));
+            title.setText(titled("Albums", loaded.albums().size()));
             return;
         }
         if (request.album() != null) {
-            title.setText("%s · %,d".formatted(request.album().name(), loaded.items().size()));
+            title.setText(titled(request.album().name(), loaded.items().size()));
         } else if (request.page() != Page.FOLDERS) {
-            title.setText("%s · %,d".formatted(request.page(), loaded.items().size()));
+            title.setText(titled(request.page().toString(), loaded.items().size()));
         }
         placeholder.setText(emptyText(request, loaded));
+        // The View and Arrange go with the Folders page only; every other page shows as it always did.
+        boolean folders = request.page() == Page.FOLDERS;
+        GridView layout = folders ? view : GridView.TIMELINE;
+        FolderArrange arranged = arrange;
+        String top = folder;
+        grid.setSectioner(layout != GridView.FOLDERS || top == null ? null
+                : items -> FolderSections.build(items, List.of(Path.of(top)), false, arranged));
+        Headers headers = layout.headers(loaded.options());
+        boolean dateOrdered = layout.dateOrdered(loaded.options());
         // The File Explorer switch changes which items are in, not the order: stay on the same photo.
         Object key = List.of(String.valueOf(loaded.scope()), loaded.options().withOsHiddenShown(false));
         if (key.equals(shownKey)) {
+            grid.setHeaders(headers, dateOrdered);
             grid.setItems(loaded.items()); // same view, new data: stay on the same photo
         } else {
-            grid.showFromTop(loaded.items(), loaded.options().grouped());
+            grid.showFromTop(loaded.items(), headers, dateOrdered);
         }
         shownKey = key;
     }
 
+    /** The View and Arrange (shared with the Grid), used on the Folders page. */
+    public void setLayout(GridView newView, FolderArrange newArrange) {
+        if (newView != view || !newArrange.equals(arrange)) {
+            view = newView;
+            arrange = newArrange;
+            if (page() == Page.FOLDERS) {
+                refresh();
+            }
+        }
+    }
+
+    /** The page on screen; listen to it to follow page changes. */
+    public ReadOnlyObjectProperty<Page> pageProperty() {
+        return pages.getSelectionModel().selectedItemProperty();
+    }
+
+    /** "Favorites · 12"; an empty page shows only its name (the page itself says it is empty). */
+    static String titled(String name, int count) {
+        return count == 0 ? name : "%s · %,d".formatted(name, count);
+    }
+
     private String emptyText(Request request, Loaded loaded) {
         if (loaded.scope() == null) {
-            return "No library folders yet. Click \"Library folders…\" to add one.";
+            return "No library folders yet";
         }
-        String filtered = request.options().filter() == ViewOptions.DEFAULT.filter() ? ""
-                : " (showing only " + request.options().filter() + ")";
+        String filtered = !request.options().isFiltered() ? ""
+                : " (showing only " + request.options().filterLabel() + ")";
         return switch (request.page()) {
-            case FOLDERS -> request.recursive() ? "Nothing in this folder" + filtered + "."
-                    : "No media directly in this folder" + filtered + ". Tick \"Include subfolders\" to see what's inside.";
-            case ALBUMS -> "Nothing in this album" + filtered + ".";
-            case FAVORITES -> "No favorites" + filtered + ". Press F on a photo, or right-click it › Add to Favorites.";
-            case RECENTLY_ADDED -> "Nothing added yet" + filtered + ".";
-            case HIDDEN -> "Nothing hidden" + filtered + ". Press H on a photo to hide it from everywhere but here."
-                    + (OsHiddenMark.SUPPORTED && !request.options().osHiddenShown()
-                            ? " Files marked Hidden in File Explorer show here too." : "");
-            case TRASH -> "Trash is empty" + filtered + ".";
+            case FOLDERS -> request.recursive() ? "Nothing in this folder" + filtered
+                    : "Nothing directly in this folder" + filtered;
+            case ALBUMS -> "Nothing in this album" + filtered;
+            case FAVORITES -> "No favorites" + filtered;
+            case RECENTLY_ADDED -> "Nothing added yet" + filtered;
+            case HIDDEN -> "Nothing hidden" + filtered;
+            case TRASH -> "Trash is empty" + filtered;
         };
     }
 
@@ -445,16 +492,7 @@ public final class CollectionsPage extends BorderPane {
         HBox.setHgrow(spacer, Priority.ALWAYS);
         folderSplit.getItems().clear();
         hint.setTextOverrun(page == Page.FOLDERS ? OverrunStyle.LEADING_ELLIPSIS : OverrunStyle.ELLIPSIS);
-        hint.setText(switch (page) {
-            case HIDDEN -> "Hidden items are shown only here: not on the Timeline, in search or in other pages."
-                    + (!OsHiddenMark.SUPPORTED ? "" : options.osHiddenShown()
-                            ? " Files marked Hidden in File Explorer show everywhere (Settings)."
-                            : " That includes files marked Hidden in File Explorer.");
-            case TRASH -> "Items in Trash are still on disk. Restore them, or delete them permanently"
-                    + " (right-click, or Delete).";
-            case RECENTLY_ADDED -> "Newest added to Prismo first.";
-            default -> "";
-        });
+        hint.setText(""); // the Folders page shows the folder's place here (load)
         switch (page) {
             case FOLDERS -> {
                 header.getChildren().addAll(title, hint, spacer, recursive);
@@ -543,10 +581,74 @@ public final class CollectionsPage extends BorderPane {
         private final HBox row = new HBox(8, Icon.FOLDER.node(FOLDER_ICON_SIZE), name, count);
         private final Tooltip path = new Tooltip();
 
+        /**
+         * The thread lines (1.1.0, like YouTube's reply threads): under each parent's arrow a thin line runs down past
+         * its folders, and each folder gets a rounded elbow from that line into it. The line stops at the last
+         * folder's elbow. One path per row, redrawn at each layout.
+         */
+        private final javafx.scene.shape.Path guides = new javafx.scene.shape.Path();
+
         FolderCell() {
             name.getStyleClass().add("folder-name");
             count.getStyleClass().add("folder-count");
             row.setAlignment(Pos.CENTER_LEFT);
+            guides.getStyleClass().add("tree-guide");
+            guides.setManaged(false);
+            guides.setMouseTransparent(true);
+        }
+
+        @Override
+        protected void layoutChildren() {
+            super.layoutChildren();
+            TreeItem<FolderTree.Node> item = getTreeItem();
+            // The tree hides its root, so a library folder is level 1: no line; its folders get one, and so on.
+            int depth = isEmpty() || item == null || getTreeView() == null ? 0
+                    : Math.max(0, getTreeView().getTreeItemLevel(item) - 1);
+            double indent = getSkin() instanceof TreeCellSkin<?> skin ? skin.getIndent() : 10;
+            // A folder without subfolders has no arrow (width 0): its lines still go under its parents' arrows.
+            Node arrow = getDisclosureNode();
+            if (arrow != null && arrow.isVisible()) {
+                arrowWidth = Math.max(arrowWidth, arrow.getLayoutBounds().getWidth());
+            }
+            if (!getChildren().contains(guides)) {
+                getChildren().add(guides); // the skin rebuilds the children when the graphic changes
+            }
+            guides.getElements().setAll(threadLines(item, depth, indent, arrow != null && arrow.isVisible()));
+        }
+
+        /**
+         * The lines for a row {@code depth} levels below its library folder. Level {@code depth - 1} is the row's own
+         * parent: an elbow into the row, and the line on down if more folders follow. Higher levels: a straight line
+         * only while that ancestor's branch has more folders below. x ends in .5 so a 1-pixel line stays sharp.
+         */
+        private List<PathElement> threadLines(TreeItem<FolderTree.Node> item, int depth, double indent,
+                boolean hasArrow) {
+            List<PathElement> lines = new ArrayList<>();
+            double height = getHeight();
+            double middle = Math.round(height / 2) + 0.5;
+            TreeItem<FolderTree.Node> branch = item;
+            for (int level = depth - 1; level >= 0 && branch != null; level--) {
+                double x = Math.floor(snappedLeftInset() + indent * level + arrowWidth / 2) + 0.5;
+                boolean more = branch.nextSibling() != null;
+                if (level == depth - 1) {
+                    // Into the arrow if the folder has one, else up to the folder icon.
+                    double end = hasArrow ? snappedLeftInset() + indent * depth + 2 : row.getLayoutX() - 4;
+                    double radius = Math.min(ELBOW_RADIUS, Math.max(0, end - x));
+                    lines.add(new MoveTo(x, 0));
+                    lines.add(new LineTo(x, middle - radius));
+                    lines.add(new ArcTo(radius, radius, 0, x + radius, middle, false, false));
+                    lines.add(new LineTo(Math.max(x + radius, end), middle));
+                    if (more) {
+                        lines.add(new MoveTo(x, middle - radius));
+                        lines.add(new LineTo(x, height));
+                    }
+                } else if (more) {
+                    lines.add(new MoveTo(x, 0));
+                    lines.add(new LineTo(x, height));
+                }
+                branch = branch.getParent();
+            }
+            return lines;
         }
 
         @Override
@@ -563,6 +665,7 @@ public final class CollectionsPage extends BorderPane {
                 setGraphic(row);
                 setTooltip(path);
             }
+            requestLayout(); // the lines depend on the folders below, which a refresh can change
         }
     }
 

@@ -9,6 +9,7 @@ import io.github.mihirvr.prismo.thumbs.MediaRef;
 import java.nio.file.Path;
 import java.util.List;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.KeyEvent;
 import org.junit.jupiter.api.Test;
 
 class ItemActionTest {
@@ -43,14 +44,14 @@ class ItemActionTest {
     }
 
     @Test
-    void theEyeShowsHWhateverActionItIs() {
-        assertEquals("H", ItemAction.UNHIDE_IN_EXPLORER.shortcut(osHidden(false), false).getDisplayText(),
-                "on Hidden, H clears the File Explorer mark: the menu says so");
-        assertEquals("Unhide in File Explorer (H)", ItemAction.UNHIDE_IN_EXPLORER.tooltip(osHidden(false), false));
+    void theEyeShowsCtrlHWhateverActionItIs() {
+        assertEquals("Ctrl+H", ItemAction.UNHIDE_IN_EXPLORER.shortcut(osHidden(false), false).getDisplayText(),
+                "on Hidden, Ctrl+H clears the File Explorer mark: the menu says so");
+        assertEquals("Unhide in File Explorer (Ctrl+H)", ItemAction.UNHIDE_IN_EXPLORER.tooltip(osHidden(false), false));
         assertEquals(null, ItemAction.UNHIDE_IN_EXPLORER.shortcut(osHidden(true), false), "there H is Prismo's Unhide");
         assertEquals(null, ItemAction.HIDE_IN_EXPLORER.shortcut(item(false, false, false), false));
         assertEquals(null, ItemAction.UNHIDE_IN_EXPLORER.shortcut(osHidden(false), true), "switch on: H is Hide");
-        assertEquals("F", ItemAction.FAVORITE.shortcut(item(false, false, false), false).getDisplayText());
+        assertEquals("Ctrl+D", ItemAction.FAVORITE.shortcut(item(false, false, false), false).getDisplayText());
         assertEquals("Move to Trash (Delete)", ItemAction.TRASH.tooltip(item(false, false, false), false));
     }
 
@@ -98,25 +99,40 @@ class ItemActionTest {
 
     @Test
     void keysToggleAndDeleteIsTrashThenDeletePermanently() {
-        assertEquals(ItemAction.FAVORITE, ItemAction.forKey(KeyCode.F, item(false, false, false)));
-        assertEquals(ItemAction.UNFAVORITE, ItemAction.forKey(KeyCode.F, item(true, false, false)));
+        assertEquals(ItemAction.FAVORITE, ItemAction.forKey(KeyCode.D, item(false, false, false)));
+        assertEquals(ItemAction.UNFAVORITE, ItemAction.forKey(KeyCode.D, item(true, false, false)));
         assertEquals(ItemAction.HIDE, ItemAction.forKey(KeyCode.H, item(false, false, false)));
         assertEquals(ItemAction.UNHIDE, ItemAction.forKey(KeyCode.H, item(false, true, false)));
         assertEquals(ItemAction.TRASH, ItemAction.forKey(KeyCode.DELETE, item(false, true, false)));
         assertEquals(ItemAction.DELETE_PERMANENTLY, ItemAction.forKey(KeyCode.DELETE, item(false, false, true)));
-        assertNull(ItemAction.forKey(KeyCode.F, item(false, false, true)), "nothing to favorite in Trash");
+        assertNull(ItemAction.forKey(KeyCode.D, item(false, false, true)), "nothing to favorite in Trash");
         assertNull(ItemAction.forKey(KeyCode.H, item(false, false, true)));
         assertNull(ItemAction.forKey(KeyCode.R, item(false, false, false)), "R is the viewer's rotate");
         for (ItemAction action : ItemAction.values()) {
             for (TimelineItem item : List.of(item(false, false, false), item(true, true, false), item(true, true, true),
                     osHidden(false), osHidden(true))) {
-                for (KeyCode key : List.of(KeyCode.F, KeyCode.H, KeyCode.DELETE)) {
+                for (KeyCode key : List.of(KeyCode.D, KeyCode.H, KeyCode.DELETE)) {
                     if (ItemAction.forKey(key, item) == action) {
                         assertTrue(ItemAction.available(item).contains(action), "a key only does what's available");
                     }
                 }
             }
         }
+    }
+
+    @Test
+    void favoriteAndHideNeedCtrlAndDeleteGoesAlone() {
+        assertEquals(KeyCode.D, ItemAction.keyOf(press(KeyCode.D, false, true)));
+        assertEquals(KeyCode.H, ItemAction.keyOf(press(KeyCode.H, false, true)));
+        assertEquals(KeyCode.DELETE, ItemAction.keyOf(press(KeyCode.DELETE, false, false)));
+        assertNull(ItemAction.keyOf(press(KeyCode.F, false, false)), "F is full screen now");
+        assertNull(ItemAction.keyOf(press(KeyCode.H, false, false)), "H alone is the subtitle delay");
+        assertNull(ItemAction.keyOf(press(KeyCode.D, true, true)), "Ctrl+Shift+D is something else");
+        assertNull(ItemAction.keyOf(press(KeyCode.DELETE, false, true)));
+    }
+
+    private static KeyEvent press(KeyCode code, boolean shift, boolean ctrl) {
+        return new KeyEvent(KeyEvent.KEY_PRESSED, "", "", code, shift, ctrl, false, false);
     }
 
     @Test
@@ -138,10 +154,10 @@ class ItemActionTest {
 
     @Test
     void tooltipsAndMenusShowTheKey() {
-        assertEquals("Add to Favorites (F)", ItemAction.FAVORITE.tooltip());
+        assertEquals("Add to Favorites (Ctrl+D)", ItemAction.FAVORITE.tooltip());
         assertEquals("Move to Trash (Delete)", ItemAction.TRASH.tooltip());
         assertEquals("Restore from Trash", ItemAction.RESTORE.tooltip());
-        assertEquals("H", ItemAction.HIDE.shortcut().getName());
+        assertEquals("Ctrl+H", ItemAction.HIDE.shortcut().getDisplayText());
         assertNull(ItemAction.HIDE_IN_EXPLORER.shortcut());
         assertTrue(osHidden(false).hiddenAnyWay());
         assertFalse(item(true, false, false).hiddenAnyWay());
@@ -204,12 +220,12 @@ class ItemActionTest {
     @Test
     void keysWorkOnTheWholeSelection() {
         List<TimelineItem> favorites = List.of(item(true, false, false), item(true, true, false));
-        assertEquals(ItemAction.UNFAVORITE, ItemAction.forSelectionKey(KeyCode.F, favorites, false));
+        assertEquals(ItemAction.UNFAVORITE, ItemAction.forSelectionKey(KeyCode.D, favorites, false));
         assertEquals(ItemAction.HIDE, ItemAction.forSelectionKey(KeyCode.H, favorites, false));
         assertEquals(ItemAction.TRASH, ItemAction.forSelectionKey(KeyCode.DELETE, favorites, false));
         assertEquals(ItemAction.DELETE_PERMANENTLY,
                 ItemAction.forSelectionKey(KeyCode.DELETE, List.of(item(false, false, true)), false));
-        assertNull(ItemAction.forSelectionKey(KeyCode.F, List.of(item(false, false, true)), false), "not in Trash");
+        assertNull(ItemAction.forSelectionKey(KeyCode.D, List.of(item(false, false, true)), false), "not in Trash");
         assertNull(ItemAction.forSelectionKey(KeyCode.Q, favorites, false));
     }
 

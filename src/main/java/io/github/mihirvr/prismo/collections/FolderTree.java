@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.collections;
 
+import io.github.mihirvr.prismo.ui.NaturalOrder;
 import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.nio.file.Path;
@@ -42,7 +43,7 @@ public final class FolderTree {
     }
 
     private static final Comparator<Node> BY_NAME =
-            Comparator.comparing(Node::name, String.CASE_INSENSITIVE_ORDER).thenComparing(Node::name);
+            Comparator.comparing(Node::name, NaturalOrder.INSTANCE);
 
     private FolderTree() {
     }

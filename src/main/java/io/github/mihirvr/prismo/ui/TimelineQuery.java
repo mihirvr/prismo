@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.ui;
 
 import io.github.mihirvr.prismo.thumbs.MediaRef;
+import java.util.Comparator;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -105,6 +106,21 @@ public final class TimelineQuery {
                     rows.getBoolean(9), rows.getBoolean(10), rows.getDouble(11), rows.getDouble(12),
                     rows.getBoolean(13)));
         }
+        if (options.sort() == MediaSort.NAME) {
+            items.sort(naturalNames(options.descending()));
+        }
         return items;
+    }
+
+    /**
+     * The Name sort in natural order (2 before 10), then id, in the view's direction. Done here, not in SQL: SQLite
+     * calling a Java collation took 1.4 s for 100,000 names against 0.1 s for its own NOCASE (measured 1.1.0), so
+     * SQL sorts by NOCASE and this re-sort in memory puts the numbers right.
+     */
+    static Comparator<TimelineItem> naturalNames(boolean descending) {
+        Comparator<TimelineItem> ascending = Comparator
+                .comparing((TimelineItem item) -> item.ref().path().getFileName().toString(), NaturalOrder.INSTANCE)
+                .thenComparingLong(item -> item.ref().id());
+        return descending ? ascending.reversed() : ascending;
     }
 }

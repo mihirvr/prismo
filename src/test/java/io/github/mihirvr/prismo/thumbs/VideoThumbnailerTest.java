@@ -1,15 +1,18 @@
 package io.github.mihirvr.prismo.thumbs;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.mihirvr.prismo.platform.ExternalProgram;
 import io.github.mihirvr.prismo.testing.TestMedia;
 import io.github.mihirvr.prismo.video.VideoNatives;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.Test;
@@ -87,11 +90,114 @@ class VideoThumbnailerTest {
 
     @Test
     void seeksBeforeOpeningTheInput() {
-        List<String> command = thumbnailer.command(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), true);
+        List<String> command = thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 2.5);
 
         assertTrue(command.indexOf("-ss") >= 0 && command.indexOf("-ss") < command.indexOf("-i"), command.toString());
-        assertEquals(VideoThumbnailer.FRAME_AT, command.get(command.indexOf("-ss") + 1));
+        assertEquals("2.500", command.get(command.indexOf("-ss") + 1));
+        assertEquals("0:V:0", command.get(command.indexOf("-map") + 1), "the real video, never the cover");
         assertEquals("out.tmp", command.getLast());
+        assertFalse(thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 0)
+                .contains("-ss"), "0 = the first frame");
+    }
+
+    @Test
+    void theFirstTryIsAtATenthOfTheLengthBetweenOneSecondAndOneMinute() {
+        assertEquals(1, VideoThumbnailer.firstFrameAt(0), "unknown length: 1 s, as before 1.1.0");
+        assertEquals(0, VideoThumbnailer.firstFrameAt(0.6), "shorter than 1 s: the first frame");
+        assertEquals(1, VideoThumbnailer.firstFrameAt(5));
+        assertEquals(4, VideoThumbnailer.firstFrameAt(40), 1e-9);
+        assertEquals(60, VideoThumbnailer.firstFrameAt(2 * 3600), "a film: at most a minute in");
+    }
+
+    @Test
+    void readsTheLengthAndTheCoverFromFfmpegsListing() {
+        // As the bundled ffmpeg 8.1 prints them (an MP4 with cover art; an MKV with cover.jpg attached).
+        String mp4 = """
+                  Duration: 00:01:40.50, start: 0.000000, bitrate: 593 kb/s
+                  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 640x360
+                  Stream #0:1[0x0]: Video: mjpeg (Baseline), yuvj420p(pc), 600x600 [SAR 1:1 DAR 1:1], 90k tbn (attached pic)
+                """;
+        assertEquals(new VideoThumbnailer.Facts(100.5, 1), VideoThumbnailer.Facts.parse(mp4));
+        String mkv = """
+                  Duration: 01:02:03.00, start: 0.000000, bitrate: 9 kb/s
+                  Stream #0:0: Video: h264 (High), yuv420p(tv, progressive), 640x360 [SAR 1:1 DAR 16:9], 25 fps
+                  Stream #0:1: Audio: aac (LC), 48000 Hz, stereo, fltp (default)
+                  Stream #0:2: Video: mjpeg (Baseline), yuvj420p(pc), 500x500, 90k tbn (attached pic)
+                      filename        : cover.jpg
+                """;
+        assertEquals(new VideoThumbnailer.Facts(3723, 2), VideoThumbnailer.Facts.parse(mkv));
+        assertEquals(new VideoThumbnailer.Facts(0, -1), VideoThumbnailer.Facts.parse("  Duration: N/A, bitrate: N/A"));
+    }
+
+    @Test
+    void blackWhiteAndFlatFramesAreBadAndAGoodFrameWins() {
+        VideoThumbnailer.Look black = VideoThumbnailer.Look.of(filled(0x000000));
+        VideoThumbnailer.Look white = VideoThumbnailer.Look.of(filled(0xFFFFFF));
+        VideoThumbnailer.Look grey = VideoThumbnailer.Look.of(filled(0x808080));
+        BufferedImage bars = new BufferedImage(64, 36, BufferedImage.TYPE_INT_RGB);
+        for (int x = 0; x < 64; x++) {
+            for (int y = 0; y < 36; y++) {
+                bars.setRGB(x, y, x < 32 ? 0x202020 : 0xE0E0E0);
+            }
+        }
+        VideoThumbnailer.Look good = VideoThumbnailer.Look.of(bars);
+
+        assertFalse(black.good());
+        assertFalse(white.good());
+        assertFalse(grey.good(), "one flat colour");
+        assertTrue(good.good(), good.toString());
+        assertTrue(good.betterThan(grey));
+        assertFalse(black.betterThan(good));
+        assertTrue(grey.betterThan(black) || black.betterThan(grey) || grey.contrast() == black.contrast());
+    }
+
+    @Test
+    void aVideoThatStartsDarkGetsALaterFrame() throws Exception {
+        // 12 s black, then 8 s of test pattern: 10 %, 25 % and 50 % are black, 75 % (15 s) is the pattern.
+        Path video = tmp.resolve("dark start.mp4");
+        ffmpeg("-f", "lavfi", "-i", "color=black:size=320x180:rate=10:duration=12", "-f", "lavfi", "-i",
+                "testsrc2=size=320x180:rate=10:duration=8", "-filter_complex", "[0][1]concat=n=2:v=1[v]",
+                "-map", "[v]", "-c:v", "mpeg4", "-g", "10", video.toString());
+
+        BufferedImage thumb = generate(video);
+
+        assertTrue(VideoThumbnailer.Look.of(thumb).good(), VideoThumbnailer.Look.of(thumb).toString());
+        try (var left = Files.list(tmp)) {
+            assertEquals(List.of(), left.filter(p -> p.toString().endsWith(".jpg")).toList(), "no tries left behind");
+        }
+    }
+
+    @Test
+    void aVideosOwnCoverPictureIsUsed() throws Exception {
+        Path cover = tmp.resolve("cover.jpg");
+        ffmpeg("-f", "lavfi", "-i", "smptebars=size=200x200", "-frames:v", "1", cover.toString());
+        Path video = tmp.resolve("with cover.mp4");
+        ffmpeg("-f", "lavfi", "-i", "color=black:size=320x180:rate=10:duration=6", "-i", cover.toString(),
+                "-map", "0", "-map", "1", "-c:v:0", "mpeg4", "-c:v:1", "mjpeg", "-disposition:v:1", "attached_pic",
+                video.toString());
+
+        BufferedImage thumb = generate(video);
+
+        assertEquals(200, thumb.getWidth(), "the square cover, not a 16:9 frame");
+        assertEquals(200, thumb.getHeight());
+    }
+
+    private static void ffmpeg(String... arguments) throws IOException {
+        List<String> command = new ArrayList<>(List.of(VideoNatives.ffmpegExecutable().toString(), "-nostdin",
+                "-hide_banner", "-loglevel", "error", "-y"));
+        command.addAll(List.of(arguments));
+        String output = ExternalProgram.run(command, 60);
+        assertTrue(Files.size(Path.of(arguments[arguments.length - 1])) > 0, output);
+    }
+
+    private static BufferedImage filled(int rgb) {
+        BufferedImage image = new BufferedImage(64, 36, BufferedImage.TYPE_INT_RGB);
+        for (int x = 0; x < 64; x++) {
+            for (int y = 0; y < 36; y++) {
+                image.setRGB(x, y, rgb);
+            }
+        }
+        return image;
     }
 
     private BufferedImage generate(Path video) throws IOException {

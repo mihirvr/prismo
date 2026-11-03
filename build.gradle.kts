@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.mihirvr"
-version = "1.0.1"
+version = "1.1.0"
 
 java {
     toolchain {
@@ -124,6 +124,40 @@ val windowsUpgradeUuid = "39ba06ee-c306-4f35-bdb6-28f103dc7eaf"
 val vendor = "Mihir Revaskar"
 val copyrightLine = "Copyright (c) 2026 Mihir Revaskar"
 val summary = "A phone-style photo and video gallery for your PC"
+// 1.1.0: Windows shows the description as the app's name in "Open with", so there it is just "Prismo".
+val packageDescription = if (isWindows) "Prismo" else summary
+
+// 1.1.0: the photo and video types Prismo opens from File Explorer ("Open with"); the same extensions as
+// index.MediaType. The installer registers each one; Windows keeps any default app the user already chose.
+val fileAssociations = mapOf(
+    "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "webp" to "image/webp",
+    "heic" to "image/heic", "heif" to "image/heif", "bmp" to "image/bmp", "tif" to "image/tiff",
+    "tiff" to "image/tiff", "gif" to "image/gif",
+    "mp4" to "video/mp4", "m4v" to "video/x-m4v", "mov" to "video/quicktime", "mkv" to "video/x-matroska",
+    "webm" to "video/webm", "avi" to "video/x-msvideo",
+    "cr2" to "image/x-canon-cr2", "cr3" to "image/x-canon-cr3", "nef" to "image/x-nikon-nef",
+    "arw" to "image/x-sony-arw", "dng" to "image/x-adobe-dng", "orf" to "image/x-olympus-orf",
+    "rw2" to "image/x-panasonic-rw2", "raf" to "image/x-fuji-raf", "rwl" to "image/x-leica-rwl",
+    "srw" to "image/x-samsung-srw", "pef" to "image/x-pentax-pef",
+)
+
+// One properties file per type, as jpackage's --file-associations wants.
+val fileAssociationFiles = tasks.register("fileAssociationFiles") {
+    description = "Writes the installer's file-association files (one per photo or video type)."
+    val dir = layout.buildDirectory.dir("packaging/associations")
+    inputs.property("associations", fileAssociations)
+    outputs.dir(dir)
+    doLast {
+        val out = dir.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        fileAssociations.forEach { (extension, mime) ->
+            val kind = if (mime.startsWith("video/")) "video" else "photo"
+            out.resolve("$extension.properties").writeText(
+                "extension=$extension\nmime-type=$mime\ndescription=Prismo $kind\n")
+        }
+    }
+}
 
 val toolchainHome = javaToolchains.compilerFor(java.toolchain).map { it.metadata.installationPath.asFile }
 fun jdkTool(name: String) = toolchainHome.map { it.resolve("bin").resolve(if (isWindows) "$name.exe" else name).path }
@@ -232,7 +266,7 @@ val appImage = tasks.register<Exec>("appImage") {
             "--app-version", packageVersion,
             "--vendor", vendor,
             "--copyright", copyrightLine,
-            "--description", summary,
+            "--description", packageDescription,
             "--icon", if (isWindows) dir.file("prismo.ico").asFile.path
                       else layout.projectDirectory.file("src/main/resources/ui/icon/prismo-256.png").asFile.path,
             "--input", dir.dir("input").asFile.path,
@@ -250,9 +284,10 @@ val appImage = tasks.register<Exec>("appImage") {
 val installer = tasks.register<Exec>("installer") {
     group = "distribution"
     description = "Builds the installer for this OS (.exe on Windows, .deb on Linux) in build/packaging/installer."
-    dependsOn(appImage)
+    dependsOn(appImage, fileAssociationFiles)
     val dest = packagingDir.map { it.dir("installer") }
     inputs.dir(packagingDir.map { it.dir("image") })
+    inputs.dir(packagingDir.map { it.dir("associations") })
     inputs.file(layout.projectDirectory.file("LICENSE"))
     outputs.dir(dest)
     doFirst {
@@ -267,11 +302,14 @@ val installer = tasks.register<Exec>("installer") {
             "--app-version", packageVersion,
             "--vendor", vendor,
             "--copyright", copyrightLine,
-            "--description", summary,
+            "--description", packageDescription,
             "--license-file", layout.projectDirectory.file("LICENSE").asFile.path,
             "--about-url", "https://prismo.mihirr.in",
             "--dest", dest.get().asFile.path,
-        )
+        ) + fileAssociations.keys.sorted().flatMap { extension ->
+            listOf("--file-associations",
+                packagingDir.get().file("associations/$extension.properties").asFile.path)
+        }
         val perOs = if (isWindows) listOf(
             "--win-per-user-install", // into the user's AppData: no admin (UAC) prompt
             // %LOCALAPPDATA%\Programs\Prismo, the usual place for per-user apps. Not jpackage's default

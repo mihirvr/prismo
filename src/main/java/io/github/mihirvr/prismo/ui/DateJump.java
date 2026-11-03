@@ -71,9 +71,7 @@ public final class DateJump {
         HBox header = new HBox(previous, left, titleButton, right, next);
         header.getStyleClass().add("date-jump-header");
         cells.getStyleClass().add("date-jump-cells");
-        Label hint = new Label("Greyed: no photos or videos then");
-        hint.getStyleClass().add("date-jump-hint");
-        VBox content = new VBox(header, cells, hint);
+        VBox content = new VBox(header, cells);
         content.getStyleClass().add("date-jump");
 
         CustomMenuItem item = new CustomMenuItem(content, false);
@@ -85,7 +83,8 @@ public final class DateJump {
     /** Opens the calendar under {@code button}, on the month of the photos at the top of {@code grid}. */
     public static void show(Node button, TimelineView grid) {
         if (!grid.isDateOrdered()) {
-            MenuItem why = new MenuItem("Sort by a date (Date taken, Date added or Date modified) to jump to one");
+            MenuItem why = new MenuItem(grid.isInFolders() ? "Not in the Folders view"
+                    : "Sort by a date to use this");
             why.setDisable(true);
             new ContextMenu(why).show(button, Side.BOTTOM, 0, 4);
             return;

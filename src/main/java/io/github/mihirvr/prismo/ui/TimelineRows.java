@@ -64,6 +64,51 @@ final class TimelineRows {
     }
 
     /**
+     * The Name sort: a header per first letter ("0-9", "A" to "Z", "#"; {@link NaturalOrder#headerOf}), items in
+     * the order given (natural name order keeps each letter in one piece).
+     */
+    static List<TimelineRow> byLetter(List<TimelineItem> items, int columns) {
+        List<FolderSections.Section> sections = new ArrayList<>();
+        int start = 0;
+        while (start < items.size()) {
+            String letter = NaturalOrder.headerOf(fileName(items.get(start)));
+            int end = start + 1;
+            while (end < items.size() && NaturalOrder.headerOf(fileName(items.get(end))).equals(letter)) {
+                end++;
+            }
+            sections.add(new FolderSections.Section(letter, items.subList(start, end)));
+            start = end;
+        }
+        return build(sections, columns);
+    }
+
+    private static String fileName(TimelineItem item) {
+        return item.ref().path().getFileName().toString();
+    }
+
+    /**
+     * The Folders view: a header per section (its label and count), then its items in rows of {@code columns}.
+     * Empty sections are left out. The rows hold views into the sections' lists, which must not change afterwards.
+     */
+    static List<TimelineRow> build(List<FolderSections.Section> sections, int columns) {
+        if (columns < 1) {
+            throw new IllegalArgumentException("columns must be at least 1: " + columns);
+        }
+        List<TimelineRow> rows = new ArrayList<>();
+        for (FolderSections.Section section : sections) {
+            List<TimelineItem> items = section.items();
+            if (items.isEmpty()) {
+                continue;
+            }
+            rows.add(new TimelineRow.Header(section.label(), items.size()));
+            for (int from = 0; from < items.size(); from += columns) {
+                rows.add(new TimelineRow.Thumbs(items.subList(from, Math.min(from + columns, items.size()))));
+            }
+        }
+        return rows;
+    }
+
+    /**
      * Arrow Up / Down on the Timeline: the item in the same column of the next thumbnail row above
      * ({@code direction} −1) or below (+1), skipping headers. A shorter row gives its last item.
      *

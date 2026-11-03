@@ -29,18 +29,25 @@ Use `--test` and a folder with a mix of photos and videos (phone photos, a HEIC 
 video with sound, a screenshot).
 
 1. **First start:** the empty screen shows the logo and "Add library folders…". Add your test folder.
-2. **Timeline:** items appear while indexing, newest first, under date headers; thumbnails fill in. Ctrl + mouse
-   wheel and the Size slider change the thumbnail size.
+2. **Grid:** items appear while indexing, newest first, under date headers; thumbnails fill in, and a small note
+   at the bottom left says what is running (it goes away when done). Ctrl + mouse wheel and the size slider change
+   the thumbnail size. The View menu switches Timeline / Folders / All files; in Folders, Arrange sets the order of
+   the folders and the files (names sort 1, 2, 10).
 3. **HEIC and RAW:** they get real thumbnails and open in the viewer (not "Open with default app").
 4. **Viewer:** click a photo. Left / Right move, + / - zoom, 0 fits, R rotates, Space starts the slideshow,
-   I opens the Info panel (camera, exposure, GPS), F11 is full screen, Esc goes back.
-5. **Video:** a phone video plays with sound in sync. Space, J / L, Left / Right, Up / Down, M, [ ], C (subtitles),
-   A (sound track), double-click for full screen. Close it halfway: its thumbnail shows a progress bar, and it
+   I opens the Info panel (camera, exposure, GPS), F (or F11) is full screen, Esc goes back. The filmstrip under
+   the photo shows the neighbours; it hides when the mouse rests, and in full screen floats over the photo on a
+   soft dark band with no hard edge (also over a video's control bar).
+5. **Video:** a phone video plays with sound in sync. Space / K, J / L, Left / Right, 0 to 9, Up / Down, M,
+   < / >, C (subtitles on / off), V (next subtitles), B (sound track), Shift+L (loop), double-click for full screen.
+   Video thumbnails show the video's cover if it has one, else a frame about 10 % in, never a black fade-in or a
+   white title card. Close it halfway: its thumbnail shows a progress bar, and it
    resumes there next time.
 6. **Search:** Ctrl+F, type part of a name, a folder, a camera or a year.
-7. **Filters + Sort:** Show (Photos / Videos …) and Sort change every grid.
+7. **Filters + Sort:** the media menu (Photos / Videos …), the Types menu (tick JPG, PNG, HEIC…) and Sort change
+   every grid.
 8. **Collections:** Folders (tree + "Include subfolders"), Albums, Favorites, Recently Added, Hidden, Trash.
-9. **Item actions:** F (favorite), H (hide), Delete (to Trash), then Restore from Trash. Delete permanently asks
+9. **Item actions:** Ctrl+D (favorite), Ctrl+H (hide), Delete (to Trash), then Restore from Trash. Delete permanently asks
    first and moves the file to the Recycle Bin.
 10. **Selection:** Ctrl-click a few tiles, Shift-click a range, Ctrl+A. The bar at the bottom favorites, hides,
     trashes, copies or moves them all at once; Esc clears.
@@ -53,7 +60,7 @@ video with sound, a screenshot).
 14. **Network folder (if you have a NAS or shared folder):** add it; the Library folders dialog says "network
     folder: no live updates"; new files show up within 10 minutes.
 15. **Settings (Ctrl+,):** each look (Light, Dark, AMOLED black, Follow system), Hidden items, Ignored folders,
-    Timeline grouping, Performance (thumbnail threads, Clear thumbnails), Keyboard shortcuts, About.
+    Date headers, Performance (thumbnail threads, Clear thumbnails), Keyboard shortcuts, About.
 16. **Restart:** close and start again: window place and size, look, thumbnail size, video volume / speed and every
     setting are as you left them.
 17. **Small window:** make the window as small as it goes: nothing overlaps, and the viewer's video bar still fits.
@@ -67,8 +74,10 @@ video with sound, a screenshot).
     forward button (or Alt+Right) walks ahead again; going somewhere new stops Forward. Open a photo, move to the
     next one, press Back: the viewer closes; Forward opens it on that photo. A video opened again with Forward
     carries on where it was.
-20. **Remembered tracks:** in a video with two sound tracks or subtitle tracks, pick a sound track (A), subtitles
-    (C or the menu) and a delay (Z / X). Close it and open it again (and after a restart): the same choices come
+20. **Remembered tracks:** in a video with two sound tracks or subtitle tracks, pick a sound track (B), subtitles
+    (V or the menu) and a delay (G / H). Close it and open it again (and after a restart): the same choices come
     back. Another video you haven't set up starts in the languages you picked last; pick Off once and a video with
     an `.srt` next to it then stays off. Delete or rename a subtitle file you picked from another folder: the video
     still opens, with the language picked last.
+21. **Open with (installed app only):** in File Explorer, right-click a photo or video › Open with › Prismo: it
+    opens at once in its own small viewer (no library), and the arrows and filmstrip step through its folder.

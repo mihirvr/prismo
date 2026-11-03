@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Function;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.css.PseudoClass;
@@ -101,8 +102,15 @@ public final class TimelineView extends StackPane {
     /** Every cell the list has made (a few dozen), to move the focus ring without rebuilding them. */
     private final List<RowCell> cells = new ArrayList<>();
     private List<TimelineItem> items = List.of();
+    /** The items as loaded (the Sort bar's order), before any Folders view sections. */
+    private List<TimelineItem> loaded = List.of();
+    /** The Folders view's sections, or null for date headers / a plain grid. */
+    private List<FolderSections.Section> sections;
+    private Function<List<TimelineItem>, List<FolderSections.Section>> sectioner;
     /** Date headers on (date sorts) or off (a plain grid). */
-    private boolean grouped = true;
+    private Headers headers = Headers.DATES;
+    /** The items are in date order (a date sort), with or without headers: Go to date works. */
+    private boolean dateOrdered = true;
     /** How date headers split the items (Settings › Timeline); shared by every grid. */
     private Grouping grouping = Grouping.DEFAULT;
     private GridLayout layout = new GridLayout(1, DEFAULT_THUMBNAIL_SIZE);
@@ -164,6 +172,15 @@ public final class TimelineView extends StackPane {
         StackPane.setAlignment(selectionBar, Pos.BOTTOM_CENTER);
         StackPane.setMargin(selectionBar, new Insets(0, 16, 14, 16));
         getChildren().addAll(list, selectionBar);
+        // Without headers, a grid in date order still gets the month of the row under the mouse.
+        new ScrubLabel(this, list, () -> layout.cellSize() + GAP, row -> {
+            if (!dateOrdered || !(list.getItems().get(row) instanceof TimelineRow.Thumbs(var rowItems))) {
+                return null;
+            }
+            long day = DateGroups.dayOf(rowItems.getFirst().sortDate());
+            return DateGroups.labelOf(DateGroups.groupOf(day, LocalDate.now(clock).toEpochDay(), Grouping.MONTH),
+                    Grouping.MONTH);
+        });
         autoScroll = new AutoScroll(list, this::flow);
         visibleProperty().addListener((_, _, shown) -> {
             if (!shown) {
@@ -197,7 +214,7 @@ public final class TimelineView extends StackPane {
 
     /** Replaces everything shown (e.g. after an index run), staying on the same photo if it's still there. */
     public void setItems(List<TimelineItem> newItems) {
-        items = List.copyOf(newItems); // rows hold views into this list, so it must never change
+        take(newItems);
         rebuild(false);
         selection.retainShown(items);
         updateSelection(); // also when nothing left it: the actions follow the items (Favorite becomes Remove)
@@ -210,8 +227,17 @@ public final class TimelineView extends StackPane {
      * @param grouped date headers (date sorts) or a plain grid
      */
     public void showFromTop(List<TimelineItem> newItems, boolean grouped) {
-        this.grouped = grouped;
-        items = List.copyOf(newItems);
+        showFromTop(newItems, grouped ? Headers.DATES : Headers.NONE, grouped);
+    }
+
+    /**
+     * Like {@link #showFromTop(List, boolean)}, for a grid that is in date order without headers (the Grid's All
+     * files view on a date sort): Go to date still works.
+     */
+    public void showFromTop(List<TimelineItem> newItems, Headers headers, boolean dateOrdered) {
+        this.headers = headers;
+        this.dateOrdered = dateOrdered;
+        take(newItems);
         focusedId = NO_FOCUS;
         selection.clear();
         list.getItems().setAll(buildRows());
@@ -219,9 +245,9 @@ public final class TimelineView extends StackPane {
         updateSelection();
     }
 
-    /** True when the items are in date order (a date sort, with date headers): only then can it jump to a date. */
+    /** True when the items are in date order (a date sort): only then can it jump to a date. */
     public boolean isDateOrdered() {
-        return grouped && !items.isEmpty();
+        return dateOrdered && !items.isEmpty();
     }
 
     /**
@@ -361,6 +387,45 @@ public final class TimelineView extends StackPane {
         }
     }
 
+    /**
+     * The Folders view: {@code newSectioner} splits the items into folder sections (null = date headers or a plain
+     * grid again, in the loaded order). Applied now to the items shown, and to every later load; stays on the same
+     * photo.
+     */
+    public void setSectioner(Function<List<TimelineItem>, List<FolderSections.Section>> newSectioner) {
+        sectioner = newSectioner;
+        take(loaded);
+        rebuild(false);
+        selection.retainShown(items);
+        updateSelection();
+    }
+
+    /** True while the grid is split into folders (the Folders view). */
+    public boolean isInFolders() {
+        return sections != null;
+    }
+
+    /** Keeps the loaded items and works out what is shown: in sections (Folders view) or as loaded. */
+    private void take(List<TimelineItem> newItems) {
+        loaded = List.copyOf(newItems);
+        if (sectioner == null) {
+            sections = null;
+            items = loaded; // rows hold views into this list, so it must never change
+        } else {
+            sections = List.copyOf(sectioner.apply(loaded));
+            items = List.copyOf(FolderSections.flatten(sections));
+        }
+    }
+
+    /** Other headers for the same items (the Grid's View); rebuilds the rows, staying on the same photo. */
+    public void setHeaders(Headers newHeaders, boolean newDateOrdered) {
+        dateOrdered = newDateOrdered;
+        if (newHeaders != headers) {
+            headers = newHeaders;
+            rebuild(false);
+        }
+    }
+
     /** Shown when there is nothing to show. */
     public void setPlaceholder(Node placeholder) {
         list.setPlaceholder(placeholder);
@@ -420,8 +485,9 @@ public final class TimelineView extends StackPane {
             case SPACE -> toggleSelected(focusedId);
             default -> {
                 int at = indexOf(focusedId);
-                ItemAction action = at < 0 || event.isShortcutDown() || event.isAltDown()
-                        ? null : ItemAction.forKey(event.getCode(), items.get(at), osHiddenShown.getAsBoolean());
+                KeyCode actionKey = ItemAction.keyOf(event); // Ctrl+D, Ctrl+H, Delete
+                ItemAction action = at < 0 || actionKey == null
+                        ? null : ItemAction.forKey(actionKey, items.get(at), osHiddenShown.getAsBoolean());
                 handled = action != null;
                 if (handled) {
                     perform(action, items.get(at));
@@ -440,7 +506,7 @@ public final class TimelineView extends StackPane {
     }
 
     /**
-     * Keys that work on the whole selection: Esc clears it, Ctrl+C copies every file, F / H / Delete do the
+     * Keys that work on the whole selection: Esc clears it, Ctrl+C copies every file, Ctrl+D / Ctrl+H / Delete do the
      * selection bar's action.
      *
      * @return true if the key was used
@@ -454,8 +520,9 @@ public final class TimelineView extends StackPane {
             fileItems.copy(selectedItems());
             return true;
         }
-        ItemAction action = event.isShortcutDown() || event.isAltDown() ? null
-                : ItemAction.forSelectionKey(event.getCode(), selectedItems(), osHiddenShown.getAsBoolean());
+        KeyCode actionKey = ItemAction.keyOf(event);
+        ItemAction action = actionKey == null ? null
+                : ItemAction.forSelectionKey(actionKey, selectedItems(), osHiddenShown.getAsBoolean());
         if (action == null) {
             return false;
         }
@@ -684,15 +751,16 @@ public final class TimelineView extends StackPane {
                 () -> open(item.ref().id()));
         MenuItem select = Menus.item(selection.contains(item.ref().id()) ? "Unselect" : "Select", Icon.CHECK,
                 new KeyCodeCombination(KeyCode.SPACE), () -> toggleSelected(item.ref().id()));
-        menu = new ContextMenu(open, select, new SeparatorMenuItem());
+        // 1.1.0: what is used most on top, the file's own items in a File submenu (opens on hover).
+        menu = new ContextMenu(open);
         for (ItemAction action : ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, osHiddenShown.getAsBoolean())) {
             menu.getItems().add(Menus.item(action.menuText(), action.icon(),
                     action.shortcut(item, osHiddenShown.getAsBoolean()),
                     () -> perform(action, item)));
         }
-        menu.getItems().add(new SeparatorMenuItem());
-        menu.getItems().addAll(fileItems.menuItems(item));
-        menu.getItems().add(Menus.item("Info", Icon.INFO, INFO, () -> openInfo(item.ref().id())));
+        menu.getItems().addAll(Menus.item("Info", Icon.INFO, INFO, () -> openInfo(item.ref().id())),
+                new SeparatorMenuItem(), Menus.submenu("File", Icon.FOLDER, fileItems.menuItems(item)),
+                new SeparatorMenuItem(), select);
         menu.show(tile, screenX, screenY);
     }
 
@@ -707,8 +775,8 @@ public final class TimelineView extends StackPane {
             selected.getItems().add(Menus.item(action.menuText(), action.icon(), action.shortcut(),
                     () -> performOnSelection(action)));
         }
-        selected.getItems().add(new SeparatorMenuItem());
-        selected.getItems().addAll(fileItems.menuItems(chosen));
+        selected.getItems().addAll(new SeparatorMenuItem(),
+                Menus.submenu("File", Icon.FOLDER, fileItems.menuItems(chosen)));
         selected.getItems().addAll(new SeparatorMenuItem(),
                 Menus.item("Select all", Icon.CHECK, SELECT_ALL, () -> {
                     selection.selectAll(items);
@@ -771,7 +839,14 @@ public final class TimelineView extends StackPane {
     }
 
     private List<TimelineRow> buildRows() {
-        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay(), grouping, grouped);
+        if (sections != null) {
+            return TimelineRows.build(sections, layout.columns());
+        }
+        if (headers == Headers.LETTERS) {
+            return TimelineRows.byLetter(items, layout.columns());
+        }
+        return TimelineRows.build(items, layout.columns(), LocalDate.now(clock).toEpochDay(), grouping,
+                headers == Headers.DATES);
     }
 
     /** Which photo is at the top of the view now, or null at the very top / before the first layout. */
@@ -844,6 +919,7 @@ public final class TimelineView extends StackPane {
                     for (int i = 0; i < rowItems.size(); i++) {
                         tiles.get(i).show(rowItems.get(i).ref(), layout.cellSize());
                         tiles.get(i).setFavorite(rowItems.get(i).favorite());
+                        tiles.get(i).setOsHidden(rowItems.get(i).osHidden());
                         tiles.get(i).setVideoLength(rowItems.get(i).durationSeconds());
                         tiles.get(i).setWatchProgress(rowItems.get(i).watchedSeconds(), rowItems.get(i).durationSeconds());
                     }

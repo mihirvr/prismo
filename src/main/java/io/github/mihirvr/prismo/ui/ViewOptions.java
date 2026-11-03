@@ -1,21 +1,43 @@
 package io.github.mihirvr.prismo.ui;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+
 /**
  * The shared Filters + Sort choice, applied the same way to the Timeline, search results and the Collections
  * pages, plus the Settings switch "Show files hidden in File Explorer" (P6), which every view applies the same way
  * too: carried here, a change reloads every view like a new filter does.
  *
- * <p>The SQL pieces come only from the fixed text in {@link MediaFilter} and {@link MediaSort}, never from
- * user input.
+ * <p>The SQL pieces come only from the fixed text in {@link MediaFilter}, {@link MediaSort} and the known
+ * extensions in {@link FileTypes}, never from user input.
  *
  * @param descending    true = newest / largest / Z first
  * @param osHiddenShown true = files with the operating system's Hidden mark show like any other file; false (the
  *                      default) = only on Collections › Hidden ({@link MediaScope#sqlCondition})
+ * @param types         the file types ticked in the Types menu ({@link FileTypes}: {@code jpg}, {@code png}…);
+ *                      empty = every type
  */
-public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending, boolean osHiddenShown) {
+public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending, boolean osHiddenShown,
+        Set<String> types) {
 
     /** Everything, date taken, newest first: the Timeline as it was before Filters and Sort existed. */
     public static final ViewOptions DEFAULT = new ViewOptions(MediaFilter.ALL, MediaSort.DATE_TAKEN, true, false);
+
+    /** The filters that became Types in 1.1.0, so a saved "JPEG" filter comes back as the JPG type. */
+    private static final Map<String, String> OLD_FILTERS = Map.of("JPEG", "jpg", "PNG", "png", "HEIC", "heic",
+            "WEBP", "webp");
+
+    public ViewOptions {
+        types = Set.copyOf(FileTypes.typesOf(types)); // only known types, each once
+    }
+
+    /** Every file type. */
+    public ViewOptions(MediaFilter filter, MediaSort sort, boolean descending, boolean osHiddenShown) {
+        this(filter, sort, descending, osHiddenShown, Set.of());
+    }
 
     /** With the File Explorer switch off (the default). */
     public ViewOptions(MediaFilter filter, MediaSort sort, boolean descending) {
@@ -26,14 +48,41 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
         return equals(DEFAULT);
     }
 
+    /** True when a filter or a type narrows what is shown. */
+    public boolean isFiltered() {
+        return filter != MediaFilter.ALL || !types.isEmpty();
+    }
+
+    /** What is shown, in words: "Videos", "JPG, PNG", "Photos, JPG"; "All" when nothing narrows it. */
+    public String filterLabel() {
+        List<String> parts = new ArrayList<>();
+        if (filter != MediaFilter.ALL) {
+            parts.add(filter.toString());
+        }
+        for (String type : new TreeSet<>(types)) {
+            parts.add(FileTypes.label(type));
+        }
+        return parts.isEmpty() ? MediaFilter.ALL.toString() : String.join(", ", parts);
+    }
+
     /** True when the view shows date headers (a date sort). */
     public boolean grouped() {
         return sort.isDate();
     }
 
-    /** The filter's SQL condition, or null when everything is shown. */
+    /** The headers this sort gets in a grid: dates for a date sort, letters for Name, none otherwise. */
+    public Headers headers() {
+        return sort.isDate() ? Headers.DATES : sort == MediaSort.NAME ? Headers.LETTERS : Headers.NONE;
+    }
+
+    /** The filter's and the types' SQL condition, or null when everything is shown. */
     public String sqlCondition() {
-        return filter.condition();
+        String byFilter = filter.condition();
+        String byType = FileTypes.sqlCondition(types);
+        if (byFilter == null || byType == null) {
+            return byFilter == null ? byType : byFilter;
+        }
+        return byFilter + " AND " + byType;
     }
 
     /**
@@ -54,43 +103,64 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
     }
 
     public ViewOptions withFilter(MediaFilter newFilter) {
-        return new ViewOptions(newFilter, sort, descending, osHiddenShown);
+        return new ViewOptions(newFilter, sort, descending, osHiddenShown, types);
     }
 
     /** A new sort starts in its natural direction (see {@link MediaSort#descendingByDefault()}). */
     public ViewOptions withSort(MediaSort newSort) {
-        return new ViewOptions(filter, newSort, newSort.descendingByDefault(), osHiddenShown);
+        return new ViewOptions(filter, newSort, newSort.descendingByDefault(), osHiddenShown, types);
     }
 
     public ViewOptions withDescending(boolean newDescending) {
-        return new ViewOptions(filter, sort, newDescending, osHiddenShown);
+        return new ViewOptions(filter, sort, newDescending, osHiddenShown, types);
     }
 
     public ViewOptions withOsHiddenShown(boolean shown) {
-        return new ViewOptions(filter, sort, descending, shown);
+        return new ViewOptions(filter, sort, descending, shown, types);
+    }
+
+    /** The ticked file types; empty = every type. */
+    public ViewOptions withTypes(Set<String> newTypes) {
+        return new ViewOptions(filter, sort, descending, osHiddenShown, newTypes);
     }
 
     /**
-     * The Filters + Sort as a setting, kept across restarts (P7): {@code "PHOTOS,NAME,asc"}. The File Explorer switch
-     * has its own setting, so it isn't part of this.
+     * The Filters + Sort as a setting, kept across restarts (P7): {@code "PHOTOS,NAME,asc"}, then the ticked types
+     * if any: {@code "ALL,NAME,asc,jpg+png"}. The File Explorer switch has its own setting, so it isn't part of this.
      */
     public String toSetting() {
-        return filter.name() + "," + sort.name() + "," + (descending ? "desc" : "asc");
+        String value = filter.name() + "," + sort.name() + "," + (descending ? "desc" : "asc");
+        return types.isEmpty() ? value : value + "," + String.join("+", new TreeSet<>(types));
     }
 
-    /** The Filters + Sort saved by {@link #toSetting}; missing or unreadable (an older or edited value): the default. */
+    /**
+     * The Filters + Sort saved by {@link #toSetting}; missing or unreadable (an older or edited value): the default.
+     * A filter that became a type in 1.1.0 (JPEG, PNG, HEIC, WEBP) comes back as that type.
+     */
     public static ViewOptions fromSetting(String value) {
         if (value == null) {
             return DEFAULT;
         }
         String[] parts = value.split(",");
-        if (parts.length != 3 || !(parts[2].equals("desc") || parts[2].equals("asc"))) {
+        if ((parts.length != 3 && parts.length != 4) || !(parts[2].equals("desc") || parts[2].equals("asc"))) {
             return DEFAULT;
         }
+        Set<String> types = new TreeSet<>(parts.length == 4 ? List.of(parts[3].split("\\+")) : List.of());
+        MediaFilter filter;
+        if (OLD_FILTERS.containsKey(parts[0])) {
+            filter = MediaFilter.ALL;
+            types.add(OLD_FILTERS.get(parts[0]));
+        } else {
+            try {
+                filter = MediaFilter.valueOf(parts[0]);
+            } catch (IllegalArgumentException e) {
+                return DEFAULT; // a filter that no longer exists
+            }
+        }
         try {
-            return new ViewOptions(MediaFilter.valueOf(parts[0]), MediaSort.valueOf(parts[1]), parts[2].equals("desc"));
+            return new ViewOptions(filter, MediaSort.valueOf(parts[1]), parts[2].equals("desc"), false, types);
         } catch (IllegalArgumentException e) {
-            return DEFAULT; // a filter or sort that no longer exists
+            return DEFAULT; // a sort that no longer exists
         }
     }
 

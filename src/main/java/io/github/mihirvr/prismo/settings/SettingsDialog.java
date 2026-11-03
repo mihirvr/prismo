@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
-import javafx.application.ColorScheme;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
@@ -109,7 +108,7 @@ public final class SettingsDialog {
     /** The pages, in the order of the list on the left. */
     enum Page {
         APPEARANCE("Appearance", Icon.IMAGE), HIDDEN("Hidden items", Icon.EYE_OFF),
-        IGNORED("Ignored folders", Icon.FOLDER), TIMELINE("Timeline", Icon.CLOCK), VIDEO("Video", Icon.SUBTITLES),
+        IGNORED("Ignored folders", Icon.FOLDER), TIMELINE("Date headers", Icon.CLOCK), VIDEO("Video", Icon.SUBTITLES),
         PERFORMANCE("Performance", Icon.SETTINGS), SHORTCUTS("Keyboard shortcuts", Icon.KEYBOARD),
         ABOUT("About", Icon.INFO);
 
@@ -281,11 +280,7 @@ public final class SettingsDialog {
                 save.accept(theme);
             }
         });
-        Label note = wrapping("settings-note", 0);
-        note.textProperty().bind(appearance.systemSchemeProperty().map(scheme -> "Follow system matches your"
-                + " computer's light or dark mode (now " + (scheme == ColorScheme.DARK ? "dark" : "light")
-                + ") and changes with it. AMOLED black uses pure black, which saves power on OLED screens."));
-        return new VBox(12, heading("Appearance"), cards, note);
+        return new VBox(12, heading("Appearance"), cards);
     }
 
     // --- Hidden items, Ignored folders ---
@@ -299,8 +294,7 @@ public final class SettingsDialog {
         showOsHidden.setSelected(options.osHiddenShown().get());
         showOsHidden.selectedProperty().addListener((_, _, on) -> options.osHiddenShown().set(on));
         Label switchDescription = wrapping("choice-description", 58);
-        switchDescription.setText("Off: files marked Hidden in File Explorer, or in a folder marked Hidden, show"
-                + " only in Collections › Hidden. On: they show everywhere, like other files.");
+        switchDescription.setText("Off: they show only in Collections › Hidden.");
         VBox.setMargin(switchDescription, new Insets(0, 0, 0, 26));
         VBox switchCard = new VBox(3, showOsHidden, switchDescription);
         switchCard.getStyleClass().add("choice-card");
@@ -324,9 +318,7 @@ public final class SettingsDialog {
                 options.hiddenMode().set((HiddenMode) selected.getUserData());
             }
         });
-        Label note = wrapping("settings-note", 0);
-        note.setText("The right-click menu can also mark a file Hidden in File Explorer, or clear that mark.");
-        VBox section = new VBox(12, heading("Hidden items"), switchCard, hideHeading, choices, note);
+        VBox section = new VBox(12, heading("Hidden items"), switchCard, hideHeading, choices);
         VBox.setMargin(hideHeading, new Insets(6, 0, 0, 0));
         return section;
     }
@@ -334,14 +326,12 @@ public final class SettingsDialog {
     /** Ignored folders: the rules as a list (each with a remove button), then ways to add one. */
     private VBox ignoredSection() {
         Label note = wrapping("settings-note", 0);
-        note.setText("Prismo skips these folders inside your library folders: their photos and videos don't show,"
-                + " and any already shown leave Prismo (the files themselves aren't touched). A name like"
-                + " node_modules counts in every folder; a folder you choose counts only there.");
+        note.setText("Photos and videos in these folders don't show. The files aren't touched.");
         ignoredList.getStyleClass().add("ignored-list");
         options.ignoredFolders().subscribe(this::fillIgnoredList);
 
         TextField name = new TextField();
-        name.setPromptText("A folder name, e.g. node_modules");
+        name.setPromptText("Folder name");
         HBox.setHgrow(name, Priority.ALWAYS);
         Button add = new Button("Add", Icon.PLUS.node(14));
         add.disableProperty().bind(name.textProperty().map(String::isBlank));
@@ -411,10 +401,7 @@ public final class SettingsDialog {
                 options.grouping().set((Grouping) selected.getUserData());
             }
         });
-        Label note = wrapping("settings-note", 0);
-        note.setText("Used on the Timeline, in search results and on the Collections pages when they are sorted by a"
-                + " date. Sorting by name, size or resolution shows no headers.");
-        return new VBox(12, heading("Date headers"), choices, note);
+        return new VBox(12, heading("Date headers"), choices);
     }
 
     // --- Video ---
@@ -445,10 +432,7 @@ public final class SettingsDialog {
         });
         StackPane strip = new StackPane(sample);
         strip.getStyleClass().add("subtitle-sample");
-        Label note = wrapping("settings-note", 0);
-        note.setText("Also in a video's right-click menu: Subtitles › Background. Prismo remembers the sound track and"
-                + " subtitles you pick in each video, and starts other videos in the language you picked last.");
-        return new VBox(12, heading("Subtitle background"), choices, strip, note);
+        return new VBox(12, heading("Subtitle background"), choices, strip);
     }
 
     // --- Performance ---
@@ -477,8 +461,7 @@ public final class SettingsDialog {
         HBox threadsRow = new HBox(10, threadsLabel, threads);
         threadsRow.setAlignment(Pos.CENTER_LEFT);
         Label threadsNote = wrapping("settings-note", 0);
-        threadsNote.setText("Fewer cores keep other programs quick while Prismo makes thumbnails (the first look"
-                + " at a big library); more make them sooner. This computer has " + max + " cores.");
+        threadsNote.setText("Fewer keep other programs quick; more make thumbnails sooner.");
 
         diskSize.getStyleClass().add("settings-value");
         Label diskLabel = new Label("Thumbnails on disk:");
@@ -499,8 +482,7 @@ public final class SettingsDialog {
         HBox diskRow = new HBox(8, diskLabel, diskSize, spacer, clearThumbnails);
         diskRow.setAlignment(Pos.CENTER_LEFT);
         Label diskNote = wrapping("settings-note", 0);
-        diskNote.setText("Clearing frees that space; thumbnails are made again as you scroll. Your photos and"
-                + " videos aren't touched.");
+        diskNote.setText("Your photos and videos aren't touched.");
         return new VBox(12, heading("Thumbnails"), threadsRow, threadsNote, diskRow, diskNote);
     }
 
@@ -526,8 +508,7 @@ public final class SettingsDialog {
         Label version = new Label("Version " + options.about().version());
         version.getStyleClass().add("settings-value");
         Label line = wrapping("settings-note", 0);
-        line.setText("A fast, offline-first photo and video library for your own folders. Nothing leaves your"
-                + " computer. Open source, MIT License.");
+        line.setText("Nothing leaves your computer. Open source, MIT License.");
         Node website;
         if (options.about().website().isPresent()) {
             URI address = options.about().website().get();
@@ -568,7 +549,7 @@ public final class SettingsDialog {
         return new VBox(12, shortcutsHeading, shortcutsScroll);
     }
 
-    /** "Ctrl+1 / Ctrl+2   Timeline / Collections": each key in a cap, "/" between them, then the text. */
+    /** "Ctrl+1 / Ctrl+2   Grid / Collections": each key in a cap, "/" between them, then the text. */
     private static HBox shortcutRow(Shortcuts.Shortcut shortcut) {
         HBox keys = new HBox(4);
         keys.setAlignment(Pos.CENTER_LEFT);

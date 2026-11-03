@@ -1,16 +1,34 @@
 package io.github.mihirvr.prismo.ui;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.function.Function;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.CheckBox;
+import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.CustomMenuItem;
 import javafx.scene.control.Label;
+import javafx.scene.control.Menu;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.RadioMenuItem;
+import javafx.scene.control.SeparatorMenuItem;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.layout.HBox;
 
 /**
- * The shared Filters + Sort controls: "Show [All ▾]  Sort [Date taken ▾] [Newest first]". One instance
- * drives every view (the Timeline and search results), so there is one definition of each filter and sort.
+ * The shared Filters + Sort controls: "View [Timeline ▾]  Show [All ▾]  Sort [Date taken ▾] [Newest first]". One
+ * instance drives every view (the Grid, search results and Collections), so there is one definition of each filter
+ * and sort. The View menu belongs to the Grid tab only and is hidden elsewhere.
  *
  * <p>Picking a sort also resets the direction to that sort's natural one (newest / largest first, names
  * A to Z); the button flips it. The Sort can be locked ({@link #setSortLocked}) for a page with a fixed order:
@@ -20,21 +38,35 @@ import javafx.scene.layout.HBox;
 public final class ViewOptionsBar extends HBox {
 
     private final ReadOnlyObjectWrapper<ViewOptions> options = new ReadOnlyObjectWrapper<>(ViewOptions.DEFAULT);
+    /** The Grid's View; shown only on the Grid tab ({@link #setViewShown}). */
+    private final ComboBox<GridView> view = new ComboBox<>();
     private final ComboBox<MediaFilter> filter = new ComboBox<>();
     private final ComboBox<MediaSort> sort = new ComboBox<>();
     private final Button direction = new Button();
+    /** The Folders view's Arrange menu, next to the View menu while Folders is chosen. */
+    private final MenuButton arrangeButton = new MenuButton("Arrange");
+    private final ReadOnlyObjectWrapper<FolderArrange> arrange = new ReadOnlyObjectWrapper<>(FolderArrange.DEFAULT);
+    private boolean viewShown = true;
+    /** The Types menu: several file types can be ticked at once; none ticked = all. */
+    private final MenuButton typesButton = new MenuButton();
+    private List<String> availableTypes = List.of();
+    private final Map<String, CheckBox> typeBoxes = new HashMap<>();
     private boolean sortLocked;
     /** True while the controls are set by code (locking), so their listeners don't change the choice. */
     private boolean quiet;
 
     public ViewOptionsBar() {
-        this(ViewOptions.DEFAULT);
+        this(ViewOptions.DEFAULT, GridView.DEFAULT, FolderArrange.DEFAULT);
     }
 
-    /** Starting with {@code start}'s Filters + Sort (the ones saved last time, P7). */
-    public ViewOptionsBar(ViewOptions start) {
+    /** Starting with the Filters + Sort, View and Arrange saved last time. */
+    public ViewOptionsBar(ViewOptions start, GridView startView, FolderArrange startArrange) {
         options.set(start);
         getStyleClass().add("view-options-bar");
+        view.getItems().setAll(GridView.values());
+        view.setValue(startView);
+        view.getStyleClass().add("view-layout");
+        view.setTooltip(new Tooltip("View"));
         filter.getItems().setAll(MediaFilter.values());
         filter.setValue(start.filter());
         filter.setTooltip(new Tooltip("Show only some kinds of media"));
@@ -60,7 +92,143 @@ public final class ViewOptionsBar extends HBox {
             }
         });
 
-        getChildren().setAll(new Label("Show"), filter, new Label("Sort"), sort, direction);
+        arrange.set(startArrange);
+        arrangeButton.getStyleClass().add("view-arrange");
+        fillArrangeMenu();
+        arrange.addListener((_, _, _) -> fillArrangeMenu());
+        view.valueProperty().addListener((_, _, _) -> updateArrangeShown());
+
+        typesButton.getStyleClass().add("view-types");
+        fillTypesMenu();
+        options.addListener((_, old, value) -> {
+            if (!old.types().equals(value.types())) {
+                showChosenTypes();
+            }
+        });
+
+        getChildren().setAll(view, arrangeButton, filter, typesButton, new Label("Sort"), sort, direction);
+        updateArrangeShown();
+    }
+
+    /**
+     * The file types in the library, for the Types menu ({@link FileTypes}: {@code jpg}, {@code png}…). A ticked
+     * type that is no longer in the library stays listed, so it can be unticked.
+     */
+    public void setAvailableTypes(List<String> types) {
+        List<String> sorted = FileTypes.typesOf(types);
+        if (!sorted.equals(availableTypes)) {
+            availableTypes = sorted;
+            fillTypesMenu();
+        }
+    }
+
+    /** "All", then one tick box per type. The menu stays open while boxes are ticked. */
+    private void fillTypesMenu() {
+        Set<String> chosen = options.get().types();
+        typeBoxes.clear();
+        MenuItem all = new MenuItem("All types");
+        all.setOnAction(_ -> options.set(options.get().withTypes(Set.of())));
+        List<MenuItem> items = new ArrayList<>(List.of(all, new SeparatorMenuItem()));
+        Set<String> listed = new TreeSet<>(availableTypes);
+        listed.addAll(chosen);
+        for (String type : listed) {
+            CheckBox box = new CheckBox(FileTypes.label(type));
+            box.setSelected(chosen.contains(type));
+            typeBoxes.put(type, box);
+            box.selectedProperty().addListener((_, _, on) -> {
+                if (quiet) {
+                    return;
+                }
+                Set<String> now = new TreeSet<>(options.get().types());
+                if (on) {
+                    now.add(type);
+                } else {
+                    now.remove(type);
+                }
+                options.set(options.get().withTypes(now));
+            });
+            CustomMenuItem item = new CustomMenuItem(box, false);
+            item.getStyleClass().add("type-item");
+            items.add(item);
+        }
+        typesButton.getItems().setAll(items);
+        showChosenTypes();
+    }
+
+    /** The button text and the ticks follow the chosen types, without rebuilding the (maybe open) menu. */
+    private void showChosenTypes() {
+        Set<String> chosen = options.get().types();
+        typesButton.setText(chosen.isEmpty() ? "All types"
+                : chosen.size() <= 2 ? options.get().withFilter(MediaFilter.ALL).filterLabel()
+                : chosen.size() + " types");
+        if (!typeBoxes.keySet().containsAll(chosen)) {
+            fillTypesMenu(); // a type chosen elsewhere (a saved setting) that the menu doesn't list yet
+            return;
+        }
+        quiet = true;
+        try {
+            typeBoxes.forEach((type, box) -> box.setSelected(chosen.contains(type)));
+        } finally {
+            quiet = false;
+        }
+    }
+
+    MenuButton typesButton() {
+        return typesButton;
+    }
+
+    /** Shows the View menu (the Grid, Collections › Folders) or hides it and its space (elsewhere). */
+    public void setViewShown(boolean shown) {
+        viewShown = shown;
+        view.setVisible(shown);
+        view.setManaged(shown);
+        updateArrangeShown();
+    }
+
+    /** The Folders view's Arrange; listen to it to re-arrange. Changed only through the menu. */
+    public ReadOnlyObjectProperty<FolderArrange> arrangeProperty() {
+        return arrange.getReadOnlyProperty();
+    }
+
+    /** Arrange only goes with the Folders view. */
+    private void updateArrangeShown() {
+        boolean shown = viewShown && view.getValue() == GridView.FOLDERS;
+        arrangeButton.setVisible(shown);
+        arrangeButton.setManaged(shown);
+    }
+
+    /** Rebuilt on each change, so the ticks always show the current choice. */
+    private void fillArrangeMenu() {
+        FolderArrange now = arrange.get();
+        CheckMenuItem foldersFirst = new CheckMenuItem("Folders first");
+        foldersFirst.setSelected(now.foldersFirst());
+        foldersFirst.selectedProperty().addListener((_, _, on) -> arrange.set(arrange.get().withFoldersFirst(on)));
+        arrangeButton.getItems().setAll(foldersFirst, new SeparatorMenuItem(),
+                orderMenu("Folders", now.folders(), false, arrange.get()::withFolders),
+                orderMenu("Top-level files", now.topFiles(), true, arrange.get()::withTopFiles),
+                orderMenu("Files in folders", now.folderFiles(), true, arrange.get()::withFolderFiles));
+    }
+
+    private Menu orderMenu(String name, FolderArrange.Order chosen, boolean withSort,
+            Function<FolderArrange.Order, FolderArrange> change) {
+        Menu menu = new Menu(name);
+        ToggleGroup group = new ToggleGroup();
+        for (FolderArrange.Order order : FolderArrange.Order.values()) {
+            if (order == FolderArrange.Order.SORT && !withSort) {
+                continue;
+            }
+            RadioMenuItem item = new RadioMenuItem(order.toString());
+            item.setToggleGroup(group);
+            item.setSelected(order == chosen);
+            item.setOnAction(_ -> arrange.set(change.apply(order)));
+            menu.getItems().add(item);
+        }
+        return menu;
+    }
+
+    /** The Grid's View; listen to it to change the Grid's layout. Changed only through the menu. */
+    public ReadOnlyObjectProperty<GridView> gridViewProperty() {
+        return view.valueProperty();
     }
 
     /**

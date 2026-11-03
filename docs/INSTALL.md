@@ -56,7 +56,7 @@ about 15 minutes to read 40,000 files, and longer for all the thumbnails. Photos
 the thumbnails on screen are always made first.
 
 While this runs, the disk is busy, so **opening photos can be slow and videos can stutter**. That's expected,
-and the status bar says so ("Setting up a big library..."). It happens only once: afterwards Prismo reads just
+and the note at the bottom of the window says so ("photos may open slowly until this finishes"). It happens only once: afterwards Prismo reads just
 what changed, and the thumbnails are kept. SSDs are much faster here than hard disks and network drives (NAS).
 
 ### If something goes wrong

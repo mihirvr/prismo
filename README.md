@@ -66,7 +66,20 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 **Version 1.0.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixes thumbnails and library folders). Windows first; the Linux package is an early preview.
 
-The app runs (`./gradlew run`). What works today:
+The app runs (`./gradlew run`).
+
+**Next: 1.1.0 (in the code on `main`, not released yet).** The Timeline tab is now **Grid**, with a View menu:
+Timeline (date headers), Folders (root files and folders as separate blocks, with an Arrange menu for their order)
+and All files. Names sort the natural way (1, 2, 10) with 0-9 / A-Z / # headers. A Types menu replaces the JPEG /
+PNG / HEIC / WEBP filters. The scroll bar shows the date, letter or folder you are at; tiles have a name tooltip and
+a badge for files hidden in File Explorer. Right-click menus have submenus; the Collections tree has guide lines. A
+filmstrip in the viewer (hides when the mouse rests). Opening a photo or video from File Explorer (Open with ›
+Prismo) shows it at once in a small viewer without the library. Keys follow YouTube, then VLC (see below). Video
+thumbnails use the video's cover, or a well-lit frame about 10 % in, instead of the frame at 1 s (old ones are made
+again once). Fewer labels: no status line full of counts (a small note shows only while work runs), and shorter
+hints.
+
+What works in 1.0.1:
 
 - **Library and Timeline:** add folders ("Library folders…": add, turn off, remove); Prismo indexes them, makes thumbnails in the background (real thumbnails for videos too, with a play badge and the length) and shows everything on a date-grouped Timeline. Files you add, rename, move or delete in your folders show up in Prismo by themselves within a second or two.
 - **Viewer:** click a photo (or move with the arrow keys and press Enter): zoom, pan, rotate, slideshow, full screen (the controls and the pointer hide after 2.5 s without mouse movement), previous / next buttons at the edges.
@@ -98,25 +111,27 @@ To try it on Windows without touching your normal Prismo data: `.\run-locally.ba
 
 ## Keyboard shortcuts
 
-Right-click menus and button tooltips show these too.
+As in the code on `main` (1.1.0): YouTube's keys first, VLC's for the rest. Right-click menus, button tooltips and
+Settings › Keyboard shortcuts show these too. (1.0.1 used F / H for favorite / hide, A for the sound track, C for the
+next subtitles and Z / X for the delay.)
 
 **Main window (viewer closed)**
 
 | Key | Does |
 |---|---|
-| Ctrl+F | Search box |
-| Ctrl+1 / Ctrl+2 | Timeline / Collections tab |
+| Ctrl+F or / | Search box |
+| Ctrl+1 / Ctrl+2 | Grid / Collections tab |
 | Ctrl+, | Settings |
 | Ctrl + mouse wheel | Bigger / smaller thumbnails (on a grid) |
 | Alt+Left / Alt+Right, or the mouse's back / forward side buttons | Back / forward: the tab, Collections page, folder, album or search you were on before (like a web browser) |
 
-**Grid (Timeline, search results, Collections pages)**
+**Grid (the Grid tab, search results, Collections pages)**
 
 | Key | Does |
 |---|---|
 | Arrow keys | Move between items |
 | Enter | Open in the viewer |
-| F / H / Delete | Favorite / hide / move to Trash (on Hidden: unhide; on Trash: delete permanently, after asking) |
+| Ctrl+D / Ctrl+H / Delete | Favorite / hide / move to Trash (on Hidden: unhide; on Trash: delete permanently, after asking) |
 | Ctrl+C | Copy the file (paste it in File Explorer or another app) |
 | F2 | Rename |
 | I or Alt+Enter | Open in the viewer with the Info panel |
@@ -129,20 +144,20 @@ Right-click menus and button tooltips show these too.
 | Shift + click | Select everything up to here |
 | Shift + arrow keys | Select while moving |
 | Ctrl+A | Select all |
-| F / H / Delete / Ctrl+C | Do it to every selected item |
+| Ctrl+D / Ctrl+H / Delete / Ctrl+C | Do it to every selected item |
 | Esc | Clear the selection |
 
 **Viewer (photos and videos)**
 
 | Key | Does |
 |---|---|
-| Page Up / Page Down | Previous / next item |
+| Page Up / Page Down, Shift+P / Shift+N | Previous / next item |
 | Left / Right | Previous / next item (photos; in a video they skip 5 s) |
 | Esc | Close the Info panel, leave full screen, then close the viewer |
 | Alt+Left, or the mouse's back button | Close the viewer (Alt+Right or the forward button opens it again on the same item) |
-| F11, double-click a video | Full screen |
+| F or F11, double-click a video | Full screen |
 | I | Info panel |
-| F / H / Delete, Ctrl+C, F2 | As on the grid |
+| Ctrl+D / Ctrl+H / Delete, Ctrl+C, F2 | As on the grid |
 | Space | Slideshow (photos) |
 | R | Rotate (view only, the file isn't changed) |
 | + / - / 0 | Zoom in / out / fit to window |
@@ -152,17 +167,24 @@ Right-click menus and button tooltips show these too.
 
 | Key | Does |
 |---|---|
-| Space, or click the video | Play / pause |
+| Space or K, or click the video | Play / pause |
 | J / L | Back / forward 10 s |
 | Left / Right | Back / forward 5 s |
-| Home | From the start |
+| Ctrl+Left / Ctrl+Right | Back / forward 1 minute |
+| 0 to 9 | Jump to 0 % to 90 % of the video |
+| Home / End | The start / the end |
 | Up / Down | Volume |
 | M | Mute |
-| [ / ] | Slower / faster (0.5× to 2×) |
+| < / > (Shift+, / Shift+.) | Slower / faster (0.5× to 2×) |
+| [ / ] | A little slower / faster |
+| = | Normal speed |
 | , / . | One picture back / on (while paused) |
-| C | Next subtitles (an `.srt` next to the video or a track inside it) |
-| Z / X | Subtitles 0.1 s earlier / later |
-| A | Next sound track |
+| Shift+L | Loop |
+| C | Subtitles on / off |
+| V | Next subtitles (an `.srt` next to the video or a track inside it) |
+| G / H | Subtitles 0.1 s earlier / later |
+| B | Next sound track |
+| T | Show the time |
 
 ---
 
@@ -223,11 +245,11 @@ prismo/
 │   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders, file reads that never lock a file (+ CR3 EXIF), dark title bar (Windows), the Windows Hidden mark, Show in folder, network drives, can a folder be reached, running ffmpeg as a separate program
 │   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders, video watch positions, the sound track / subtitles picked in each video
 │   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress; removes gone files, follows moves; ignored folders; rename / move
-│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, video frames via ffmpeg, HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
+│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, video covers or well-lit frames via ffmpeg, HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
 │   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; date grouping; selection; offline folders; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement; the Back / Forward history; the subtitle background choices
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
 │   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, hide modes, Library folders dialog
-│   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, Timeline, video (subtitle background), performance, keyboard shortcuts, About
+│   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, date headers, video (subtitle background), performance, keyboard shortcuts, About
 │   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
 │   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, speed, sound and subtitle tracks, subtitles (.srt), which tracks a video starts with
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, full screen, video controls, Info panel

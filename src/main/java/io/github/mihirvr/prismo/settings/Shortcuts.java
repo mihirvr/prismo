@@ -20,8 +20,8 @@ public final class Shortcuts {
 
     public static final List<Section> SECTIONS = List.of(
             new Section("Everywhere", List.of(
-                    new Shortcut("Ctrl+F", "Search"),
-                    new Shortcut("Ctrl+1 / Ctrl+2", "Timeline / Collections"),
+                    new Shortcut("Ctrl+F / /", "Search"),
+                    new Shortcut("Ctrl+1 / Ctrl+2", "Grid / Collections"),
                     new Shortcut("Ctrl+,", "Settings"),
                     new Shortcut("Ctrl + mouse wheel", "Bigger or smaller thumbnails"),
                     new Shortcut("Alt+Left / Alt+Right", "Back / forward: the tab, page, folder, album or search before,"
@@ -31,8 +31,8 @@ public final class Shortcuts {
                     new Shortcut("Arrow keys", "Move between photos"),
                     new Shortcut("Enter", "Open"),
                     new Shortcut("I / Alt+Enter", "Open with the Info panel"),
-                    new Shortcut("F", "Add to Favorites, or remove"),
-                    new Shortcut("H", "Hide, or unhide"),
+                    new Shortcut("Ctrl+D", "Add to Favorites, or remove"),
+                    new Shortcut("Ctrl+H", "Hide, or unhide"),
                     new Shortcut("Delete", "Move to Trash (in Trash: delete permanently)"),
                     new Shortcut("Ctrl+C", "Copy the file"),
                     new Shortcut("F2", "Rename"))),
@@ -41,15 +41,16 @@ public final class Shortcuts {
                     new Shortcut("Shift + click", "Select everything up to here"),
                     new Shortcut("Shift + arrow keys", "Select while moving"),
                     new Shortcut("Ctrl+A", "Select all"),
-                    new Shortcut("F / H / Delete / Ctrl+C", "Do it to every selected item"),
+                    new Shortcut("Ctrl+D / Ctrl+H / Delete / Ctrl+C", "Do it to every selected item"),
                     new Shortcut("Esc", "Clear the selection"))),
             new Section("Viewer", List.of(
-                    new Shortcut("Esc", "Back to the grid (closes the Info panel first)"),
+                    new Shortcut("Esc", "Close the Info panel, leave full screen, then back to the grid"),
                     new Shortcut("Alt+Left / Mouse back", "Close the viewer (Alt+Right or Mouse forward opens it again)"),
                     new Shortcut("Page Up / Page Down", "Previous / next photo or video"),
-                    new Shortcut("F11", "Full screen"),
+                    new Shortcut("Shift+P / Shift+N", "Previous / next photo or video"),
+                    new Shortcut("F / F11", "Full screen"),
                     new Shortcut("I", "Info panel"),
-                    new Shortcut("F / H / Delete", "Favorite, hide, Trash"),
+                    new Shortcut("Ctrl+D / Ctrl+H / Delete", "Favorite, hide, Trash"),
                     new Shortcut("Ctrl+C / F2", "Copy the file / rename"))),
             new Section("Photos", List.of(
                     new Shortcut("Left / Right", "Previous / next"),
@@ -59,18 +60,25 @@ public final class Shortcuts {
                     new Shortcut("Double-click", "Zoom to 100 %, or back to fit"),
                     new Shortcut("R", "Rotate"))),
             new Section("Videos", List.of(
-                    new Shortcut("Space", "Play or pause"),
+                    new Shortcut("Space / K", "Play or pause"),
                     new Shortcut("Double-click", "Full screen"),
                     new Shortcut("Left / Right", "Back / forward 5 s"),
                     new Shortcut("J / L", "Back / forward 10 s"),
+                    new Shortcut("Ctrl+Left / Ctrl+Right", "Back / forward 1 minute"),
+                    new Shortcut("0 to 9", "Jump to 0 % to 90 % of the video"),
+                    new Shortcut("Home / End", "The start / the end"),
                     new Shortcut(", / .", "One picture back / forward (paused)"),
-                    new Shortcut("Home", "From the start"),
                     new Shortcut("Up / Down", "Volume up / down"),
                     new Shortcut("M", "Mute"),
-                    new Shortcut("[ / ]", "Slower / faster"),
-                    new Shortcut("C", "Next subtitles"),
-                    new Shortcut("Z / X", "Subtitles 0.1 s earlier / later"),
-                    new Shortcut("A", "Next sound track"))));
+                    new Shortcut("< / >", "Slower / faster"),
+                    new Shortcut("[ / ]", "A little slower / faster"),
+                    new Shortcut("=", "Normal speed"),
+                    new Shortcut("Shift+L", "Loop"),
+                    new Shortcut("C", "Subtitles on or off"),
+                    new Shortcut("V", "Next subtitles"),
+                    new Shortcut("G / H", "Subtitles 0.1 s earlier / later"),
+                    new Shortcut("B", "Next sound track"),
+                    new Shortcut("T", "Show the time"))));
 
     private Shortcuts() {
     }

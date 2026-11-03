@@ -11,6 +11,7 @@ import java.sql.Statement;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -114,10 +115,6 @@ class TimelineQueryTest {
                 Map.entry(MediaFilter.VIDEOS, List.of(3L)),
                 Map.entry(MediaFilter.GIFS, List.of(5L)),
                 Map.entry(MediaFilter.RAW, List.of(6L)),
-                Map.entry(MediaFilter.JPEG, List.of(2L, 1L)),
-                Map.entry(MediaFilter.PNG, List.of(4L)),
-                Map.entry(MediaFilter.HEIC, List.of(7L)),
-                Map.entry(MediaFilter.WEBP, List.of(8L)),
                 Map.entry(MediaFilter.LANDSCAPE, List.of(7L, 3L, 1L)), // 5 is square; 6 and 8 have no size
                 Map.entry(MediaFilter.PORTRAIT, List.of(4L, 2L)),
                 Map.entry(MediaFilter.SCREENSHOTS, List.of(4L, 7L)), // 4 by its name, 7 by its folder
@@ -127,6 +124,21 @@ class TimelineQueryTest {
             for (MediaFilter filter : MediaFilter.values()) {
                 assertEquals(expected.get(filter), ids(database, ViewOptions.DEFAULT.withFilter(filter)), filter.name());
             }
+        }
+    }
+
+    @Test
+    void theTypesMenuShowsTheTickedTypesTogether() throws Exception {
+        try (Database database = library()) {
+            ViewOptions all = ViewOptions.DEFAULT;
+            assertEquals(List.of(2L, 1L), ids(database, all.withTypes(Set.of("jpg"))));
+            assertEquals(List.of(4L), ids(database, all.withTypes(Set.of("png"))));
+            assertEquals(List.of(7L), ids(database, all.withTypes(Set.of("heic"))));
+            assertEquals(List.of(8L), ids(database, all.withTypes(Set.of("webp"))));
+            assertEquals(List.of(4L, 2L, 7L, 1L), ids(database, all.withTypes(Set.of("jpg", "png", "heic"))),
+                    "several types at once");
+            assertEquals(List.of(4L, 2L), ids(database, all.withFilter(MediaFilter.PORTRAIT)
+                    .withTypes(Set.of("jpg", "png"))), "and with a filter");
         }
     }
 
