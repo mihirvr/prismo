@@ -146,6 +146,7 @@ a { color: inherit; }
 .bg .still { object-fit: cover; transition: opacity 1.6s var(--ease); }
 .bg .gl { filter: blur(48px) saturate(1.15); opacity: 0; transition: opacity 1.6s var(--ease); }
 .bg .gl.on { opacity: 1; }
+@media (max-width: 860px) { .bg .gl { filter: blur(32px) saturate(1.15); } }
 .bg .veil { position: absolute; inset: 0; background: var(--veil); }
 .bg .grain {
   position: absolute; inset: 0; opacity: var(--grain);

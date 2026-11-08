@@ -6,16 +6,17 @@ import ScrollRail from './ScrollRail.jsx'
 import { useTheme } from './theme.js'
 import { Down, GitHub, Moon, Sun } from './icons.jsx'
 import still from './fallback.svg'
+import stillTall from './fallback-tall.svg'
 
 const Gradient = lazy(() => import('./Gradient.jsx'))
 
 export const REPO = 'https://github.com/mihirvr/prismo'
 
-// The moving gradient is skipped on phones, for reduced motion, on data saver and without WebGL;
-// those visitors get the still picture of it.
+// The moving gradient is skipped for reduced motion, on data saver and without WebGL; those visitors get the still
+// picture of it. Phones run it too (since the 1.2.0 site: our own small shader, not a 1 MB 3D library; it draws at
+// 30 frames a second there, see Gradient.jsx).
 function canAnimate() {
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return false
-  if (matchMedia('(max-width: 860px)').matches) return false
   if (navigator.connection?.saveData) return false
   try {
     const c = document.createElement('canvas')
@@ -112,7 +113,10 @@ export default function App() {
     <>
       <div className="bg" aria-hidden="true">
         {/* the still stays underneath, so nothing dark ever shows while the moving one starts */}
-        <img className="still" src={still} alt="" />
+        <picture>
+          <source media="(orientation: portrait)" srcSet={stillTall} />
+          <img className="still" src={still} alt="" />
+        </picture>
         {animate && (
           <div className={`gl${ready ? ' on' : ''}`}>
             <Suspense fallback={null}>

@@ -67,7 +67,9 @@ vec3 palette(float x) {
 
 void main() {
   vec2 uv = gl_FragCoord.xy / size;
-  vec2 p = (uv - 0.5) * vec2(size.x / size.y, 1.0) * 1.6;
+  // Scaled by the shorter side, so a tall phone screen shows as many colour bands top to bottom as a wide screen
+  // does across (scaled by the height, a phone only showed a narrow slice: two or three colours).
+  vec2 p = (uv - 0.5) * size / min(size.x, size.y) * 1.6;
   float t = time;
   // Noise warping noise (domain warping): slow, wandering shapes with no fixed rhythm.
   vec2 q = vec2(fbm(p + vec2(0.0, t)), fbm(p + vec2(5.2, 1.3) - t * 0.7));
@@ -122,8 +124,12 @@ export default function Gradient({ theme, onReady }) {
     // A random start, so each visit begins somewhere else in the flow.
     const offset = Math.random() * 1000
     const start = performance.now()
-    let raf = 0, first = true
+    let raf = 0, first = true, last = 0
+    // Phones and small windows: 30 frames a second is plenty for this slow movement, and saves battery.
+    const small = matchMedia('(max-width: 860px)')
     const frame = (now) => {
+      if (!first && small.matches && now - last < 30) { raf = requestAnimationFrame(frame); return }
+      last = now
       gl.uniform2f(u('size'), el.width, el.height)
       gl.uniform1f(u('time'), offset + ((now - start) / 1000) * SPEED)
       gl.uniform1f(u('lift'), mood.current.lift)
