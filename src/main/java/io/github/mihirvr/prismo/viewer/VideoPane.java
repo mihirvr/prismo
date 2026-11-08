@@ -1161,7 +1161,6 @@ final class VideoPane extends StackPane {
     boolean menuShowing() {
         return subtitlesButton.isShowing() || soundButton.isShowing() || speedButton.isShowing();
     }
-
     VideoPlayer player() {
         return player;
     }

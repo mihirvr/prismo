@@ -64,20 +64,34 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.0.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixes thumbnails and library folders). Windows first; the Linux package is an early preview.
+**Version 1.2.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 and 1.2.0 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
 
-**Next: 1.1.0 (in the code on `main`, not released yet).** The Timeline tab is now **Grid**, with a View menu:
+**1.2.0:** **People tags**, all done by hand (Prismo never looks at the
+pictures, and nothing leaves your PC): right-click one item, a selection or a whole folder › People… and tick who is
+in them; type a new name there to add a person on the spot (or use New person on Collections › People). For a
+folder, pick which subfolders count. Ticking only adds; untick to remove. A
+People filter next to Types shows the items of the people ticked, all of them together or any of them, or the items
+nobody is tagged in yet. Right-click menus are flat again (no File submenu: Show in folder and Copy are on the menu
+itself). Drag a photo or video (or a selection) out of Prismo into another app, a browser page such as WhatsApp Web, or
+a folder, as from File Explorer (a folder gets a copy). Fixes: video thumbnails on big libraries were made very slowly
+(each try decoded every frame up to the chosen time; now only key frames are decoded, 5 to 10 times faster on
+heavy HEVC videos), and the progress note now says how many could not be made; video thumbnails are always a frame of the video (1.1.0 used a cover picture stored in
+the file, which in downloaded series is often the encoder group's logo); a click outside an open menu closes it and
+does nothing else; menu shortcut keys are in the muted colour; the filmstrip's tiles fade out at the edges in full
+screen too; Windows' "Open with" list shows "Prismo" after an upgrade; MKV and WebM tiles show the video's
+length (read from the file's own header; existing ones are read once more after the update).
+
+**1.1.0:** the Timeline tab is now **Grid**, with a View menu:
 Timeline (date headers), Folders (root files and folders as separate blocks, with an Arrange menu for their order)
 and All files. Names sort the natural way (1, 2, 10) with 0-9 / A-Z / # headers. A Types menu replaces the JPEG /
 PNG / HEIC / WEBP filters. The scroll bar shows the date, letter or folder you are at; tiles have a name tooltip and
 a badge for files hidden in File Explorer. Right-click menus have submenus; the Collections tree has guide lines. A
 filmstrip in the viewer (hides when the mouse rests). Opening a photo or video from File Explorer (Open with ›
 Prismo) shows it at once in a small viewer without the library. Keys follow YouTube, then VLC (see below). Video
-thumbnails use the video's cover, or a well-lit frame about 10 % in, instead of the frame at 1 s (old ones are made
-again once). Fewer labels: no status line full of counts (a small note shows only while work runs), and shorter
-hints.
+thumbnails use a well-lit frame about 10 % in instead of the frame at 1 s (old ones are made again once). Fewer
+labels: no status line full of counts (a small note shows only while work runs), and shorter hints.
 
 What works in 1.0.1:
 
@@ -245,7 +259,7 @@ prismo/
 │   │   │   ├── platform/           # OS-specific code: OS detection, app data/cache/log folders, file reads that never lock a file (+ CR3 EXIF), dark title bar (Windows), the Windows Hidden mark, Show in folder, network drives, can a folder be reached, running ffmpeg as a separate program
 │   │   │   ├── db/                 # SQLite: connections, single writer thread, migrations, settings, library folders, video watch positions, the sound track / subtitles picked in each video
 │   │   │   ├── index/              # Media indexer: folder walk, metadata reading, batched writes, progress; removes gone files, follows moves; ignored folders; rename / move
-│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, video covers or well-lit frames via ffmpeg, HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
+│   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, well-lit video frames via ffmpeg (key frames only), HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
 │   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; date grouping; selection; offline folders; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement; the Back / Forward history; the subtitle background choices
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
 │   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, hide modes, Library folders dialog

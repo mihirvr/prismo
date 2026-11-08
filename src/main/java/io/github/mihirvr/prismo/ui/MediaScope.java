@@ -17,10 +17,11 @@ import java.util.List;
  *
  * @param folder    the folder's path as stored in {@code media.folder}, for {@link Kind#FOLDER}; else null
  * @param recursive for a folder: also everything in the folders below it (Recursive View)
+ * @param person    for {@link Kind#PERSON} (1.2.0): the person's id; else 0
  */
-public record MediaScope(Kind kind, String folder, boolean recursive) {
+public record MediaScope(Kind kind, String folder, boolean recursive, long person) {
 
-    public enum Kind { LIBRARY, FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH, FOLDER }
+    public enum Kind { LIBRARY, FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH, FOLDER, PERSON }
 
     /** Not in Trash, not hidden by Prismo: what every normal view shows (when File Explorer's Hidden mark is shown). */
     static final String VISIBLE = "trashed_at IS NULL AND hidden = 0";
@@ -37,6 +38,18 @@ public record MediaScope(Kind kind, String folder, boolean recursive) {
         if ((kind == Kind.FOLDER) != (folder != null)) {
             throw new IllegalArgumentException("a folder scope needs a folder, and only it: " + kind);
         }
+        if ((kind == Kind.PERSON) != (person != 0)) {
+            throw new IllegalArgumentException("a person scope needs a person, and only it: " + kind);
+        }
+    }
+
+    public MediaScope(Kind kind, String folder, boolean recursive) {
+        this(kind, folder, recursive, 0);
+    }
+
+    /** One person's media (1.2.0: the People page). */
+    public static MediaScope person(long id) {
+        return new MediaScope(Kind.PERSON, null, false, id);
     }
 
     /** One folder's media; with {@code recursive}, also everything below it. */
@@ -73,11 +86,15 @@ public record MediaScope(Kind kind, String folder, boolean recursive) {
             case TRASH -> "trashed_at IS NOT NULL";
             case FOLDER -> visible
                     + (recursive ? " AND (+folder = ? OR (+folder >= ? AND +folder < ?))" : " AND folder = ?");
+            case PERSON -> visible + " AND id IN (SELECT media_id FROM media_person WHERE person_id = ?)";
         };
     }
 
     /** The values for the {@code ?} in {@link #sqlCondition}, in order. */
     public List<Object> params() {
+        if (kind == Kind.PERSON) {
+            return List.of(person);
+        }
         if (kind != Kind.FOLDER) {
             return List.of();
         }

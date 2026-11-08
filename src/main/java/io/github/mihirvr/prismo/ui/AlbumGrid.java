@@ -2,6 +2,7 @@ package io.github.mihirvr.prismo.ui;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -10,6 +11,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.ContextMenuEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
@@ -32,6 +34,8 @@ public final class AlbumGrid extends StackPane {
     private List<Album> albums = List.of();
     private GridLayout layout = new GridLayout(1, TimelineView.DEFAULT_THUMBNAIL_SIZE);
     private Consumer<Album> onOpen = _ -> { };
+    /** A right-click on a card (1.2.0: Rename / Delete a person); null = no menu. */
+    private BiConsumer<Album, ContextMenuEvent> onMenu;
 
     public AlbumGrid(ThumbnailLoader loader) {
         this.loader = loader;
@@ -53,6 +57,11 @@ public final class AlbumGrid extends StackPane {
     /** Called with the album clicked. */
     public void setOnOpen(Consumer<Album> onOpen) {
         this.onOpen = onOpen;
+    }
+
+    /** Called on a right-click on a card (1.2.0: the People page's Rename / Delete). */
+    public void setOnMenu(BiConsumer<Album, ContextMenuEvent> onMenu) {
+        this.onMenu = onMenu;
     }
 
     public DoubleProperty thumbnailSizeProperty() {
@@ -138,6 +147,12 @@ public final class AlbumGrid extends StackPane {
                     onOpen.accept(album);
                 }
             });
+            setOnContextMenuRequested(event -> {
+                if (onMenu != null && album != null) {
+                    onMenu.accept(album, event);
+                    event.consume();
+                }
+            });
         }
 
         void show(Album newAlbum, double size) {
@@ -150,7 +165,7 @@ public final class AlbumGrid extends StackPane {
             name.setText(newAlbum.name());
             name.setMaxWidth(size);
             count.setText("%,d".formatted(newAlbum.count()));
-            path.setText(newAlbum.folder());
+            path.setText(newAlbum.isPerson() ? newAlbum.name() : newAlbum.folder()); // a person has no folder
         }
 
         void clear() {

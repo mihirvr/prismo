@@ -24,17 +24,23 @@ import org.slf4j.LoggerFactory;
  * which doesn't matter for background thumbnails.
  *
  * <p><b>Which picture</b> (1.1.0; before, it was always the frame at 1 s, which in a TV episode or a phone video is
- * often a fade-in or a title card: plain black or white tiles):
+ * often a fade-in or a title card: plain black or white tiles). Always a frame of the video itself (1.2.0: a cover
+ * picture stored in the file is never used; in downloaded series it is often the encoder group's logo, the same
+ * tile for every episode):
  * <ol>
- *   <li>the cover picture stored in the file, if it has one (MP4 "cover art", an MKV {@code cover.jpg}): ffmpeg
- *       lists it as an "attached pic" stream;</li>
- *   <li>else the frame at {@link #FIRST_SHARE} of the length, at least {@link #MIN_SECONDS} and at most
+ *   <li>the frame at {@link #FIRST_SHARE} of the length, at least {@link #MIN_SECONDS} and at most
  *       {@link #MAX_SECONDS} in (a video shorter than that gets its first frame);</li>
  *   <li>if that frame is almost black, almost white or one flat colour ({@link Look}), the frames at
  *       {@link #RETRY_SHARES} are tried too and the best one is kept. (Our own rule: video sites pick a few frames
  *       spread over the video, but none publishes how.)</li>
  * </ol>
- * One quick extra {@code ffmpeg} run reads the length and finds the cover; it decodes nothing.
+ * One quick extra {@code ffmpeg} run reads the length; it decodes nothing.
+ *
+ * <p><b>Only key frames are decoded</b> (1.2.0, {@code -skip_frame nokey}): a seek lands on the key frame before
+ * the time and, to be exact, would decode every frame from there to the time. On a 1080p 10-bit HEVC file with a key
+ * frame every 10 s that took 1.1-2.1 s per frame on one thread; key frames only, 0.17-0.34 s (measured 2026-11-08). A
+ * thumbnail doesn't need the exact frame: the first key frame at or after the time is fine. (A file without a seek
+ * index is not decoded from the start: ffmpeg reads up to the time instead, which only a slow disk notices.)
  *
  * <p>{@code ffmpeg} turns phone videos upright by itself (from the rotation tag) and decodes single-threaded, so the
  * thumbnail pool's thread count stays the CPU limit.
@@ -45,9 +51,10 @@ final class VideoThumbnailer {
 
     /**
      * Raised when video thumbnails are made differently, so the ones already made are made again once (see
-     * {@link ThumbnailGenerator#VIDEO_REVISION}). 1 = 1.1.0: cover, frame at 10 %, brightness check.
+     * {@link ThumbnailGenerator#VIDEO_REVISION}). 1 = 1.1.0: cover, frame at 10 %, brightness check. 2 = 1.2.0:
+     * never the cover (every cover thumbnail of 1.1.0 is made again as a frame).
      */
-    static final int REVISION = 1;
+    static final int REVISION = 2;
     static final double FIRST_SHARE = 0.10;
     static final double MIN_SECONDS = 1;
     static final double MAX_SECONDS = 60;
@@ -55,9 +62,9 @@ final class VideoThumbnailer {
     /** A video shorter than this keeps its first try: other frames of a few seconds look much the same. */
     static final double MIN_SECONDS_TO_RETRY = 4;
     private static final long TIMEOUT_SECONDS = 60;
+    /** A video thumbnail that takes longer than this is logged with its time and number of tries (1.2.0). */
+    private static final long SLOW_MILLIS = 5_000;
     private static final Pattern DURATION = Pattern.compile("Duration: (\\d+):(\\d\\d):(\\d\\d(?:\\.\\d+)?)");
-    /** "Stream #0:1[0x2](und): Video: mjpeg …, 600x600 … (attached pic)"; the number after "#0:" is its index. */
-    private static final Pattern COVER = Pattern.compile("Stream #0:(\\d+)\\S*: Video: .*\\(attached pic\\)");
 
     /** Finds the {@code ffmpeg} program; unpacking it can be slow (first time only). */
     @FunctionalInterface
@@ -74,19 +81,27 @@ final class VideoThumbnailer {
     }
 
     void generate(Path source, Path target) throws IOException {
+        long start = System.nanoTime();
+        int[] frames = {0};
+        try {
+            generate(source, target, frames);
+        } finally {
+            long millis = (System.nanoTime() - start) / 1_000_000;
+            if (millis > SLOW_MILLIS) {
+                log.info("Video thumbnail for {} took {} ms ({} frame tries)", source, millis, frames[0]);
+            }
+        }
+    }
+
+    /** {@code frames[0]} counts the frame runs, for the slow-thumbnail log line. */
+    private void generate(Path source, Path target, int[] frames) throws IOException {
         Path program = ffmpeg.path();
         Facts facts = Facts.parse(run(probeCommand(program, source)));
-        if (facts.coverStream() >= 0) {
-            String error = run(coverCommand(program, source, target, facts.coverStream()));
-            if (Files.size(target) > 0) {
-                return;
-            }
-            log.debug("The cover of {} could not be read ({}): a frame instead", source, error.strip());
-        }
         double first = firstFrameAt(facts.seconds());
-        String error = run(frameCommand(program, source, target, first));
+        String error = grab(program, source, target, first, frames);
         if (Files.size(target) == 0 && first > 0) {
-            error = run(frameCommand(program, source, target, 0)); // shorter than it said: the first frame
+            frames[0]++;
+            error = run(frameCommand(program, source, target, 0, true)); // shorter than it said: the first frame
         }
         if (Files.size(target) == 0) {
             throw new IOException("ffmpeg made no picture" + (error.isEmpty() ? "" : ": " + error.strip()));
@@ -104,7 +119,7 @@ final class VideoThumbnailer {
             for (double share : RETRY_SHARES) {
                 Path candidate = target.resolveSibling(target.getFileName() + "." + Math.round(share * 100) + ".jpg");
                 tries.add(candidate);
-                run(frameCommand(program, source, candidate, facts.seconds() * share));
+                grab(program, source, candidate, facts.seconds() * share, frames);
                 if (!Files.isRegularFile(candidate) || Files.size(candidate) == 0) {
                     continue;
                 }
@@ -124,6 +139,22 @@ final class VideoThumbnailer {
         }
     }
 
+    /**
+     * The frame at {@code seconds} into {@code target}: key frames only first (fast, see the class comment); if that
+     * gives no picture (no key frame after the time: a short clip with a single key frame at the start, say), the
+     * exact frame, decoding every frame up to it (slow on a long file, but then the file is short or the time is near
+     * its end). Returns what ffmpeg printed last.
+     */
+    private String grab(Path program, Path source, Path target, double seconds, int[] frames) throws IOException {
+        frames[0]++;
+        String error = run(frameCommand(program, source, target, seconds, true));
+        if ((!Files.isRegularFile(target) || Files.size(target) == 0) && seconds > 0) {
+            frames[0]++;
+            error = run(frameCommand(program, source, target, seconds, false));
+        }
+        return error;
+    }
+
     /** Where to take the first frame, in seconds; 0 = the first frame. An unknown length ({@code <= 0}): 1 s. */
     static double firstFrameAt(double seconds) {
         if (seconds <= 0) {
@@ -140,23 +171,20 @@ final class VideoThumbnailer {
         return List.of(program.toString(), "-nostdin", "-hide_banner", "-i", source.toString());
     }
 
-    /** The cover stream as the thumbnail. */
-    List<String> coverCommand(Path program, Path source, Path target, int stream) {
-        List<String> command = new ArrayList<>(List.of(program.toString(), "-nostdin", "-hide_banner",
-                "-loglevel", "error", "-threads", "1", "-i", source.toString(), "-map", "0:" + stream));
-        command.addAll(output(target));
-        return command;
-    }
-
     /**
      * One frame at {@code seconds} (0 = the first frame): quiet, long edge at most {@code size} (never enlarged), one
-     * JPEG written to {@code target} (the "mjpeg" format writes a single frame as a plain JPEG file).
+     * JPEG written to {@code target} (the "mjpeg" format writes a single frame as a plain JPEG file). With
+     * {@code keyFramesOnly} only key frames are decoded, so the picture is the first key frame at or after
+     * {@code seconds} (see the class comment); without, the exact frame.
      */
-    List<String> frameCommand(Path program, Path source, Path target, double seconds) {
+    List<String> frameCommand(Path program, Path source, Path target, double seconds, boolean keyFramesOnly) {
         List<String> command = new ArrayList<>(List.of(program.toString(), "-nostdin", "-hide_banner",
                 "-loglevel", "error", "-threads", "1"));
+        if (keyFramesOnly) {
+            command.addAll(List.of("-skip_frame", "nokey"));
+        }
         if (seconds > 0) {
-            // Before -i: jumps to the key frame before, then decodes up to the exact time.
+            // Before -i: jumps to the key frame before the time (input option, like -skip_frame).
             command.addAll(List.of("-ss", String.format(Locale.ROOT, "%.3f", seconds)));
         }
         command.addAll(List.of("-i", source.toString(), "-map", "0:V:0"));
@@ -176,10 +204,10 @@ final class VideoThumbnailer {
     }
 
     /**
-     * What ffmpeg says about a file: its length in seconds (0 if unknown) and the index of its cover stream (-1 if
-     * none). {@code "0:V:0"} in {@link #frameCommand} (capital V) picks the first real video stream, never the cover.
+     * What ffmpeg says about a file: its length in seconds (0 if unknown). {@code "0:V:0"} in {@link #frameCommand}
+     * (capital V) picks the first real video stream, never a cover picture ("attached pic") stored in the file.
      */
-    record Facts(double seconds, int coverStream) {
+    record Facts(double seconds) {
 
         static Facts parse(String ffmpegOutput) {
             double seconds = 0;
@@ -188,15 +216,7 @@ final class VideoThumbnailer {
                 seconds = Integer.parseInt(duration.group(1)) * 3600 + Integer.parseInt(duration.group(2)) * 60
                         + Double.parseDouble(duration.group(3));
             }
-            int cover = -1;
-            for (String line : ffmpegOutput.split("\\R")) {
-                Matcher stream = COVER.matcher(line);
-                if (stream.find()) {
-                    cover = Integer.parseInt(stream.group(1));
-                    break;
-                }
-            }
-            return new Facts(seconds, cover);
+            return new Facts(seconds);
         }
     }
 

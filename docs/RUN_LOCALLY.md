@@ -40,7 +40,7 @@ video with sound, a screenshot).
    soft dark band with no hard edge (also over a video's control bar).
 5. **Video:** a phone video plays with sound in sync. Space / K, J / L, Left / Right, 0 to 9, Up / Down, M,
    < / >, C (subtitles on / off), V (next subtitles), B (sound track), Shift+L (loop), double-click for full screen.
-   Video thumbnails show the video's cover if it has one, else a frame about 10 % in, never a black fade-in or a
+   Video thumbnails always show a frame of the video (1.2.0: never a cover picture stored in the file), about 10 % in, never a black fade-in or a
    white title card. Close it halfway: its thumbnail shows a progress bar, and it
    resumes there next time.
 6. **Search:** Ctrl+F, type part of a name, a folder, a camera or a year.

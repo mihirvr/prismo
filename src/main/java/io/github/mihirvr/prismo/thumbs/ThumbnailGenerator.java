@@ -49,13 +49,15 @@ public final class ThumbnailGenerator {
 
     /**
      * Raised when a change can make thumbnails of files that failed before; their failure markers are then forgotten
-     * once, so they are tried again. 2 = 1.0.1 (tiled HEIC).
+     * once, so they are tried again. 2 = 1.0.1 (tiled HEIC). 3 = 1.2.0 (videos that took longer than a minute in
+     * 1.1.0: only key frames are decoded now).
      */
-    public static final int REVISION = 2;
+    public static final int REVISION = 3;
     /**
      * Raised when video thumbnails are made differently; the video thumbnails already made are then made again once,
      * because a made thumbnail never fails (so {@link #REVISION}'s markers don't cover it). 1 = 1.1.0: the video's
-     * cover, or a frame at about 10 % checked for brightness, instead of the frame at 1 s.
+     * cover, or a frame at about 10 % checked for brightness, instead of the frame at 1 s. 2 = 1.2.0: never the
+     * cover.
      */
     public static final int VIDEO_REVISION = VideoThumbnailer.REVISION;
     private static final float JPEG_QUALITY = 0.85f;

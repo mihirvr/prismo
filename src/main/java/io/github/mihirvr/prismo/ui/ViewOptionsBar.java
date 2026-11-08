@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.scene.Node;
@@ -51,6 +52,10 @@ public final class ViewOptionsBar extends HBox {
     private final MenuButton typesButton = new MenuButton();
     private List<String> availableTypes = List.of();
     private final Map<String, CheckBox> typeBoxes = new HashMap<>();
+    /** The People menu (1.2.0): a tick per person, "No people", and all of them together or any of them. */
+    private final MenuButton peopleButton = new MenuButton();
+    /** Every person, id to name, A to Z; read each time the menu opens. */
+    private Supplier<Map<Long, String>> people = Map::of;
     private boolean sortLocked;
     /** True while the controls are set by code (locking), so their listeners don't change the choice. */
     private boolean quiet;
@@ -106,7 +111,18 @@ public final class ViewOptionsBar extends HBox {
             }
         });
 
-        getChildren().setAll(view, arrangeButton, filter, typesButton, new Label("Sort"), sort, direction);
+        peopleButton.getStyleClass().add("view-people");
+        peopleButton.setTooltip(new Tooltip("Show only some people's photos and videos"));
+        peopleButton.setOnShowing(_ -> fillPeopleMenu());
+        showChosenPeople();
+        options.addListener((_, old, value) -> {
+            if (!old.people().equals(value.people())) {
+                showChosenPeople();
+            }
+        });
+
+        getChildren().setAll(view, arrangeButton, filter, typesButton, peopleButton, new Label("Sort"), sort,
+                direction);
         updateArrangeShown();
     }
 
@@ -159,7 +175,8 @@ public final class ViewOptionsBar extends HBox {
     private void showChosenTypes() {
         Set<String> chosen = options.get().types();
         typesButton.setText(chosen.isEmpty() ? "All types"
-                : chosen.size() <= 2 ? options.get().withFilter(MediaFilter.ALL).filterLabel()
+                : chosen.size() <= 2 ? options.get().withFilter(MediaFilter.ALL).withPeople(PeopleFilter.NONE)
+                        .filterLabel()
                 : chosen.size() + " types");
         if (!typeBoxes.keySet().containsAll(chosen)) {
             fillTypesMenu(); // a type chosen elsewhere (a saved setting) that the menu doesn't list yet
@@ -175,6 +192,80 @@ public final class ViewOptionsBar extends HBox {
 
     MenuButton typesButton() {
         return typesButton;
+    }
+
+    /** Where the People menu reads the people from (1.2.0): id to name, A to Z. */
+    public void setPeople(Supplier<Map<Long, String>> people) {
+        this.people = people;
+    }
+
+    /**
+     * The People menu, made fresh each time it opens (people come and go): Everyone; all of them together or any of
+     * them; No people; one tick per person. Ticking stays in the menu; a person deleted meanwhile drops out of the
+     * filter.
+     */
+    private void fillPeopleMenu() {
+        Map<Long, String> everyone = people.get();
+        PeopleFilter chosen = options.get().people().keepOnly(everyone.keySet());
+        if (!chosen.equals(options.get().people())) {
+            options.set(options.get().withPeople(chosen));
+        }
+        MenuItem all = new MenuItem("Everyone");
+        all.setOnAction(_ -> options.set(options.get().withPeople(PeopleFilter.NONE)));
+        ToggleGroup mode = new ToggleGroup();
+        RadioMenuItem together = new RadioMenuItem("All of them together");
+        RadioMenuItem any = new RadioMenuItem("Any of them");
+        together.setToggleGroup(mode);
+        any.setToggleGroup(mode);
+        (chosen.together() ? together : any).setSelected(true);
+        together.setOnAction(_ -> options.set(options.get().withPeople(options.get().people().withTogether(true))));
+        any.setOnAction(_ -> options.set(options.get().withPeople(options.get().people().withTogether(false))));
+        List<MenuItem> items = new ArrayList<>(List.of(all, new SeparatorMenuItem(), together, any,
+                new SeparatorMenuItem()));
+        CheckBox untagged = new CheckBox("No people");
+        untagged.setSelected(chosen.untagged());
+        untagged.selectedProperty().addListener((_, _, on) ->
+                options.set(options.get().withPeople(options.get().people().withUntagged(on))));
+        CustomMenuItem untaggedItem = new CustomMenuItem(untagged, false);
+        untaggedItem.getStyleClass().add("type-item");
+        items.add(untaggedItem);
+        if (everyone.isEmpty()) {
+            MenuItem none = new MenuItem("No people yet");
+            none.setDisable(true);
+            items.add(none);
+        }
+        List<CheckBox> boxes = new ArrayList<>();
+        boolean[] clearing = {false}; // the boxes are being unticked for "No people": not the user's own clicks
+        everyone.forEach((id, name) -> {
+            CheckBox box = new CheckBox(name);
+            box.setMnemonicParsing(false);
+            box.setSelected(chosen.people().contains(id));
+            box.selectedProperty().addListener((_, _, on) -> {
+                if (clearing[0]) {
+                    return;
+                }
+                options.set(options.get().withPeople(options.get().people().withPerson(id, on)));
+                untagged.setSelected(options.get().people().untagged());
+            });
+            boxes.add(box);
+            CustomMenuItem item = new CustomMenuItem(box, false);
+            item.getStyleClass().add("type-item");
+            items.add(item);
+        });
+        untagged.selectedProperty().addListener((_, _, on) -> {
+            if (on) {
+                clearing[0] = true;
+                boxes.forEach(box -> box.setSelected(false)); // "No people" and people don't mix
+                clearing[0] = false;
+            }
+        });
+        peopleButton.getItems().setAll(items);
+    }
+
+    /** The People button's text: "Everyone", "People: 2", "No people". */
+    private void showChosenPeople() {
+        String label = options.get().people().label();
+        peopleButton.setText(label == null ? "Everyone" : label);
     }
 
     /** Shows the View menu (the Grid, Collections › Folders) or hides it and its space (elsewhere). */

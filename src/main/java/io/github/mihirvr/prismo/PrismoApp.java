@@ -6,6 +6,7 @@ import io.github.mihirvr.prismo.collections.HiddenMode;
 import io.github.mihirvr.prismo.collections.ItemActions;
 import io.github.mihirvr.prismo.collections.LibraryFoldersDialog;
 import io.github.mihirvr.prismo.collections.MediaFlags;
+import io.github.mihirvr.prismo.collections.PeopleUi;
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.db.LibraryRootStore;
 import io.github.mihirvr.prismo.db.PlaybackPositions;
@@ -71,6 +72,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -280,6 +282,8 @@ public final class PrismoApp extends Application {
     private TimelineView searchResults;
     private SearchBar searchBar;
     private MediaViewer viewer;
+    /** People tags (1.2.0). */
+    private PeopleUi people;
     private CollectionsPage collections;
     private ViewOptionsBar viewBar;
     private final ToggleButton timelineTab = new ToggleButton("Grid");
@@ -525,6 +529,13 @@ public final class PrismoApp extends Application {
         searchResults.setOsHiddenShown(osHiddenShown::get);
         collections.grid().setOsHiddenShown(osHiddenShown::get);
         viewer.setOsHiddenShown(osHiddenShown::get);
+        // 1.2.0: People tags (manual): right-click › People… in every grid and the viewer, the People page, folders.
+        people = new PeopleUi(database, () -> stage, this::libraryChanged, status::say);
+        for (TimelineView grid : List.of(timeline, searchResults, collections.grid())) {
+            grid.setOnPeople(people::editItems);
+        }
+        viewer.setOnPeople(people::editItems);
+        collections.setPeople(people);
         viewer.setOffline(offlineFolders::get);
         offlineFolders.addListener((_, _, offline) -> {
             for (TimelineView grid : List.of(timeline, searchResults, collections.grid())) {
@@ -587,6 +598,11 @@ public final class PrismoApp extends Application {
         HBox tabBar = new HBox(timelineTab, collectionsTab);
         tabBar.getStyleClass().add("tabs");
         viewBar = new ViewOptionsBar(viewOptions.withOsHiddenShown(false), gridView, folderArrange);
+        viewBar.setPeople(() -> { // 1.2.0: the People filter's names, read each time its menu opens
+            Map<Long, String> names = new LinkedHashMap<>();
+            people.people().forEach(person -> names.put(person.id(), person.name()));
+            return names;
+        });
         applyGridLayout();
         viewBar.gridViewProperty().addListener((_, _, chosen) -> {
             settings.put(GRID_VIEW_SETTING, chosen.settingValue());
@@ -1119,7 +1135,7 @@ public final class PrismoApp extends Application {
                         thumbnails.warmUp(media, p -> Platform.runLater(() -> {
                             if (isLatestWarmUp(number)) { // a stopped one's last jobs may still report
                                 int handled = p.ready() + p.unsupported() + p.failed() + p.missing();
-                                status.progress(p.done() ? null : StatusNote.thumbnails(handled, p.total(),
+                                status.progress(p.done() ? null : StatusNote.thumbnails(handled, p.total(), p.failed(),
                                         p.total() - handled >= BIG_SETUP_FILES));
                             }
                         }));
@@ -1163,7 +1179,7 @@ public final class PrismoApp extends Application {
 
     /**
      * Once after an update that makes video thumbnails differently ({@link ThumbnailGenerator#VIDEO_REVISION}; 1.1.0:
-     * cover or a well-lit frame instead of the frame at 1 s): forgets every video's thumbnail, so the warm-up makes
+     * cover or a well-lit frame instead of the frame at 1 s; 1.2.0: never the cover): forgets every video's thumbnail, so the warm-up makes
      * them again the new way. Runs before the window shows, so no grid loads an old one first. A new library has no
      * videos yet: then only the setting is written.
      */

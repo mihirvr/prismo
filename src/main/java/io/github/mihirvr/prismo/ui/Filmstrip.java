@@ -3,11 +3,9 @@ package io.github.mihirvr.prismo.ui;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
-import javafx.geometry.Pos;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.Pane;
-import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
 import javafx.scene.shape.Rectangle;
 
@@ -15,6 +13,10 @@ import javafx.scene.shape.Rectangle;
  * The filmstrip (1.1.0): a row of small thumbnails under the photo, the current one in the middle and outlined, the
  * edges fading out. A click opens that item, the mouse wheel steps one item at a time. Shared by the main viewer
  * and the standalone viewer; only the tiles that fit are made, so a list of 100,000 costs the same as one of 20.
+ *
+ * <p><b>The fade</b> (1.2.0): the tiles themselves fade near the left and right edges ({@link #edgeOpacity}). 1.1.0
+ * laid a gradient in the viewer's background colour over the edges, which works on a plain background but not in
+ * full screen, where the strip floats over the photo or video: there it was turned off and the tiles were cut hard.
  *
  * <p>All methods run on the JavaFX Application Thread.
  */
@@ -27,6 +29,12 @@ public final class Filmstrip extends StackPane {
     public static final double HEIGHT = TILE_SIZE + 16;
     /** About one notch of a mouse wheel (JavaFX reports about 40 on Windows). */
     private static final double WHEEL_NOTCH = 40;
+    /**
+     * How far in from each edge the tiles fade: three and a half tiles, so three tiles at each end step down (about
+     * 0.85, 0.45, 0.07) and it reads as a fade. Each tile has one opacity, so with one and a half tiles (first try)
+     * only one tile was dimmed and the end still looked cut (checked in the app, window and full screen, 2026-11-08).
+     */
+    static final double FADE_WIDTH = TILE_SIZE * 3.5;
 
     private final ThumbnailLoader loader;
     private final Pane track = new Pane();
@@ -47,19 +55,8 @@ public final class Filmstrip extends StackPane {
         clip.widthProperty().bind(widthProperty());
         clip.heightProperty().bind(heightProperty());
         setClip(clip);
-        Region fadeLeft = new Region();
-        fadeLeft.getStyleClass().addAll("filmstrip-fade", "filmstrip-fade-left");
-        Region fadeRight = new Region();
-        fadeRight.getStyleClass().addAll("filmstrip-fade", "filmstrip-fade-right");
-        for (Region fade : List.of(fadeLeft, fadeRight)) {
-            fade.setMouseTransparent(true);
-            fade.setMaxWidth(USE_PREF_SIZE);
-            fade.setPrefWidth(TILE_SIZE * 1.5);
-        }
-        StackPane.setAlignment(fadeLeft, Pos.CENTER_LEFT);
-        StackPane.setAlignment(fadeRight, Pos.CENTER_RIGHT);
         track.setManaged(true);
-        getChildren().addAll(track, fadeLeft, fadeRight);
+        getChildren().add(track);
         widthProperty().addListener((_, _, _) -> place());
         addEventHandler(ScrollEvent.SCROLL, event -> {
             double delta = event.getDeltaX() != 0 && Math.abs(event.getDeltaX()) > Math.abs(event.getDeltaY())
@@ -135,7 +132,9 @@ public final class Filmstrip extends StackPane {
             tile.show(item.ref(), TILE_SIZE);
             tile.setVideoLength(0);
             tile.setFocusRing(at == index);
-            tile.relocate(middle + (at - index) * step, top);
+            double x = middle + (at - index) * step;
+            tile.relocate(x, top);
+            tile.setOpacity(edgeOpacity(x + TILE_SIZE / 2, width));
             tile.setOnMouseClicked(event -> {
                 if (event.getButton() == MouseButton.PRIMARY) {
                     pick(at);
@@ -143,6 +142,21 @@ public final class Filmstrip extends StackPane {
                 }
             });
         }
+    }
+
+    /**
+     * A tile's opacity from where its centre is ({@code centreX}, in a strip {@code width} wide): 1 away from the
+     * edges, falling smoothly to 0 at an edge over {@link #FADE_WIDTH} (smoothstep: no visible kink where it starts).
+     * A strip too narrow for both fades scales them down, so the middle tile stays fully visible.
+     */
+    static double edgeOpacity(double centreX, double width) {
+        double fade = Math.min(FADE_WIDTH, width / 2);
+        if (fade <= 0) {
+            return 1;
+        }
+        double fromEdge = Math.min(centreX, width - centreX);
+        double t = Math.clamp(fromEdge / fade, 0, 1);
+        return t * t * (3 - 2 * t);
     }
 
     /** For tests and tools: the tiles on screen. */

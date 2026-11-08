@@ -27,7 +27,19 @@ import java.util.Optional;
  */
 public record MediaDetails(Path path, String extension, String mediaType, long sizeBytes, Long dateTaken,
         long dateModified, long dateAdded, int width, int height, String cameraMake, String cameraModel,
-        double duration, boolean favorite, boolean hidden, boolean osHidden, boolean trashed) {
+        double duration, boolean favorite, boolean hidden, boolean osHidden, boolean trashed, List<String> people) {
+
+    public MediaDetails {
+        people = people == null ? List.of() : List.copyOf(people);
+    }
+
+    /** Without people (1.2.0 added them). */
+    public MediaDetails(Path path, String extension, String mediaType, long sizeBytes, Long dateTaken,
+            long dateModified, long dateAdded, int width, int height, String cameraMake, String cameraModel,
+            double duration, boolean favorite, boolean hidden, boolean osHidden, boolean trashed) {
+        this(path, extension, mediaType, sizeBytes, dateTaken, dateModified, dateAdded, width, height, cameraMake,
+                cameraModel, duration, favorite, hidden, osHidden, trashed, List.of());
+    }
 
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("d MMMM yyyy, HH:mm", Locale.UK);
 
@@ -52,9 +64,25 @@ public record MediaDetails(Path path, String extension, String mediaType, long s
                 return Optional.of(new MediaDetails(Path.of(row.getString(1)), row.getString(2), row.getString(3),
                         row.getLong(4), dateTaken, row.getLong(6), row.getLong(7), row.getInt(8), row.getInt(9),
                         row.getString(10), row.getString(11), row.getDouble(12), row.getBoolean(13),
-                        row.getBoolean(14), row.getBoolean(15), row.getBoolean(16)));
+                        row.getBoolean(14), row.getBoolean(15), row.getBoolean(16), peopleIn(connection, id)));
             }
         }
+    }
+
+    /** The names of the people tagged in item {@code id}, A to Z (1.2.0). */
+    static List<String> peopleIn(Connection connection, long id) throws SQLException {
+        List<String> names = new ArrayList<>();
+        try (PreparedStatement select = connection.prepareStatement("""
+                SELECT p.name FROM media_person mp JOIN person p ON p.id = mp.person_id
+                WHERE mp.media_id = ? ORDER BY p.name COLLATE NOCASE""")) {
+            select.setLong(1, id);
+            try (ResultSet rows = select.executeQuery()) {
+                while (rows.next()) {
+                    names.add(rows.getString(1));
+                }
+            }
+        }
+        return names;
     }
 
     /** The file's name ("IMG_0001.JPG"). */

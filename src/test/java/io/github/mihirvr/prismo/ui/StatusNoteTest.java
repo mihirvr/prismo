@@ -40,7 +40,9 @@ class StatusNoteTest {
     @Test
     void textsAreShortAndCountOnlyWhatIsRunning() {
         assertEquals("Looking for photos and videos… 1,234 found", StatusNote.State.indexing(1234));
-        assertEquals("Making thumbnails… 120 of 266", StatusNote.State.thumbnails(120, 266, false));
-        assertTrue(StatusNote.State.thumbnails(1, 40_000, true).endsWith("photos may open slowly until this finishes"));
+        assertEquals("Making thumbnails… 120 of 266", StatusNote.State.thumbnails(120, 266, 0, false));
+        assertEquals("Making thumbnails… 120 of 266  ·  2 couldn't be made",
+                StatusNote.State.thumbnails(120, 266, 2, false));
+        assertTrue(StatusNote.State.thumbnails(1, 40_000, 0, true).endsWith("photos may open slowly until this finishes"));
     }
 }

@@ -239,18 +239,12 @@
     -fx-padding: 0 8 0 0;
 }
 
-/* The key next to an entry ("Ctrl+C"), quieter than its name. */
+/* A submenu's arrow (the only thing in this box; an entry's key is not in it). */
 .context-menu > .menu-item > .right-container {
     -fx-padding: 0 0 0 24;
 }
 
-.context-menu > .menu-item > .right-container > .accelerator-text {
-    -fx-text-fill: -prismo-text-faint;
-}
-
-.context-menu > .menu-item:focused > .right-container > .accelerator-text {
-    -fx-text-fill: -prismo-text-muted;
-}
+/* The key next to an entry ("Ctrl+C"): its colour is at the end of this file ("The key next to a menu entry"). */
 
 .context-menu > .menu-item:disabled > .label {
     -fx-text-fill: -prismo-text-faint;
@@ -643,17 +637,10 @@
     -fx-stroke: #ffffff;
 }
 
-/* 1.1.0: the viewer's filmstrip. The edges fade into the viewer's background. */
+/* 1.1.0: the viewer's filmstrip. 1.2.0: its tiles fade out near the edges by themselves (Filmstrip.edgeOpacity), so
+   it looks the same over the plain background and over a photo in full screen. */
 .filmstrip {
     -fx-background-color: transparent;
-}
-
-.filmstrip-fade-left {
-    -fx-background-color: linear-gradient(to right, -prismo-viewer-bg, transparent);
-}
-
-.filmstrip-fade-right {
-    -fx-background-color: linear-gradient(to left, -prismo-viewer-bg, transparent);
 }
 
 .filmstrip-tile {
@@ -673,10 +660,6 @@
    video's control bar too), so it has no hard edge anywhere. */
 .filmstrip-band {
     -fx-background-color: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.4) 45%, rgba(0, 0, 0, 0.12) 80%, transparent);
-}
-
-.filmstrip.floating .filmstrip-fade {
-    -fx-background-color: transparent;
 }
 
 /* 1.1.0: next to the scroll bar while it is dragged or hovered: the letter, date or folder there. */
@@ -1689,4 +1672,47 @@
 
 .date-jump-cell:disabled {
     -fx-opacity: 0.35;
+}
+
+/* The key next to a menu entry ("Ctrl+D", "Page Up", the Subtitles menu's C / V / G / H) in the muted colour, in every
+   menu and every look, also on the hovered row (1.2.0: it was as bright as the entry's name). JavaFX puts the key's label
+   ("accelerator-text") straight inside the row, next to the name's label: there is no "right-container" box around it
+   (that box only holds a submenu's arrow), so a rule through it never matched (checked in the running app, 2026-11-08).
+   The viewer's own rules paint every label in its menus bright (".viewer-top-bar .context-menu .label" and others), so
+   the viewer forms are spelled out to outrank them; at the end of the file, so equal-strength rules above lose too. */
+.context-menu .menu-item > .accelerator-text,
+.context-menu .menu-item:focused > .accelerator-text,
+.viewer .context-menu .menu-item > .accelerator-text,
+.viewer .context-menu .menu-item:focused > .accelerator-text,
+.viewer-top-bar .context-menu .menu-item > .accelerator-text,
+.viewer-top-bar .context-menu .menu-item:focused > .accelerator-text,
+.viewer .viewer-video-controls .context-menu .menu-item > .accelerator-text,
+.viewer .viewer-video-controls .context-menu .menu-item:focused > .accelerator-text {
+    -fx-text-fill: -prismo-text-muted;
+}
+
+/* 1.2.0: the menu entry a double-click or Enter does too ("Open"), bold as in File Explorer (Menus.asDefault). Only its
+   name: its key stays as the other keys. */
+.context-menu .menu-item.menu-default > .label {
+    -fx-font-weight: bold;
+}
+
+.context-menu .menu-item.menu-default > .accelerator-text {
+    -fx-font-weight: normal;
+}
+
+/* 1.2.0: the People window. Notes ("in 12 of 40", the empty list) muted; the summary of what Save will do. */
+.people-dialog .people-note {
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.people-dialog .people-summary {
+    -fx-text-fill: -prismo-text;
+    -fx-font-weight: bold;
+}
+
+.people-dialog .people-list {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
 }

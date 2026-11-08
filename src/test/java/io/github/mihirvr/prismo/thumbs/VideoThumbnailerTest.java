@@ -90,13 +90,19 @@ class VideoThumbnailerTest {
 
     @Test
     void seeksBeforeOpeningTheInput() {
-        List<String> command = thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 2.5);
+        List<String> command = thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 2.5,
+                true);
 
         assertTrue(command.indexOf("-ss") >= 0 && command.indexOf("-ss") < command.indexOf("-i"), command.toString());
         assertEquals("2.500", command.get(command.indexOf("-ss") + 1));
         assertEquals("0:V:0", command.get(command.indexOf("-map") + 1), "the real video, never the cover");
+        int skip = command.indexOf("-skip_frame");
+        assertTrue(skip >= 0 && skip < command.indexOf("-i"), "key frames only, an input option: " + command);
+        assertEquals("nokey", command.get(skip + 1));
+        assertFalse(thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 2.5, false)
+                .contains("-skip_frame"), "the exact frame: every frame decoded");
         assertEquals("out.tmp", command.getLast());
-        assertFalse(thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 0)
+        assertFalse(thumbnailer.frameCommand(Path.of("ffmpeg"), Path.of("in.mp4"), Path.of("out.tmp"), 0, true)
                 .contains("-ss"), "0 = the first frame");
     }
 
@@ -110,14 +116,14 @@ class VideoThumbnailerTest {
     }
 
     @Test
-    void readsTheLengthAndTheCoverFromFfmpegsListing() {
-        // As the bundled ffmpeg 8.1 prints them (an MP4 with cover art; an MKV with cover.jpg attached).
+    void readsTheLengthFromFfmpegsListing() {
+        // As the bundled ffmpeg 8.1 prints them (an MP4 with cover art; an MKV with cover.jpg attached: both ignored).
         String mp4 = """
                   Duration: 00:01:40.50, start: 0.000000, bitrate: 593 kb/s
                   Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 640x360
                   Stream #0:1[0x0]: Video: mjpeg (Baseline), yuvj420p(pc), 600x600 [SAR 1:1 DAR 1:1], 90k tbn (attached pic)
                 """;
-        assertEquals(new VideoThumbnailer.Facts(100.5, 1), VideoThumbnailer.Facts.parse(mp4));
+        assertEquals(new VideoThumbnailer.Facts(100.5), VideoThumbnailer.Facts.parse(mp4));
         String mkv = """
                   Duration: 01:02:03.00, start: 0.000000, bitrate: 9 kb/s
                   Stream #0:0: Video: h264 (High), yuv420p(tv, progressive), 640x360 [SAR 1:1 DAR 16:9], 25 fps
@@ -125,8 +131,8 @@ class VideoThumbnailerTest {
                   Stream #0:2: Video: mjpeg (Baseline), yuvj420p(pc), 500x500, 90k tbn (attached pic)
                       filename        : cover.jpg
                 """;
-        assertEquals(new VideoThumbnailer.Facts(3723, 2), VideoThumbnailer.Facts.parse(mkv));
-        assertEquals(new VideoThumbnailer.Facts(0, -1), VideoThumbnailer.Facts.parse("  Duration: N/A, bitrate: N/A"));
+        assertEquals(new VideoThumbnailer.Facts(3723), VideoThumbnailer.Facts.parse(mkv));
+        assertEquals(new VideoThumbnailer.Facts(0), VideoThumbnailer.Facts.parse("  Duration: N/A, bitrate: N/A"));
     }
 
     @Test
@@ -168,7 +174,8 @@ class VideoThumbnailerTest {
     }
 
     @Test
-    void aVideosOwnCoverPictureIsUsed() throws Exception {
+    void aVideosOwnCoverPictureIsNeverUsed() throws Exception {
+        // 1.2.0: downloaded series carry the encoder group's logo as their cover; the thumbnail is always a frame.
         Path cover = tmp.resolve("cover.jpg");
         ffmpeg("-f", "lavfi", "-i", "smptebars=size=200x200", "-frames:v", "1", cover.toString());
         Path video = tmp.resolve("with cover.mp4");
@@ -178,8 +185,8 @@ class VideoThumbnailerTest {
 
         BufferedImage thumb = generate(video);
 
-        assertEquals(200, thumb.getWidth(), "the square cover, not a 16:9 frame");
-        assertEquals(200, thumb.getHeight());
+        assertEquals(320, thumb.getWidth(), "a 16:9 frame, not the square cover");
+        assertEquals(180, thumb.getHeight());
     }
 
     private static void ffmpeg(String... arguments) throws IOException {

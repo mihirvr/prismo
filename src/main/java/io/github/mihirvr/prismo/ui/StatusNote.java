@@ -71,11 +71,12 @@ public final class StatusNote extends Label {
     }
 
     /**
-     * "Making thumbnails… 120 of 266"; during a big first setup also that photos may open slowly meanwhile (1.0.1:
-     * indexing and thumbnails keep the disk busy; seen on a 40,000-item library on a hard disk).
+     * "Making thumbnails… 120 of 266", and (1.2.0) "· 2 couldn't be made" once any failed, so a count that stops
+     * moving is told apart from files that can't be read; during a big first setup also that photos may open slowly
+     * meanwhile (1.0.1: indexing and thumbnails keep the disk busy; seen on a 40,000-item library on a hard disk).
      */
-    public static String thumbnails(int done, int total, boolean bigSetup) {
-        return State.thumbnails(done, total, bigSetup);
+    public static String thumbnails(int done, int total, int failed, boolean bigSetup) {
+        return State.thumbnails(done, total, failed, bigSetup);
     }
 
     /** The rules and texts, without JavaFX (loading StatusNote itself needs it): what the note says now. */
@@ -85,8 +86,9 @@ public final class StatusNote extends Label {
             return "Looking for photos and videos… %,d found".formatted(found);
         }
 
-        static String thumbnails(int done, int total, boolean bigSetup) {
+        static String thumbnails(int done, int total, int failed, boolean bigSetup) {
             return "Making thumbnails… %,d of %,d".formatted(done, total)
+                    + (failed > 0 ? "  ·  %,d couldn't be made".formatted(failed) : "")
                     + (bigSetup ? "  ·  photos may open slowly until this finishes" : "");
         }
 

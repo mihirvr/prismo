@@ -52,6 +52,9 @@ final class InfoSections {
     static List<Section> build(MediaDetails details, ZoneId zone, Metadata metadata, VideoPlayer.Info video) {
         List<Section> sections = new ArrayList<>();
         add(sections, "Details", details.lines(zone));
+        if (!details.people().isEmpty()) { // 1.2.0: the people tagged in it
+            add(sections, "People", List.of(new Line("", String.join(", ", details.people()))));
+        }
         List<Line> camera = new ArrayList<>();
         if (!details.camera().isEmpty()) {
             camera.add(new Line("Camera", details.camera()));

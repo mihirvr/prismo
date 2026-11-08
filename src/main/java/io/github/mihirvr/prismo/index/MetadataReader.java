@@ -90,6 +90,11 @@ public final class MetadataReader {
             make = exifString(metadata, ExifDirectoryBase.TAG_MAKE);
             model = exifString(metadata, ExifDirectoryBase.TAG_MODEL);
         }
+        // 1.2.0: the metadata library doesn't read MKV / WebM at all, so their length (the tile's badge) comes from
+        // the Matroska header itself.
+        if (type == MediaType.VIDEO && duration == null && MatroskaInfo.handles(MediaType.extensionOf(fileName))) {
+            duration = MatroskaInfo.durationSeconds(file).orElse(null);
+        }
 
         Path parent = file.getParent();
         return new MediaRecord(file.toString(), parent == null ? "" : parent.toString(), fileName,

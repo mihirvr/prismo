@@ -93,7 +93,12 @@ public enum Icon {
     OFFLINE("M8.5 3.5V7.5M15.5 3.5V7.5M6 7.5H18V10.5A6 6 0 0 1 6 10.5ZM12 16.5V20.5M4 4L20 20"),
     /** A folder with an arrow into it: Move to folder. */
     MOVE("M3.5 7.5A2 2 0 0 1 5.5 5.5H9.3L11.3 7.5H18.5A2 2 0 0 1 20.5 9.5V16.5A2 2 0 0 1 18.5 18.5H5.5"
-            + "A2 2 0 0 1 3.5 16.5ZM8.5 13H15M12.5 10.5L15 13L12.5 15.5");
+            + "A2 2 0 0 1 3.5 16.5ZM8.5 13H15M12.5 10.5L15 13L12.5 15.5"),
+    /** 1.2.0: a person tag (one head and shoulders). */
+    PERSON("M12 4A3.5 3.5 0 1 1 12 11A3.5 3.5 0 1 1 12 4ZM5 20A7 7 0 0 1 19 20"),
+    /** 1.2.0: People (the Collections page, the menu entry): a person with a second one behind. */
+    PEOPLE("M9 5.5A3 3 0 1 1 9 11.5A3 3 0 1 1 9 5.5ZM3.5 19.5A5.5 5.5 0 0 1 14.5 19.5M16 6.5A2.5 2.5 0 1 1 16 11.5"
+            + "M17 14.3A4.8 4.8 0 0 1 20.5 19");
 
     /** The drawing grid's side: every path above is drawn inside 0..24. */
     public static final double GRID = 24;

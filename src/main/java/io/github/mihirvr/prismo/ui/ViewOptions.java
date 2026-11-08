@@ -19,9 +19,10 @@ import java.util.TreeSet;
  *                      default) = only on Collections › Hidden ({@link MediaScope#sqlCondition})
  * @param types         the file types ticked in the Types menu ({@link FileTypes}: {@code jpg}, {@code png}…);
  *                      empty = every type
+ * @param people        the People filter (1.2.0); {@link PeopleFilter#NONE} = everyone
  */
 public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending, boolean osHiddenShown,
-        Set<String> types) {
+        Set<String> types, PeopleFilter people) {
 
     /** Everything, date taken, newest first: the Timeline as it was before Filters and Sort existed. */
     public static final ViewOptions DEFAULT = new ViewOptions(MediaFilter.ALL, MediaSort.DATE_TAKEN, true, false);
@@ -29,9 +30,18 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
     /** The filters that became Types in 1.1.0, so a saved "JPEG" filter comes back as the JPG type. */
     private static final Map<String, String> OLD_FILTERS = Map.of("JPEG", "jpg", "PNG", "png", "HEIC", "heic",
             "WEBP", "webp");
+    /** Marks the People part of the setting (types never contain "="). */
+    private static final String PEOPLE_PREFIX = "p=";
 
     public ViewOptions {
         types = Set.copyOf(FileTypes.typesOf(types)); // only known types, each once
+        people = people == null ? PeopleFilter.NONE : people;
+    }
+
+    /** Nobody filtered by people. */
+    public ViewOptions(MediaFilter filter, MediaSort sort, boolean descending, boolean osHiddenShown,
+            Set<String> types) {
+        this(filter, sort, descending, osHiddenShown, types, PeopleFilter.NONE);
     }
 
     /** Every file type. */
@@ -50,7 +60,7 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
 
     /** True when a filter or a type narrows what is shown. */
     public boolean isFiltered() {
-        return filter != MediaFilter.ALL || !types.isEmpty();
+        return filter != MediaFilter.ALL || !types.isEmpty() || people.active();
     }
 
     /** What is shown, in words: "Videos", "JPG, PNG", "Photos, JPG"; "All" when nothing narrows it. */
@@ -61,6 +71,9 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
         }
         for (String type : new TreeSet<>(types)) {
             parts.add(FileTypes.label(type));
+        }
+        if (people.label() != null) {
+            parts.add(people.label());
         }
         return parts.isEmpty() ? MediaFilter.ALL.toString() : String.join(", ", parts);
     }
@@ -75,14 +88,15 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
         return sort.isDate() ? Headers.DATES : sort == MediaSort.NAME ? Headers.LETTERS : Headers.NONE;
     }
 
-    /** The filter's and the types' SQL condition, or null when everything is shown. */
+    /** The filter's, the types' and the people's SQL condition, or null when everything is shown. */
     public String sqlCondition() {
-        String byFilter = filter.condition();
-        String byType = FileTypes.sqlCondition(types);
-        if (byFilter == null || byType == null) {
-            return byFilter == null ? byType : byFilter;
+        List<String> parts = new ArrayList<>();
+        for (String part : new String[] {filter.condition(), FileTypes.sqlCondition(types), people.sqlCondition()}) {
+            if (part != null) {
+                parts.add(part);
+            }
         }
-        return byFilter + " AND " + byType;
+        return parts.isEmpty() ? null : String.join(" AND ", parts);
     }
 
     /**
@@ -103,34 +117,44 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
     }
 
     public ViewOptions withFilter(MediaFilter newFilter) {
-        return new ViewOptions(newFilter, sort, descending, osHiddenShown, types);
+        return new ViewOptions(newFilter, sort, descending, osHiddenShown, types, people);
     }
 
     /** A new sort starts in its natural direction (see {@link MediaSort#descendingByDefault()}). */
     public ViewOptions withSort(MediaSort newSort) {
-        return new ViewOptions(filter, newSort, newSort.descendingByDefault(), osHiddenShown, types);
+        return new ViewOptions(filter, newSort, newSort.descendingByDefault(), osHiddenShown, types, people);
     }
 
     public ViewOptions withDescending(boolean newDescending) {
-        return new ViewOptions(filter, sort, newDescending, osHiddenShown, types);
+        return new ViewOptions(filter, sort, newDescending, osHiddenShown, types, people);
     }
 
     public ViewOptions withOsHiddenShown(boolean shown) {
-        return new ViewOptions(filter, sort, descending, shown, types);
+        return new ViewOptions(filter, sort, descending, shown, types, people);
     }
 
     /** The ticked file types; empty = every type. */
     public ViewOptions withTypes(Set<String> newTypes) {
-        return new ViewOptions(filter, sort, descending, osHiddenShown, newTypes);
+        return new ViewOptions(filter, sort, descending, osHiddenShown, newTypes, people);
+    }
+
+    /** The People filter (1.2.0). */
+    public ViewOptions withPeople(PeopleFilter newPeople) {
+        return new ViewOptions(filter, sort, descending, osHiddenShown, types, newPeople);
     }
 
     /**
      * The Filters + Sort as a setting, kept across restarts (P7): {@code "PHOTOS,NAME,asc"}, then the ticked types
-     * if any: {@code "ALL,NAME,asc,jpg+png"}. The File Explorer switch has its own setting, so it isn't part of this.
+     * if any: {@code "ALL,NAME,asc,jpg+png"}, then the People filter if any (1.2.0): {@code ",p=all:3+7"}. The File
+     * Explorer switch has its own setting, so it isn't part of this.
      */
     public String toSetting() {
         String value = filter.name() + "," + sort.name() + "," + (descending ? "desc" : "asc");
-        return types.isEmpty() ? value : value + "," + String.join("+", new TreeSet<>(types));
+        if (!types.isEmpty()) {
+            value += "," + String.join("+", new TreeSet<>(types));
+        }
+        String byPeople = people.toSetting();
+        return byPeople == null ? value : value + "," + PEOPLE_PREFIX + byPeople;
     }
 
     /**
@@ -142,10 +166,18 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
             return DEFAULT;
         }
         String[] parts = value.split(",");
-        if ((parts.length != 3 && parts.length != 4) || !(parts[2].equals("desc") || parts[2].equals("asc"))) {
+        if (parts.length < 3 || parts.length > 5 || !(parts[2].equals("desc") || parts[2].equals("asc"))) {
             return DEFAULT;
         }
-        Set<String> types = new TreeSet<>(parts.length == 4 ? List.of(parts[3].split("\\+")) : List.of());
+        // After the sort: the types, the People part (1.2.0), or the types then the People part; nothing else.
+        String typesPart = parts.length > 3 && !parts[3].startsWith(PEOPLE_PREFIX) ? parts[3] : null;
+        String peoplePart = parts.length == 5 ? parts[4] : parts.length == 4 && typesPart == null ? parts[3] : null;
+        if ((parts.length == 5 && typesPart == null) || (peoplePart != null && !peoplePart.startsWith(PEOPLE_PREFIX))) {
+            return DEFAULT;
+        }
+        Set<String> types = new TreeSet<>(typesPart == null ? List.of() : List.of(typesPart.split("\\+")));
+        PeopleFilter people = peoplePart == null ? PeopleFilter.NONE
+                : PeopleFilter.fromSetting(peoplePart.substring(PEOPLE_PREFIX.length()));
         MediaFilter filter;
         if (OLD_FILTERS.containsKey(parts[0])) {
             filter = MediaFilter.ALL;
@@ -158,7 +190,7 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
             }
         }
         try {
-            return new ViewOptions(filter, MediaSort.valueOf(parts[1]), parts[2].equals("desc"), false, types);
+            return new ViewOptions(filter, MediaSort.valueOf(parts[1]), parts[2].equals("desc"), false, types, people);
         } catch (IllegalArgumentException e) {
             return DEFAULT; // a sort that no longer exists
         }

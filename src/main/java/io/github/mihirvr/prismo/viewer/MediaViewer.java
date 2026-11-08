@@ -152,6 +152,8 @@ public final class MediaViewer extends StackPane {
     private boolean infoOpen;
     /** The right-click menu or the More button's menu, while one is open. */
     private ContextMenu menu;
+    /** "People…" in the right-click menu (1.2.0); null = not offered. */
+    private Consumer<List<TimelineItem>> onPeople;
     /** Full screen: hides the controls and pointer after {@link #IDLE_TIME} without a mouse move. */
     private final PauseTransition idle = new PauseTransition(IDLE_TIME);
     private boolean chromeHidden;
@@ -1142,12 +1144,14 @@ public final class MediaViewer extends StackPane {
         if (item == null) {
             return List.of();
         }
-        // 1.1.0: grouped in submenus that open on hover (as in VLC): Playback, Audio, Subtitles (videos), View, File;
-        // then the item actions and Info, then Previous / Next.
-        List<MenuItem> entries = new ArrayList<>();
+        // 1.1.0: Playback, Audio, Subtitles (videos) and View are submenus that open on hover (as in VLC): many
+        // entries each. 1.2.0: no File submenu any more; the file's own entries are on the menu itself (Microsoft's
+        // guidelines: no frequent entries in a submenu). A photo has them on top; a video at the bottom, under its
+        // playback menus, so they are still in sight.
         ViewMode mode = ViewMode.of(item.ref().extension());
+        List<MenuItem> playback = new ArrayList<>();
         if (mode == ViewMode.VIDEO && video.player() != null) {
-            entries.addAll(video.menuItems());
+            playback.addAll(video.menuItems());
         }
         List<MenuItem> view = new ArrayList<>();
         if (mode != ViewMode.VIDEO && imageView.getImage() != null) {
@@ -1169,16 +1173,29 @@ public final class MediaViewer extends StackPane {
             view.add(Menus.item(slideshow.isRunning() ? "Stop the slideshow" : "Slideshow", Icon.SLIDESHOW,
                     new KeyCodeCombination(KeyCode.SPACE), this::toggleSlideshow));
         }
-        entries.add(Menus.submenu("View", Icon.IMAGE, view));
-        entries.add(Menus.submenu("File", Icon.FOLDER, fileItems.menuItems(item)));
-        entries.add(new SeparatorMenuItem());
+        playback.add(Menus.submenu("View", Icon.IMAGE, view));
+
+        boolean shown = osHiddenShown.getAsBoolean();
+        List<MenuItem> settings = new ArrayList<>();
+        List<MenuItem> changes = new ArrayList<>(fileItems.changeItems(item));
+        List<MenuItem> removing = new ArrayList<>();
         for (ItemAction action : menuActions(item)) {
-            entries.add(Menus.item(action.menuText(), action.icon(),
-                    action.shortcut(item, osHiddenShown.getAsBoolean()), () -> act(action)));
+            MenuItem entry = Menus.item(action.menuText(), action.icon(), action.shortcut(item, shown),
+                    () -> act(action));
+            switch (action) {
+                case TRASH -> changes.add(entry);
+                case DELETE_PERMANENTLY -> removing.add(entry);
+                default -> settings.add(entry);
+            }
+            if ((action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) && onPeople != null) {
+                settings.add(Menus.item("People…", Icon.PEOPLE, null, () -> onPeople.accept(List.of(item))));
+            }
         }
-        entries.add(Menus.item(infoOpen ? "Close the info" : "Info", Icon.INFO, new KeyCodeCombination(KeyCode.I),
-                this::toggleInfo));
-        entries.add(new SeparatorMenuItem());
+        if (!itemActionsShown) {
+            changes.clear(); // the standalone viewer: no library, so no Rename / Move here either
+        }
+        List<MenuItem> info = List.of(Menus.item(infoOpen ? "Close the info" : "Info", Icon.INFO,
+                new KeyCodeCombination(KeyCode.I), this::toggleInfo));
         boolean video = mode == ViewMode.VIDEO;
         MenuItem previousItem = Menus.item("Previous", Icon.PREVIOUS_MEDIA,
                 new KeyCodeCombination(video ? KeyCode.PAGE_UP : KeyCode.LEFT), () -> step(-1));
@@ -1186,9 +1203,21 @@ public final class MediaViewer extends StackPane {
         MenuItem nextItem = Menus.item("Next", Icon.NEXT_MEDIA,
                 new KeyCodeCombination(video ? KeyCode.PAGE_DOWN : KeyCode.RIGHT), () -> step(+1));
         nextItem.setDisable(index >= items.size() - 1);
-        entries.add(previousItem);
-        entries.add(nextItem);
-        return entries;
+        List<MenuItem> stepping = List.of(previousItem, nextItem);
+        List<MenuItem> opening = fileItems.openItems(item);
+        List<MenuItem> copying = List.of(fileItems.copyItem(item));
+        if (video) {
+            return Menus.grouped(playback, settings, info, stepping, opening, copying, changes, removing);
+        }
+        return Menus.grouped(opening, copying, settings, changes, removing, info, playback, stepping);
+    }
+
+    /**
+     * What "People…" in the right-click menu does (1.2.0): opens the People window for the item on screen. Null (the
+     * default, and the standalone viewer) leaves the entry out.
+     */
+    public void setOnPeople(Consumer<List<TimelineItem>> onPeople) {
+        this.onPeople = onPeople;
     }
 
     /** The More button: the file items, and the File Explorer Hidden mark where there is one. */

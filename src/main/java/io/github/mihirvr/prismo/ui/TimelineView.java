@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.ui;
 
 import io.github.mihirvr.prismo.platform.OsHiddenMark;
+import java.io.File;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
@@ -18,6 +20,7 @@ import javafx.geometry.Bounds;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.control.Button;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.IndexedCell;
@@ -25,9 +28,11 @@ import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
 import javafx.scene.control.MenuItem;
-import javafx.scene.control.SeparatorMenuItem;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.skin.VirtualFlow;
+import javafx.scene.image.Image;
+import javafx.scene.input.ClipboardContent;
+import javafx.scene.input.Dragboard;
 import javafx.scene.input.KeyCode;
 import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
@@ -35,9 +40,11 @@ import javafx.scene.input.KeyEvent;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.input.ScrollEvent;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Region;
 import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
 
 /**
  * The Timeline: every photo and video, newest first, under date headers, as a grid of square thumbnails.
@@ -118,6 +125,8 @@ public final class TimelineView extends StackPane {
     private BiConsumer<List<TimelineItem>, Integer> onOpen = (_, _) -> { };
     private BiConsumer<List<TimelineItem>, Integer> onInfo = (_, _) -> { };
     private ItemAction.Handler onAction = (_, _) -> false;
+    /** "People…" in the right-click menu (1.2.0); null = not offered. */
+    private Consumer<List<TimelineItem>> onPeople;
     private FileItems fileItems = FileItems.NONE;
     /** The Settings switch "Show files hidden in File Explorer" (which actions an item gets). */
     private BooleanSupplier osHiddenShown = () -> false;
@@ -729,8 +738,11 @@ public final class TimelineView extends StackPane {
     }
 
     /**
-     * The right-click menu for one tile: Open, then what {@link ItemAction#forMenu} allows, then the file items.
-     * Each entry shows its key (shown only: the keys themselves are handled in {@link #onKey}).
+     * The right-click menu for one tile, flat (1.2.0; 1.1.0 had the file items in a File submenu, which hid Show in
+     * folder and Copy one level down). Groups in the order of Microsoft's menu guidelines: Open (bold: it is what a
+     * double-click does), Show in folder, Open with default app | Copy | Favorite, People, Hide, File Explorer mark |
+     * Rename, Move to folder, Move to Trash | Info | Select. In Trash: Open, the open items, Copy | Restore |
+     * Delete permanently | Info. Each entry shows its key (shown only: the keys are handled in {@link #onKey}).
      */
     private void showMenu(ThumbnailTile tile, double screenX, double screenY) {
         int at = tile.ref() == null ? -1 : indexOf(tile.ref().id());
@@ -747,42 +759,109 @@ public final class TimelineView extends StackPane {
             menu.show(tile, screenX, screenY);
             return;
         }
-        MenuItem open = Menus.item("Open", Icon.IMAGE, new KeyCodeCombination(KeyCode.ENTER),
-                () -> open(item.ref().id()));
-        MenuItem select = Menus.item(selection.contains(item.ref().id()) ? "Unselect" : "Select", Icon.CHECK,
-                new KeyCodeCombination(KeyCode.SPACE), () -> toggleSelected(item.ref().id()));
-        // 1.1.0: what is used most on top, the file's own items in a File submenu (opens on hover).
-        menu = new ContextMenu(open);
-        for (ItemAction action : ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, osHiddenShown.getAsBoolean())) {
-            menu.getItems().add(Menus.item(action.menuText(), action.icon(),
-                    action.shortcut(item, osHiddenShown.getAsBoolean()),
-                    () -> perform(action, item)));
+        MenuItem open = Menus.asDefault(Menus.item("Open", Icon.IMAGE, new KeyCodeCombination(KeyCode.ENTER),
+                () -> open(item.ref().id())));
+        List<MenuItem> opening = new ArrayList<>(List.of(open));
+        opening.addAll(fileItems.openItems(item));
+        boolean shown = osHiddenShown.getAsBoolean();
+        List<MenuItem> settings = new ArrayList<>();
+        List<MenuItem> changes = new ArrayList<>(fileItems.changeItems(item));
+        List<MenuItem> removing = new ArrayList<>();
+        for (ItemAction action : ItemAction.forMenu(item, OsHiddenMark.SUPPORTED, shown)) {
+            MenuItem entry = Menus.item(action.menuText(), action.icon(), action.shortcut(item, shown),
+                    () -> perform(action, item));
+            switch (action) {
+                case TRASH -> changes.add(entry); // with Rename and Move: what changes where the file is
+                case DELETE_PERMANENTLY -> removing.add(entry); // alone, last but Info: it can't be undone
+                default -> settings.add(entry);
+            }
+            if ((action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) && onPeople != null) {
+                settings.add(peopleItem(List.of(item)));
+            }
         }
-        menu.getItems().addAll(Menus.item("Info", Icon.INFO, INFO, () -> openInfo(item.ref().id())),
-                new SeparatorMenuItem(), Menus.submenu("File", Icon.FOLDER, fileItems.menuItems(item)),
-                new SeparatorMenuItem(), select);
+        List<MenuItem> info = List.of(Menus.item("Info", Icon.INFO, INFO, () -> openInfo(item.ref().id())));
+        List<MenuItem> select = item.trashed() ? List.of()
+                : List.of(Menus.item(selection.contains(item.ref().id()) ? "Unselect" : "Select", Icon.CHECK,
+                        new KeyCodeCombination(KeyCode.SPACE), () -> toggleSelected(item.ref().id())));
+        menu = new ContextMenu();
+        menu.getItems().setAll(Menus.grouped(opening, List.of(fileItems.copyItem(item)), settings, changes,
+                removing, info, select));
         menu.show(tile, screenX, screenY);
     }
 
-    /** The right-click menu on a selected tile while several are selected: what the selection bar does. */
+    /**
+     * Drags the tile's file out of Prismo, as from File Explorer (1.2.0): onto WhatsApp Web or another browser page, a
+     * mail, a chat app, a folder. A tile that is part of the selection drags every selected file. Only a copy is
+     * offered, so dropping on a folder copies the file and never moves it out of the library. The drag picture is
+     * the tile itself.
+     */
+    private void dragOut(ThumbnailTile tile) {
+        long id = tile.ref().id();
+        List<TimelineItem> dragged = selection.contains(id) ? selectedItems() : List.of(items.get(indexOf(id)));
+        if (dragged.isEmpty()) {
+            return;
+        }
+        List<File> files = new ArrayList<>(dragged.size());
+        for (TimelineItem item : dragged) {
+            files.add(item.ref().path().toFile());
+        }
+        Dragboard board = tile.startDragAndDrop(TransferMode.COPY);
+        ClipboardContent content = new ClipboardContent();
+        content.putFiles(files);
+        board.setContent(content);
+        SnapshotParameters transparent = new SnapshotParameters();
+        transparent.setFill(Color.TRANSPARENT);
+        Image picture = tile.snapshot(transparent, null);
+        board.setDragView(picture, picture.getWidth() / 2, picture.getHeight() / 2);
+    }
+
+    /** "People…": who is in these items (1.2.0, manual tags); only when {@link #setOnPeople} was given. */
+    private MenuItem peopleItem(List<TimelineItem> chosen) {
+        Consumer<List<TimelineItem>> handler = onPeople;
+        return Menus.item("People…", Icon.PEOPLE, null, () -> handler.accept(chosen));
+    }
+
+    /**
+     * What "People…" in the right-click menu does (1.2.0): opens the People window for the item or the selection.
+     * Null (the default) leaves the entry out.
+     */
+    public void setOnPeople(Consumer<List<TimelineItem>> onPeople) {
+        this.onPeople = onPeople;
+    }
+
+    /**
+     * The right-click menu on a selected tile while several are selected: what the selection bar does, flat and in
+     * the same order as one tile's menu (1.2.0): "N selected" | Copy | Favorite, People, Hide | Move to folder, Move
+     * to Trash | Select all, Clear selection. In Trash: Restore | Delete permanently.
+     */
     private ContextMenu selectionMenu() {
         List<TimelineItem> chosen = selectedItems();
-        ContextMenu selected = new ContextMenu();
         MenuItem count = new MenuItem("%,d selected".formatted(chosen.size()));
         count.setDisable(true);
-        selected.getItems().addAll(count, new SeparatorMenuItem());
+        List<MenuItem> settings = new ArrayList<>();
+        List<MenuItem> changes = new ArrayList<>(fileItems.changeItems(chosen));
+        List<MenuItem> removing = new ArrayList<>();
         for (ItemAction action : ItemAction.forSelection(chosen, osHiddenShown.getAsBoolean())) {
-            selected.getItems().add(Menus.item(action.menuText(), action.icon(), action.shortcut(),
-                    () -> performOnSelection(action)));
+            MenuItem entry = Menus.item(action.menuText(), action.icon(), action.shortcut(),
+                    () -> performOnSelection(action));
+            switch (action) {
+                case TRASH -> changes.add(entry);
+                case DELETE_PERMANENTLY -> removing.add(entry);
+                default -> settings.add(entry);
+            }
+            if ((action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) && onPeople != null) {
+                settings.add(peopleItem(chosen));
+            }
         }
-        selected.getItems().addAll(new SeparatorMenuItem(),
-                Menus.submenu("File", Icon.FOLDER, fileItems.menuItems(chosen)));
-        selected.getItems().addAll(new SeparatorMenuItem(),
+        List<MenuItem> selecting = List.of(
                 Menus.item("Select all", Icon.CHECK, SELECT_ALL, () -> {
                     selection.selectAll(items);
                     updateSelection();
                 }),
                 Menus.item("Clear selection", Icon.CLOSE, new KeyCodeCombination(KeyCode.ESCAPE), this::clearSelection));
+        ContextMenu selected = new ContextMenu();
+        selected.getItems().setAll(Menus.grouped(List.of(count), List.of(fileItems.copyItem(chosen)), settings,
+                changes, removing, selecting));
         return selected;
     }
 
@@ -971,6 +1050,12 @@ public final class TimelineView extends StackPane {
                         moveFocus(id);
                         open(id);
                     }
+                }
+            });
+            tile.setOnDragDetected(event -> {
+                if (event.getButton() == MouseButton.PRIMARY && tile.ref() != null) {
+                    dragOut(tile);
+                    event.consume();
                 }
             });
             tile.setOnCheck(() -> toggleSelected(tile.ref().id()));

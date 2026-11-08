@@ -118,26 +118,53 @@ public final class FileItems {
         this.listener = listener;
     }
 
-    /** The menu entries for {@code item}. */
+    /** The menu entries for {@code item}, in one list (the viewer's More button). */
     public List<MenuItem> menuItems(TimelineItem item) {
-        List<MenuItem> entries = new ArrayList<>(List.of(
-                Menus.item("Show in folder", Icon.FOLDER, null, () -> showInFolder(item)),
-                Menus.item("Open with default app", Icon.OPEN_EXTERNAL, null, () -> openWithDefaultApp(item)),
-                Menus.item("Copy", Icon.COPY, COPY, () -> copy(item))));
-        if (operations != null && !item.trashed()) {
-            entries.add(Menus.item("Rename\u2026", Icon.RENAME, RENAME, () -> rename(item)));
-            entries.add(Menus.item("Move to folder\u2026", Icon.MOVE, null, () -> move(List.of(item))));
-        }
+        List<MenuItem> entries = new ArrayList<>(openItems(item));
+        entries.add(copyItem(item));
+        entries.addAll(changeItems(item));
         return entries;
     }
 
     /** The menu entries for a selection of several items (P7): Copy and Move to folder (not for Trash items). */
     public List<MenuItem> menuItems(List<TimelineItem> items) {
-        List<MenuItem> entries = new ArrayList<>(List.of(Menus.item("Copy", Icon.COPY, COPY, () -> copy(items))));
-        if (canMove(items)) {
-            entries.add(Menus.item("Move to folder\u2026", Icon.MOVE, null, () -> move(items)));
-        }
+        List<MenuItem> entries = new ArrayList<>(List.of(copyItem(items)));
+        entries.addAll(changeItems(items));
         return entries;
+    }
+
+    // 1.2.0: the right-click menus are flat (no File submenu), in the order of Microsoft's menu guidelines: open,
+    // copy, the item's settings, then what changes the file. These give each group on its own.
+
+    /** Show in folder and Open with default app: they open something, they change nothing. */
+    public List<MenuItem> openItems(TimelineItem item) {
+        return List.of(Menus.item("Show in folder", Icon.FOLDER, null, () -> showInFolder(item)),
+                Menus.item("Open with default app", Icon.OPEN_EXTERNAL, null, () -> openWithDefaultApp(item)));
+    }
+
+    /** Copy (Ctrl+C): the file, for pasting in File Explorer or another app. */
+    public MenuItem copyItem(TimelineItem item) {
+        return Menus.item("Copy", Icon.COPY, COPY, () -> copy(item));
+    }
+
+    /** Copy (Ctrl+C) for a selection. */
+    public MenuItem copyItem(List<TimelineItem> items) {
+        return Menus.item("Copy", Icon.COPY, COPY, () -> copy(items));
+    }
+
+    /** Rename (F2) and Move to folder: they change the file; none for a Trash item or without a library. */
+    public List<MenuItem> changeItems(TimelineItem item) {
+        if (operations == null || item.trashed()) {
+            return List.of();
+        }
+        return List.of(Menus.item("Rename\u2026", Icon.RENAME, RENAME, () -> rename(item)),
+                Menus.item("Move to folder\u2026", Icon.MOVE, null, () -> move(List.of(item))));
+    }
+
+    /** Move to folder for a selection (when {@link #canMove}). */
+    public List<MenuItem> changeItems(List<TimelineItem> items) {
+        return canMove(items) ? List.of(Menus.item("Move to folder\u2026", Icon.MOVE, null, () -> move(items)))
+                : List.of();
     }
 
     /** True if Move to folder is offered for {@code items}: there is a library, and none of them is in Trash. */
