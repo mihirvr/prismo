@@ -51,8 +51,8 @@ More on these folders, the cache's size and clearing it: [Where Prismo keeps its
 ### First start with a big library
 
 The first time you add a big library, Prismo reads every file once (its date taken, size and so on) and makes a
-thumbnail for each one. With tens of thousands of photos and videos this takes a while: on a laptop hard disk,
-about 15 minutes to read 40,000 files, and longer for all the thumbnails. Photos show up as they are found, and
+thumbnail for each one. With tens of thousands of photos and videos this takes a while, longer on a hard disk or a network drive
+than on an SSD, and longer still for all the thumbnails. Photos show up as they are found, and
 the thumbnails on screen are always made first.
 
 While this runs, the disk is busy, so **opening photos can be slow and videos can stutter**. That's expected,
@@ -157,7 +157,7 @@ logs) lives in your user's app-data folders. There is no setting to move them; t
 To open the Windows folder quickly, paste `%LOCALAPPDATA%\Prismo` into the File Explorer address bar.
 (`AppData` is a hidden folder, so it doesn't show up when you just browse to your user folder.)
 
-- **How big the cache gets:** about 20 KB per photo or video (one real library: 31,906 thumbnails in 596 MB),
+- **How big the cache gets:** about 20 KB per photo or video,
   so roughly 800 MB for 40,000 items, plus about 70 MB for the video player files. Settings > Performance shows
   the size.
 - **Clearing it:** Settings > Performance > **Clear thumbnails** deletes the thumbnails; they are made again as they

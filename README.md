@@ -76,8 +76,8 @@ People filter next to Types shows the items of the people ticked, all of them to
 nobody is tagged in yet. Right-click menus are flat again (no File submenu: Show in folder and Copy are on the menu
 itself). Drag a photo or video (or a selection) out of Prismo into another app, a browser page such as WhatsApp Web, or
 a folder, as from File Explorer (a folder gets a copy). Fixes: video thumbnails on big libraries were made very slowly
-(each try decoded every frame up to the chosen time; now only key frames are decoded, 5 to 10 times faster on
-heavy HEVC videos), and the progress note now says how many could not be made; video thumbnails are always a frame of the video (1.1.0 used a cover picture stored in
+(each try decoded every frame up to the chosen time; now only key frames are decoded, which is much faster on
+heavy videos such as HEVC), and the progress note now says how many could not be made; video thumbnails are always a frame of the video (1.1.0 used a cover picture stored in
 the file, which in downloaded series is often the encoder group's logo); a click outside an open menu closes it and
 does nothing else; menu shortcut keys are in the muted colour; the filmstrip's tiles fade out at the edges in full
 screen too; Windows' "Open with" list shows "Prismo" after an upgrade; MKV and WebM tiles show the video's
