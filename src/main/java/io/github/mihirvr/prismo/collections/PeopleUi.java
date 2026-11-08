@@ -85,9 +85,9 @@ public final class PeopleUi {
         Thread.ofVirtual().name("prismo-people").start(() -> {
             try {
                 List<People.Person> people = database.read(People::all);
-                // Every subfolder, whatever filter the Collections tree follows (Mihir, 2026-11-08: "easy and
-                // unconfusing"): with Filter = Videos the tree had dropped folders without videos, so they couldn't be
-                // chosen and were left untagged. What is ticked here is what gets tagged.
+                // Every subfolder, whatever filter the Collections tree follows (1.2.0 app check): with Filter =
+                // Videos the tree had dropped folders without videos, so they couldn't be chosen and were left
+                // untagged. What is ticked here is what gets tagged.
                 FolderTree.Node whole = find(database.read(c -> FolderTree.load(c, ViewOptions.DEFAULT)), folder.path());
                 FolderTree.Node shown = whole == null ? folder : whole;
                 Platform.runLater(() -> PeopleDialog.forFolder(owner.get(), shown, people, folders ->
