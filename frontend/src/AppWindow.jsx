@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ITEMS, FOLDERS } from './library.js'
+import { ITEMS, FOLDERS, PEOPLE } from './library.js'
 import { MousePointerClick } from 'lucide-react'
 import { Search, Star } from './icons.jsx'
 
 const NAS = 'NAS · Family'
 
-// A working piece of the real app, built in HTML: Timeline, folders, search, filters,
+// A working piece of the real app, built in HTML: Timeline, folders, people, search, filters,
 // an unplugged drive, the viewer with its Info panel. Sample pictures only.
 export default function AppWindow({ stageLabel = 'Prismo' }) {
   const [folder, setFolder] = useState(null)
+  const [person, setPerson] = useState(null)
   const [kind, setKind] = useState('all')
   const [q, setQ] = useState('')
   const [nasOff, setNasOff] = useState(false)
@@ -22,12 +23,13 @@ export default function AppWindow({ stageLabel = 'Prismo' }) {
     const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean)
     return ITEMS.filter((it) => {
       if (folder && it.folder !== folder) return false
+      if (person && !it.people.includes(person)) return false
       if (kind === 'photos' && it.video) return false
       if (kind === 'videos' && !it.video) return false
       const hay = `${it.title} ${it.folder} ${it.camera} ${it.name}`.toLowerCase()
       return words.every((w) => hay.includes(w))
     })
-  }, [folder, kind, q])
+  }, [folder, person, kind, q])
 
   const days = useMemo(() => {
     const out = []
@@ -40,6 +42,7 @@ export default function AppWindow({ stageLabel = 'Prismo' }) {
   }, [visible])
 
   const count = (f) => ITEMS.filter((it) => it.folder === f).length
+  const tagged = (n) => ITEMS.filter((it) => it.people.includes(n)).length
   const idx = open == null ? -1 : visible.findIndex((v) => v.id === open)
   const go = (d) => {
     if (!visible.length) return
@@ -80,14 +83,21 @@ export default function AppWindow({ stageLabel = 'Prismo' }) {
       </div>
       <div className="winbody">
         <nav className="side" aria-label="Collections">
-          <button aria-pressed={folder === null} onClick={() => setFolder(null)}>
+          <button aria-pressed={folder === null && person === null} onClick={() => { setFolder(null); setPerson(null) }}>
             Timeline <span className="count">{ITEMS.length}</span>
           </button>
           <h3>Folders</h3>
           {FOLDERS.map((f) => (
-            <button key={f} aria-pressed={folder === f} onClick={() => setFolder(f)} className={f === NAS && nasOff ? 'off' : ''}>
+            <button key={f} aria-pressed={folder === f} onClick={() => { setFolder(f); setPerson(null) }} className={f === NAS && nasOff ? 'off' : ''}>
               {f}
               <span className="count">{f === NAS && nasOff ? 'offline' : count(f)}</span>
+            </button>
+          ))}
+          <h3>People</h3>
+          {PEOPLE.map((n) => (
+            <button key={n} aria-pressed={person === n} onClick={() => { setPerson(n); setFolder(null) }}>
+              {n}
+              <span className="count">{tagged(n)}</span>
             </button>
           ))}
         </nav>
@@ -156,6 +166,7 @@ export default function AppWindow({ stageLabel = 'Prismo' }) {
                 <dt>Camera</dt><dd>{cur.camera} (sample)</dd>
                 <dt>Size</dt><dd>{cur.size}</dd>
                 <dt>Kind</dt><dd>{cur.video ? 'Video' : 'Photo'}</dd>
+                <dt>People</dt><dd>{cur.people.length ? cur.people.join(', ') : 'nobody tagged'}</dd>
               </dl>
             </aside>
           )}

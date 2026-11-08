@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.1.0/Prismo-1.1.0.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.1.0/prismo_1.1.0_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.2.0/Prismo-1.2.0.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.2.0/prismo_1.2.0_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -81,6 +81,20 @@ const CARDS = [
     ),
   },
   {
+    head: 'People…',
+    name: 'Tag who is in them, by hand',
+    text: 'Right-click a photo, a selection or a whole folder, People…, and tick who is in them. Type a new name to add someone on the spot. Prismo never looks at faces; the tags stay on your PC.',
+    body: (
+      <>
+        <div className="row2"><b>Who is in “Goa trip”?</b><span>12 items</span></div>
+        {[['✓ Asha', 'all 12'], ['– Ravi', 'in 2 of 12'], ['+ Add “Meera”', 'new person']].map(([n, c]) => (
+          <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
+        ))}
+        <p style={{ color: 'var(--muted)' }}>People filter: everyone, all of them together, any of them, or no one tagged yet</p>
+      </>
+    ),
+  },
+  {
     head: 'Grid › Folders',
     name: 'By date, or by folder',
     text: 'Switch the grid between Timeline, Folders and All files. Arrange sets which comes first and how folders sort, and names count like people do: 1, 2, 10.',
@@ -135,6 +149,18 @@ const CARDS = [
     ),
   },
   {
+    head: 'Drag out',
+    name: 'Drag photos into other apps',
+    text: 'Drag a photo, or a whole selection, into WhatsApp Web, an email or a folder, just like from File Explorer. Dropping on a folder makes a copy.',
+    body: (
+      <>
+        <div className="row2"><b>3 selected</b><span>dragging…</span></div>
+        <div className="row2"><span>WhatsApp Web</span><span>3 attached</span></div>
+        <div className="row2"><span>A folder</span><span>copied, originals stay</span></div>
+      </>
+    ),
+  },
+  {
     head: 'Library folders',
     name: 'A drive goes away, nothing is lost',
     text: 'An unplugged drive or a network share that is off shows as offline. Its tiles go grey, and everything comes back with the drive.',
@@ -185,7 +211,7 @@ function Showcase() {
   return (
     <section className="section container" id="features" aria-labelledby="feat-h">
       <div className="show snap-block">
-        <Head id="feat-h" title="Everything a gallery should do." intro="Search, folders, details, videos, Open with, offline drives and looks. Use the arrows, swipe, or click the card behind." center />
+        <Head id="feat-h" title="Everything a gallery should do." intro="Search, people, folders, details, videos, Open with, drag and drop, offline drives and looks. Use the arrows, swipe, or click the card behind." center />
         <div className="stack rise" style={{ '--i': 2 }} tabIndex={0} onKeyDown={onKey} onPointerDown={down} onPointerUp={up} onPointerCancel={() => (x0.current = null)} aria-roledescription="carousel" aria-label="App features">
           {CARDS.map((c, i) => {
             const k = i - at
@@ -260,7 +286,7 @@ function Principles() {
 const STEPS = [
   { h: 'Point it at a folder.', p: 'A folder, a USB drive or a network share. Nothing is imported or copied; your files stay put.' },
   { h: 'It reads and remembers.', p: 'Dates and camera data are read once, in the background, and thumbnails are cached. You can browse while it works.' },
-  { h: 'Then browse like a phone.', p: 'A timeline by day, or your folders, with search, filters, favorites, hidden and trash. New files appear by themselves within a second or two.' },
+  { h: 'Then browse like a phone.', p: 'A timeline by day, or your folders, with search, filters, people, favorites, hidden and trash. New files appear by themselves within a second or two.' },
 ]
 
 function PinWindow({ on }) {
@@ -384,15 +410,12 @@ function Built() {
 /* ---------- questions ---------- */
 
 const FAQ = [
-  ['Is it free?', 'Yes. Prismo is free and open source under the MIT licence. No account, no subscription.'],
-  ['Isn’t this what Picasa did?', 'In spirit, yes. Google retired Picasa in 2016. Prismo is a new, open-source take on the same idea: a phone-style gallery for the photos already on your PC.'],
-  ['Does it copy or move my photos?', 'No. It reads them where they are. A file changes only when you rename, move or delete it yourself.'],
-  ['Does anything go online?', 'No. There is no cloud, no upload and no telemetry. It works with no internet at all.'],
-  ['What about NAS and USB drives?', 'Add them as library folders. If one can’t be reached, its tiles go grey and a banner says so, and everything returns with it. Network folders are checked every 10 minutes instead of watched live.'],
-  ['Can I open just one photo with it?', 'Yes. Right-click a photo or video in File Explorer, Open with, Prismo, or make it the default app. It opens at once in a quick viewer, without loading your library, and the arrows and filmstrip step through that folder.'],
+  ['Does it recognise faces?', 'No, on purpose. You tag people yourself: right-click a photo, a selection or a folder, People…, and tick who is in them. Prismo never looks at the pictures, and the tags stay in Prismo on your PC; your files are not changed.'],
+  ['Windows says “Windows protected your PC”. Is it safe?', 'The installer isn’t code-signed yet, so Windows warns about it as it does for any new download from an unknown publisher. Click More info, then Run anyway. It needs no admin rights. The code is public, and every release on GitHub lists the files’ SHA-256 checksums so you can check your download.'],
+  ['Will it cope with a big library?', 'Yes. It is used on a library of about 40,000 photos and videos on a laptop hard disk. The first time, it reads every file once and makes thumbnails in the background, which can take a while on a hard disk; you can browse meanwhile. After that it opens and scrolls quickly.'],
+  ['How do I update or uninstall it?', 'Update: run the newer installer over the old one; your library, people, favorites and settings stay. Uninstall: Settings › Apps › Installed apps › Prismo. Your library data stays in %LOCALAPPDATA%\\Prismo until you delete that folder; your photos and videos are never touched.'],
   ['Which files does it open?', 'JPEG, PNG, WebP, GIF, HEIC, and RAW files (CR2, CR3, NEF, ARW, DNG and more) through the preview inside them. Videos: MP4, MOV, MKV, WebM and AVI.'],
-  ['Does it run on Linux or Mac?', 'Linux: yes, as a .deb package for Ubuntu, Debian and their relatives. Prismo is built and tested on Windows first; the Linux package is checked automatically (it installs and opens), but has not been used much on a real Linux desktop yet, so expect some rough edges. Mac: not yet.'],
-  ['How do I install it?', 'Windows: run the installer; it needs no admin rights. Windows may warn that the file is not signed: click More info, then Run anyway. Linux: install the .deb with sudo apt install ./prismo_1.1.0_amd64.deb so the libraries it needs come along. Step by step guide in INSTALL.md on GitHub.'],
+  ['Does it run on Linux or Mac?', 'Linux: yes, as a .deb package for Ubuntu, Debian and their relatives. Install it with sudo apt install ./prismo_1.2.0_amd64.deb so the libraries it needs come along. It is made on Windows first; the Linux package installs and opens, but has not been used much on a real Linux desktop yet. Mac: not yet.'],
 ]
 
 function Faq() {
@@ -437,7 +460,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.png" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.1.0. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.2.0. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />

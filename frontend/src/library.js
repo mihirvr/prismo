@@ -5,6 +5,9 @@ import { PHOTOS } from './photos.js'
 const FOLDERS = ['Camera', 'Holidays', 'NAS · Family']
 const DAYS = ['Saturday, 3 May', 'Sunday, 27 April', 'Friday, 11 April']
 const CAMERAS = ['Pixel 8', 'Galaxy S24', 'X-T5', 'EOS R6']
+// People tags are added by hand in Prismo (it never looks at the pictures); these are made up for the demo.
+const PEOPLE = ['Asha', 'Ravi']
+const TAGGED = { Asha: [0, 1, 4, 6, 9], Ravi: [0, 3, 4, 8, 10] }
 
 export const ITEMS = PHOTOS.map((p, i) => {
   const video = i % 5 === 3
@@ -21,7 +24,8 @@ export const ITEMS = PHOTOS.map((p, i) => {
     camera: CAMERAS[i % CAMERAS.length],
     name: `IMG_${String(2400 + i * 13).padStart(4, '0')}.${video ? 'MP4' : 'JPG'}`,
     size: `${(2.1 + ((i * 37) % 50) / 10).toFixed(1)} MB`,
+    people: PEOPLE.filter((n) => TAGGED[n].includes(i)),
   }
 })
 
-export { FOLDERS }
+export { FOLDERS, PEOPLE }

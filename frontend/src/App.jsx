@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import AppWindow from './AppWindow.jsx'
 import PhotoFan from './PhotoFan.jsx'
 import { Sections } from './Sections.jsx'
+import ScrollRail from './ScrollRail.jsx'
 import { useTheme } from './theme.js'
 import { Down, GitHub, Moon, Sun } from './icons.jsx'
 import still from './fallback.svg'
@@ -123,7 +124,7 @@ export default function App() {
         <div className="grain" />
       </div>
 
-      <a className={`logo${barHidden ? ' alone' : ''}`} href="#top" onClick={toTop} aria-label="Prismo, back to the top">
+      <a className={`logo${barHidden ? ' folded' : ''}`} href="#top" onClick={toTop} aria-label="Prismo, back to the top">
         <img src="/brand/prismo-mark.png" alt="" width="34" height="34" />
       </a>
 
@@ -170,6 +171,7 @@ export default function App() {
 
         <Sections />
       </main>
+      <ScrollRail />
 
       <a className={`scroll-hint${scrolled ? ' gone' : ''}`} href="#try" aria-label="Scroll down">
         Scroll <Down />
