@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.2.1/Prismo-1.2.1.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.2.1/prismo_1.2.1_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.3.0/Prismo-1.3.0.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.3.0/prismo_1.3.0_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -81,16 +81,16 @@ const CARDS = [
     ),
   },
   {
-    head: 'People…',
-    name: 'Tag who is in them, by hand',
-    text: 'Right-click a photo, a selection or a whole folder, People…, and tick who is in them. Type a new name to add someone on the spot. Prismo never looks at faces; the tags stay on your PC.',
+    head: 'People… and Categories…',
+    name: 'Tag who is in them, and what they are, by hand',
+    text: 'Right-click a photo, a selection or a whole folder, People…, and tick who is in them; Categories… works the same for Nature, Documents, Portraits or anything you like, and a photo can have both. Type a new name to add one on the spot. Prismo never looks at faces; the tags stay on your PC.',
     body: (
       <>
         <div className="row2"><b>Who is in “Goa trip”?</b><span>12 items</span></div>
         {[['✓ Asha', 'all 12'], ['– Ravi', 'in 2 of 12'], ['+ Add “Meera”', 'new person']].map(([n, c]) => (
           <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
         ))}
-        <p style={{ color: 'var(--muted)' }}>People filter: everyone, all of them together, any of them, or no one tagged yet</p>
+        <p style={{ color: 'var(--muted)' }}>People and Categories filters: all of them together, any of them, or nothing tagged yet</p>
       </>
     ),
   },
@@ -415,7 +415,7 @@ const FAQ = [
   ['Will it cope with a big library?', 'Yes. The first time, it reads every file once and makes thumbnails in the background, which can take a while for a big library on a slow disk; you can browse meanwhile. After that the thumbnails are kept and only what is on screen is loaded, so it opens and scrolls quickly.'],
   ['How do I update or uninstall it?', 'Update: run the newer installer over the old one; your library, people, favorites and settings stay. Uninstall: Settings › Apps › Installed apps › Prismo. Your library data stays in %LOCALAPPDATA%\\Prismo until you delete that folder; your photos and videos are never touched.'],
   ['Which files does it open?', 'JPEG, PNG, WebP, GIF, HEIC, and RAW files (CR2, CR3, NEF, ARW, DNG and more) through the preview inside them. Videos: MP4, MOV, MKV, WebM and AVI.'],
-  ['Does it run on Linux or Mac?', 'Linux: yes, as an early preview, so expect some rough edges. It comes as a .deb package for Ubuntu, Debian and their relatives; install it with sudo apt install ./prismo_1.2.1_amd64.deb so the libraries it needs come along. Mac: not yet.'],
+  ['Does it run on Linux or Mac?', 'Linux: yes, as an early preview, so expect some rough edges. It comes as a .deb package for Ubuntu, Debian and their relatives; install it with sudo apt install ./prismo_1.3.0_amd64.deb so the libraries it needs come along. Mac: not yet.'],
 ]
 
 function Faq() {
@@ -460,7 +460,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.png" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.2.1. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.3.0. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />
