@@ -33,7 +33,7 @@
     -prismo-tooltip-bg: #2e3340;
     -prismo-tooltip-text: #f2f3f6;
     -prismo-card: #1c1f26;
-    -prismo-viewer-bg: #0e0f13;
+    -prismo-viewer-bg: #000000; /* pitch black in every theme */
 
     /* Modena works out the colours of anything prismo.css doesn't style from this (dark, so its text is light). */
     -fx-base: #2a2e37;

@@ -36,8 +36,10 @@ video with sound, a screenshot).
 3. **HEIC and RAW:** they get real thumbnails and open in the viewer (not "Open with default app").
 4. **Viewer:** click a photo. Left / Right move, + / - zoom, 0 fits, R rotates, Space starts the slideshow,
    I opens the Info panel (camera, exposure, GPS), F (or F11) is full screen, Esc goes back. The filmstrip under
-   the photo shows the neighbours; it hides when the mouse rests, and in full screen floats over the photo on a
-   soft dark band with no hard edge (also over a video's control bar).
+   the photo shows the neighbours; in a window it always stays, and in full screen it floats over the photo on a
+   soft dark band with no hard edge (also over a video's control bar) and hides when the mouse rests. During a
+   slideshow only the photos show (moving the mouse brings nothing back); any click or key stops it and does nothing
+   else. Around the photo the viewer is pitch black in every look.
 5. **Video:** a phone video plays with sound in sync. Space / K, J / L, Left / Right, 0 to 9, Up / Down, M,
    < / >, C (subtitles on / off), V (next subtitles), B (sound track), Shift+L (loop), double-click for full screen.
    Video thumbnails always show a frame of the video (1.2.0: never a cover picture stored in the file), about 10 % in, never a black fade-in or a

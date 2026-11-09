@@ -31,6 +31,9 @@ import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
+import javafx.scene.Scene;
+import javafx.scene.effect.ColorAdjust;
+import javafx.scene.effect.GaussianBlur;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.Control;
@@ -107,6 +110,15 @@ final class VideoPane extends StackPane {
     private static final Duration NOTE_TIME = Duration.seconds(1.6);
     /** The seek bar never gets shorter than this; narrower than that, other controls make room. */
     private static final double MIN_SEEK_WIDTH = 60;
+    /** The seek preview card's frame: this much on the top and sides, and this tall at the bottom (the time). */
+    private static final double PREVIEW_PADDING = 6;
+    private static final double PREVIEW_BOTTOM = 26;
+    private static final double PREVIEW_RADIUS = 12;
+    private static final double PICTURE_RADIUS = 6;
+    /** The glass: blur radius, the extra snapshot around the card (so the blur has no dark edge), and the lens. */
+    private static final double GLASS_BLUR = 16;
+    private static final double GLASS_PAD = 20;
+    private static final double GLASS_LENS = 1.06;
     /**
      * The video area widths at which the bar still fits everything, then without the volume slider, without the
      * ±10 s buttons, without loop, without the speed button (see {@link #controlsLeftOut}). Measured in the app at
@@ -135,8 +147,22 @@ final class VideoPane extends StackPane {
     private final Label time = new Label(PlaybackTime.format(0, 0));
     /** The time label shows the time left instead of the time played (1.1.0). */
     private final BooleanProperty remainingShown = new SimpleBooleanProperty(false);
-    /** The time under the mouse on the seek bar (1.1.0). */
+    /**
+     * The preview over the seek bar (1.1.0 time only; 1.2.1 a Polaroid-like card): the picture at the time under the
+     * mouse ({@link SeekPreviews}) in a see-through frame, the time in its thicker bottom edge.
+     */
     private final Tooltip seekTip = new Tooltip();
+    private final ImageView previewPicture = new ImageView();
+    private final StackPane previewFrame = new StackPane(previewPicture);
+    private final Label previewTime = new Label();
+    /** The card's glass: a blurred snapshot of what is behind the card ({@link #paintGlass}). */
+    private final ImageView glass = new ImageView();
+    private final javafx.scene.layout.Region glassTint = new javafx.scene.layout.Region();
+    private final StackPane previewCard;
+    /** The open video's preview pictures (made in the background); none while no video is open. */
+    private SeekPreviews previews = SeekPreviews.none();
+    /** The preview picture area: {@link SeekPreviews#WIDTH} wide, this tall (from the video's shape). */
+    private double previewHeight = SeekPreviews.WIDTH * 9.0 / 16;
     private final MenuButton subtitlesButton = new MenuButton();
     private final MenuButton soundButton = new MenuButton();
     private final MenuButton speedButton = new MenuButton();
@@ -209,18 +235,63 @@ final class VideoPane extends StackPane {
 
         seek.getStyleClass().add("viewer-seek");
         HBox.setHgrow(seek, Priority.ALWAYS);
-        // Hovering the seek bar shows only the time under the mouse, just above the bar.
-        seek.addEventHandler(MouseEvent.MOUSE_MOVED, event -> {
-            double seconds = secondsAt(event.getX());
-            if (seconds < 0 || player == null) {
-                seekTip.hide();
-                return;
+        // Hovering the seek bar shows the picture and the time under the mouse, just above the bar (seek-preview).
+        previewPicture.setPreserveRatio(true);
+        previewPicture.setFitWidth(SeekPreviews.WIDTH);
+        previewFrame.getStyleClass().add("seek-preview-picture");
+        previewTime.getStyleClass().add("seek-preview-time");
+        previewTime.setMaxWidth(Double.MAX_VALUE);
+        previewTime.setAlignment(Pos.CENTER);
+        javafx.scene.layout.VBox polaroid = new javafx.scene.layout.VBox(previewFrame, previewTime);
+        polaroid.getStyleClass().add("seek-preview-content");
+        // Glass: the frame shows what is behind it, blurred, a little brighter and slightly magnified (a lens), so it
+        // reads as see-through. A popup can't blur the window under it, so the card paints a snapshot of that part.
+        ColorAdjust brighter = new ColorAdjust(0, -0.1, 0.08, 0);
+        GaussianBlur blur = new GaussianBlur(GLASS_BLUR);
+        blur.setInput(brighter);
+        glass.setEffect(blur);
+        glass.setManaged(false);
+        glass.setScaleX(GLASS_LENS);
+        glass.setScaleY(GLASS_LENS);
+        glassTint.getStyleClass().add("seek-preview-tint");
+        StackPane card = new StackPane(glass, glassTint, polaroid);
+        card.getStyleClass().add("seek-preview");
+        // Rounded corners by clipping: nothing square (window, snapshot, tint) can show at the corners.
+        javafx.scene.shape.Rectangle cardClip = new javafx.scene.shape.Rectangle();
+        cardClip.setArcWidth(2 * PREVIEW_RADIUS);
+        cardClip.setArcHeight(2 * PREVIEW_RADIUS);
+        cardClip.widthProperty().bind(card.widthProperty());
+        cardClip.heightProperty().bind(card.heightProperty());
+        card.setClip(cardClip);
+        javafx.scene.shape.Rectangle pictureClip = new javafx.scene.shape.Rectangle();
+        pictureClip.setArcWidth(2 * PICTURE_RADIUS);
+        pictureClip.setArcHeight(2 * PICTURE_RADIUS);
+        pictureClip.widthProperty().bind(previewFrame.widthProperty());
+        pictureClip.heightProperty().bind(previewFrame.heightProperty());
+        previewFrame.setClip(pictureClip);
+        previewCard = card;
+        seekTip.setGraphic(card);
+        // A popup's own base pane takes the theme's page colour (.root), which painted a square behind the round
+        // card: make this popup's base see-through.
+        seekTip.setOnShown(_ -> {
+            seekTip.getScene().setFill(javafx.scene.paint.Color.TRANSPARENT);
+            seekTip.getScene().getRoot().setStyle("-fx-background-color: transparent;");
+        });
+        seekTip.setContentDisplay(javafx.scene.control.ContentDisplay.GRAPHIC_ONLY);
+        seek.addEventHandler(MouseEvent.MOUSE_MOVED, event -> showPreview(event.getX(), event.getScreenX()));
+        seek.addEventHandler(MouseEvent.MOUSE_DRAGGED, event -> showPreview(event.getX(), event.getScreenX()));
+        // A click anywhere on the bar's area seeks, also just above or below the thin track (where the time shows).
+        seek.addEventFilter(MouseEvent.MOUSE_PRESSED, event -> {
+            boolean onThumb = event.getTarget() instanceof javafx.scene.Node node && node.getStyleClass().contains("thumb");
+            if (event.getButton() == MouseButton.PRIMARY && player != null && !onThumb) {
+                double seconds = secondsAt(event.getX());
+                if (seconds >= 0) {
+                    seek.setValue(seconds);
+                }
             }
-            seekTip.setText(PlaybackTime.clock(seconds));
-            seekTip.show(seek, event.getScreenX() - 18, seek.localToScreen(0, 0).getY() - 34);
         });
         seek.addEventHandler(MouseEvent.MOUSE_EXITED, _ -> seekTip.hide());
-        seek.addEventHandler(MouseEvent.MOUSE_PRESSED, _ -> seekTip.hide());
+        seek.addEventHandler(MouseEvent.MOUSE_RELEASED, _ -> seekTip.hide());
         seekTip.getStyleClass().add("seek-tip");
         // Clicking the time switches between time played and time left.
         time.getStyleClass().add("viewer-time-toggle");
@@ -436,6 +507,7 @@ final class VideoPane extends StackPane {
                     if (generation == mine) {
                         info = opened;
                         seek.setMax(Math.max(0.001, opened.durationMicros() / 1e6));
+                        startPreviews(video.ref().path(), opened);
                         rotation = opened.rotation();
                         picture.setRotate(rotation);
                         fitPicture();
@@ -516,6 +588,83 @@ final class VideoPane extends StackPane {
     /** True = the time label shows the time left ("-11:25 / 12:30"); clicking the label switches. Saved. */
     BooleanProperty remainingShownProperty() {
         return remainingShown;
+    }
+
+    /** Starts making the open video's preview pictures; the picture area takes the video's upright shape. */
+    private void startPreviews(Path file, VideoPlayer.Info opened) {
+        previews.cancel();
+        boolean sideways = opened.rotation() % 180 != 0;
+        double width = sideways ? opened.height() : opened.width();
+        double height = sideways ? opened.width() : opened.height();
+        previewHeight = width > 0 && height > 0
+                ? Math.clamp(SeekPreviews.WIDTH * height / width, 40, SeekPreviews.WIDTH * 1.8)
+                : SeekPreviews.WIDTH * 9.0 / 16;
+        previews = opened.hasPicture()
+                ? SeekPreviews.start(file, opened.durationMicros() / 1e6, VideoNatives::ffmpegExecutable)
+                : SeekPreviews.none();
+    }
+
+    /**
+     * The Polaroid over the seek bar at the mouse ({@code x} in the bar, {@code screenX} on screen): the nearest
+     * picture made so far (an empty frame until the first one is ready) and the time. It follows the mouse along the
+     * bar and stays inside the window's edges.
+     */
+    private void showPreview(double x, double screenX) {
+        double seconds = secondsAt(x);
+        if (seconds < 0 || player == null) {
+            seekTip.hide();
+            return;
+        }
+        javafx.scene.image.Image shot = previews.at(seconds);
+        previewPicture.setImage(shot);
+        previewPicture.setFitHeight(previewHeight);
+        previewFrame.setMinSize(SeekPreviews.WIDTH, previewHeight);
+        previewFrame.setPrefSize(SeekPreviews.WIDTH, previewHeight);
+        previewFrame.setMaxSize(SeekPreviews.WIDTH, previewHeight);
+        previewTime.setText(PlaybackTime.clock(seconds));
+        // The card's size: picture + its padding (see .seek-preview in prismo.css) + the time row.
+        double cardWidth = SeekPreviews.WIDTH + 2 * PREVIEW_PADDING;
+        double cardHeight = previewHeight + PREVIEW_PADDING + PREVIEW_BOTTOM;
+        double left = screenX - cardWidth / 2;
+        if (getScene() != null && getScene().getWindow() != null) {
+            javafx.stage.Window window = getScene().getWindow();
+            left = Math.clamp(left, window.getX() + 4, Math.max(window.getX() + 4,
+                    window.getX() + window.getWidth() - cardWidth - 4));
+        }
+        double top = seek.localToScreen(0, 0).getY() - cardHeight - 10;
+        if (seekTip.isShowing()) {
+            seekTip.setAnchorX(left);
+            seekTip.setAnchorY(top);
+        } else {
+            seekTip.show(seek, left, top);
+        }
+        javafx.geometry.Bounds at = previewCard.localToScreen(previewCard.getBoundsInLocal());
+        if (at != null && at.getWidth() > 0) {
+            paintGlass(at.getMinX(), at.getMinY(), at.getWidth(), at.getHeight());
+        } else {
+            paintGlass(left, top, cardWidth, cardHeight);
+        }
+    }
+
+    /**
+     * Paints the card's glass: a snapshot of this window where the card is ({@code screenX}, {@code screenY},
+     * {@code width} x {@code height} on screen), plus {@link #GLASS_PAD} around it; the blur and lens are set once.
+     */
+    private void paintGlass(double screenX, double screenY, double width, double height) {
+        Scene scene = getScene();
+        if (scene == null || scene.getWindow() == null) {
+            return;
+        }
+        javafx.stage.Window window = scene.getWindow();
+        double x = screenX - window.getX() - scene.getX() - GLASS_PAD;
+        double y = screenY - window.getY() - scene.getY() - GLASS_PAD;
+        javafx.scene.SnapshotParameters view = new javafx.scene.SnapshotParameters();
+        view.setViewport(new Rectangle2D(x, y, width + 2 * GLASS_PAD, height + 2 * GLASS_PAD));
+        javafx.scene.image.Image old = glass.getImage();
+        WritableImage reuse = old instanceof WritableImage w && w.getWidth() == Math.ceil(width + 2 * GLASS_PAD)
+                && w.getHeight() == Math.ceil(height + 2 * GLASS_PAD) ? w : null;
+        glass.setImage(scene.getRoot().snapshot(view, reuse));
+        glass.relocate(-GLASS_PAD, -GLASS_PAD);
     }
 
     /** The time at {@code x} (in the seek bar's own coordinates), for the hover tooltip; -1 off the track. */
@@ -1079,6 +1228,9 @@ final class VideoPane extends StackPane {
         saveProgress();
         generation++;
         pulse.stop();
+        previews.cancel();
+        previews = SeekPreviews.none();
+        seekTip.hide();
         if (player != null) {
             player.close();
             player = null;

@@ -18,6 +18,7 @@ import java.util.function.Function;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
@@ -28,6 +29,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Tooltip;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -194,7 +196,25 @@ public final class LibraryFoldersDialog {
         if (!row.root().enabled()) {
             node.getStyleClass().add("library-row-off"); // dimmed: not shown anywhere while off
         }
+        // 1.2.1: a click anywhere on the row turns the folder on or off, like its check box; only Remove… removes.
+        node.setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.PRIMARY && !enabled.isDisabled()
+                    && !inside(event.getTarget(), enabled) && !inside(event.getTarget(), remove)) {
+                enabled.fire();
+                event.consume();
+            }
+        });
         return node;
+    }
+
+    /** True if {@code target} is {@code node} or inside it (a click on the check box or a button handles itself). */
+    private static boolean inside(Object target, Node node) {
+        for (Node at = target instanceof Node n ? n : null; at != null; at = at.getParent()) {
+            if (at == node) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // --- Actions ---

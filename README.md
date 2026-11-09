@@ -64,9 +64,18 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.2.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 and 1.2.0 are described below). Windows first; the Linux package is an early preview.
+**Version 1.2.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0, 1.2.0 and 1.2.1 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.2.1:** hovering a video's seek bar shows a **preview picture** of that moment
+with its time, in a see-through glass card that follows the mouse (the pictures are made in the background when the
+video opens, spread over the whole video first, then filled in; until the first one is ready the card shows only the
+time). A click just above or below the thin seek bar now seeks too, and the bar gets thicker under the pointer. In a
+window the filmstrip always stays; it hides on its own only in full screen. A **slideshow** now shows only the photos:
+no bars, no filmstrip, and moving the mouse brings nothing back; any click or key press only stops it (it doesn't also
+open or step anything). Around a photo or video the viewer is pitch black in every theme. In Library folders a click
+anywhere on a folder's row turns it on or off (Remove… still only removes).
 
 **1.2.0:** **People tags**, all done by hand (Prismo never looks at the
 pictures, and nothing leaves your PC): right-click one item, a selection or a whole folder › People… and tick who is
@@ -266,7 +275,7 @@ prismo/
 │   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, date headers, video (subtitle background), performance, keyboard shortcuts, About
 │   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
 │   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, speed, sound and subtitle tracks, subtitles (.srt), which tracks a video starts with
-│   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, full screen, video controls, Info panel
+│   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, full screen, video controls, seek-bar previews, Info panel
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
 │   │       ├── app.properties      # Version (filled in by the build) and website, for Settings › About

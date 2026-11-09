@@ -41,7 +41,7 @@
     -prismo-tooltip-bg: #1f2433;
     -prismo-tooltip-text: #ffffff;
     -prismo-card: #ffffff;       /* rows and cards inside dialogs */
-    -prismo-viewer-bg: #0e0f13;  /* the viewer is dark in every theme, so photos stand out */
+    -prismo-viewer-bg: #000000;  /* 1.2.1: pitch black in every theme (immersive; no grey edges round a photo or video) */
 
     /* Modena's names, so standard controls (lists, menus, text fields, check boxes) use the same colours. */
     -fx-background: -prismo-bg;
@@ -681,9 +681,47 @@
 }
 
 /* 1.1.0: just the time under the mouse on the seek bar. */
-.seek-tip {
+/* 1.2.1: the seek preview is a Polaroid-like card: a see-through frame with rounded corners around the picture, the
+   time in its thicker bottom edge. The tooltip itself is only the carrier: no card of its own.
+   Sizes match PREVIEW_PADDING (6) and PREVIEW_BOTTOM (26) in VideoPane. */
+.tooltip.seek-tip {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0;
+    -fx-effect: null;
+}
+
+/* The card is glass: VideoPane paints a blurred, brightened, slightly magnified snapshot of what is behind it, and
+   clips the card and the picture to rounded shapes. No outline, no shadow. */
+.seek-preview {
+    -fx-background-color: transparent;
+}
+
+.seek-preview-tint {
+    -fx-background-color: rgba(255, 255, 255, 0.06);
+}
+
+.seek-preview-content {
+    -fx-padding: 6 6 0 6;
+}
+
+.seek-preview-picture {
+    -fx-background-color: rgba(0, 0, 0, 0.25);
+}
+
+.seek-preview-time {
+    -fx-min-height: 26;
+    -fx-pref-height: 26;
+    -fx-max-height: 26;
     -fx-font-size: 12px;
-    -fx-padding: 3 7 3 7;
+    -fx-font-weight: bold;
+    -fx-text-fill: #ffffff;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 4, 0, 0, 1); /* readable on bright glass */
+}
+
+/* The video's seek bar gets thicker while the pointer is on it. */
+.viewer .slider:hover > .track {
+    -fx-padding: 4;
 }
 
 /* 1.1.0: a slashed eye on files with File Explorer's Hidden mark (shown when Settings lets them out of Hidden). */
@@ -1194,6 +1232,7 @@
     -fx-background-insets: 0, 1;
     -fx-background-radius: 9, 8;
     -fx-padding: 10 12 10 12;
+    -fx-cursor: hand; /* 1.2.1: a click on the row turns the folder on or off */
 }
 
 .library-row-off .library-name,

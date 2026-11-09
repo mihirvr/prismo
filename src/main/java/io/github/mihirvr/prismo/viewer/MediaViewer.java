@@ -892,6 +892,10 @@ public final class MediaViewer extends StackPane {
     // --- Keys and the top bar ---
 
     private void onKey(KeyEvent event) {
+        interruptSlideshow(event); // any key only stops a running slideshow
+        if (event.isConsumed()) {
+            return;
+        }
         if (fileItems.handleKey(event, current())) {
             event.consume(); // Ctrl+C
             return;
@@ -1265,23 +1269,51 @@ public final class MediaViewer extends StackPane {
     private void setUpAutoHide() {
         idle.setOnFinished(_ -> hideChromeIfIdle());
         stripIdle.setOnFinished(_ -> hideStripIfIdle());
+        // While the slideshow runs the screen is clean: moving the mouse does nothing, and any click or key press
+        // only stops the slideshow (the press is eaten, like an interrupt; keys: see onKey) and brings the controls back.
+        addEventFilter(MouseEvent.MOUSE_PRESSED, event -> interruptSlideshow(event));
         addEventFilter(MouseEvent.MOUSE_MOVED, _ -> mouseActive());
         addEventFilter(MouseEvent.MOUSE_DRAGGED, _ -> mouseActive());
         addEventFilter(MouseEvent.MOUSE_PRESSED, _ -> mouseActive());
+        slideshow.runningProperty().subscribe(on -> {
+            if (on) {
+                hideChromeNow();
+                hideStripNow();
+            } else {
+                showChrome();
+                showStrip();
+                stripIdle.playFromStart();
+                restartIdle();
+            }
+        });
         sceneProperty().flatMap(Scene::windowProperty)
                 .flatMap(w -> w instanceof Stage s ? s.fullScreenProperty() : null).orElse(false)
                 .subscribe(full -> {
                     placeFilmstrip(full);
+                    if (slideshow.isRunning()) {
+                        return;
+                    }
                     if (full) {
                         idle.playFromStart();
                     } else {
                         idle.stop();
                         showChrome();
+                        showStrip(); // in a window the strip is always there
                     }
                 });
     }
 
+    private void interruptSlideshow(javafx.event.Event event) {
+        if (slideshow.isRunning()) {
+            slideshow.stop();
+            event.consume();
+        }
+    }
+
     private void mouseActive() {
+        if (slideshow.isRunning()) {
+            return;
+        }
         if (chromeHidden) {
             showChrome();
         }
@@ -1331,11 +1363,18 @@ public final class MediaViewer extends StackPane {
 
     /** The strip fades out once the mouse rests, unless the pointer is on it or a menu is open. */
     private void hideStripIfIdle() {
-        if (!isOpen() || stripHidden) {
-            return;
+        if (!isOpen() || stripHidden || !isFullScreen()) {
+            return; // in a window the strip stays
         }
         if (menuShowing() || filmstrip.isHover()) {
             stripIdle.playFromStart();
+            return;
+        }
+        hideStripNow();
+    }
+
+    private void hideStripNow() {
+        if (stripHidden) {
             return;
         }
         stripHidden = true;
@@ -1358,6 +1397,13 @@ public final class MediaViewer extends StackPane {
         }
         if (menuShowing() || pointerOnChrome()) {
             idle.playFromStart(); // look again later; never hide what is being used
+            return;
+        }
+        hideChromeNow();
+    }
+
+    private void hideChromeNow() {
+        if (chromeHidden) {
             return;
         }
         chromeHidden = true;
