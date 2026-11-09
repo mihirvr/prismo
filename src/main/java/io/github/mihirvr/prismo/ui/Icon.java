@@ -99,6 +99,10 @@ public enum Icon {
     /** 1.2.0: People (the Collections page, the menu entry): a person with a second one behind. */
     PEOPLE("M9 5.5A3 3 0 1 1 9 11.5A3 3 0 1 1 9 5.5ZM3.5 19.5A5.5 5.5 0 0 1 14.5 19.5M16 6.5A2.5 2.5 0 1 1 16 11.5"
             + "M17 14.3A4.8 4.8 0 0 1 20.5 19"),
+    /** 1.3.1: the sort direction in a narrow window: newest / largest / Z first. */
+    ARROW_DOWN("M12 5V19M6 13L12 19L18 13"),
+    /** 1.3.1: oldest / smallest / A first. */
+    ARROW_UP("M12 19V5M6 11L12 5L18 11"),
     /** 1.3.0: Categories (the Collections page, the menu entry): a label tag with its hole. */
     CATEGORY("M3.5 5.5A2 2 0 0 1 5.5 3.5H11.3L20.2 12.4A1.5 1.5 0 0 1 20.2 14.5L14.5 20.2A1.5 1.5 0 0 1 12.4 20.2"
             + "L3.5 11.3ZM8 8H8.01");

@@ -433,6 +433,11 @@
     -fx-min-width: 110;
 }
 
+/* 1.3.1: a half-screen window shows the direction as an arrow only. */
+.view-direction.compact {
+    -fx-min-width: 0;
+}
+
 /* Search: the box in the top bar, its result count, and the "no matches" text in an empty results grid. */
 .search-bar {
     -fx-spacing: 8;

@@ -64,9 +64,14 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.3.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.0 are described below). Windows first; the Linux package is an early preview.
+**Version 1.3.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.1 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.3.1:** the Filters bar fits a smaller window: the People and Categories buttons show their icon with a short
+text (All, a number, None; the tooltip says it in full), and when room runs out the word "Sort" steps aside first, then
+"Go to date" becomes its icon, then the thumbnail-size slider hides (Ctrl + mouse wheel still resizes), and in a
+half-screen window People, Categories and the sort direction show as icons. Nothing is cut off mid-word.
 
 **1.3.0:** **Categories** (Nature, Documents, Portraits, anything you like), made by hand
 exactly like People: right-click one item, a selection or a whole folder › Categories… and tick the categories; type a

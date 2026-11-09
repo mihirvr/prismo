@@ -686,6 +686,10 @@ public final class PrismoApp extends Application {
         goToDate.setMinWidth(Region.USE_PREF_SIZE);
         goToDate.setOnAction(_ -> DateJump.show(goToDate, currentGrid()));
         viewBar.getChildren().addAll(goToDate, viewSpacer, size);
+        // 1.3.1: in a small window "Go to date" becomes its icon, then the size slider steps aside (Ctrl + wheel
+        // still resizes), instead of every control being cut short.
+        viewBar.iconWhenNarrow(goToDate);
+        viewBar.hideWhenNarrow(size);
 
         // Shown while a library folder can't be reached: which one, and that nothing is lost.
         offlineBanner.getStyleClass().add("offline-banner");

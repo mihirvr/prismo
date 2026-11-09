@@ -16,8 +16,10 @@ import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.CheckMenuItem;
 import javafx.scene.control.ComboBox;
+import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.CustomMenuItem;
 import javafx.scene.control.Label;
+import javafx.scene.control.Labeled;
 import javafx.scene.control.Menu;
 import javafx.scene.control.MenuButton;
 import javafx.scene.control.MenuItem;
@@ -60,6 +62,14 @@ public final class ViewOptionsBar extends HBox {
     private final Map<TagKind, MenuButton> tagButtons = new EnumMap<>(TagKind.class);
     /** Every tag of each kind, id to name, A to Z; read each time its menu opens. */
     private final Map<TagKind, Supplier<Map<Long, String>>> tagNames = new EnumMap<>(TagKind.class);
+    /** The word "Sort" before the sort box; the first thing left out when the bar is short of room (1.3.1). */
+    private final Label sortLabel = new Label("Sort");
+    /** Shown as their icon only when the bar is short of room, after the "Sort" word ({@link #fit}). */
+    private final List<Labeled> iconWhenNarrow = new ArrayList<>();
+    /** Left out when the bar is still short of room after that. */
+    private final List<Node> hiddenWhenNarrow = new ArrayList<>();
+    /** True while {@link #fit} changes the bar, so the layout pass it causes doesn't start it again. */
+    private boolean fitting;
     private boolean sortLocked;
     /** True while the controls are set by code (locking), so their listeners don't change the choice. */
     private boolean quiet;
@@ -86,7 +96,7 @@ public final class ViewOptionsBar extends HBox {
         sort.getStyleClass().add("view-sort");
         direction.setTooltip(new Tooltip("Reverse the order"));
         direction.getStyleClass().add("view-direction");
-        direction.setText(start.sort().directionLabel(start.descending()));
+        showDirection(start.sort(), start.descending());
 
         filter.valueProperty().addListener((_, _, value) -> options.set(options.get().withFilter(value)));
         sort.valueProperty().addListener((_, _, value) -> {
@@ -97,7 +107,7 @@ public final class ViewOptionsBar extends HBox {
         direction.setOnAction(_ -> options.set(options.get().withDescending(!options.get().descending())));
         options.addListener((_, _, value) -> {
             if (!sortLocked) {
-                direction.setText(value.sort().directionLabel(value.descending()));
+                showDirection(value.sort(), value.descending());
             }
         });
 
@@ -118,6 +128,9 @@ public final class ViewOptionsBar extends HBox {
         for (TagKind kind : TagKind.values()) {
             MenuButton button = new MenuButton();
             button.getStyleClass().add(kind == TagKind.PEOPLE ? "view-people" : "view-categories");
+            // 1.3.1: the kind's icon and a short text ("All", "2", "None"), so the bar fits a smaller window; the
+            // full wording is in the tooltip.
+            button.setGraphic(Icon.of(kind).node(16));
             button.setTooltip(new Tooltip(kind.filterTip));
             button.setOnShowing(_ -> fillTagMenu(kind));
             tagButtons.put(kind, button);
@@ -133,7 +146,7 @@ public final class ViewOptionsBar extends HBox {
         });
 
         getChildren().setAll(view, arrangeButton, filter, typesButton, tagButtons.get(TagKind.PEOPLE),
-                tagButtons.get(TagKind.CATEGORIES), new Label("Sort"), sort, direction);
+                tagButtons.get(TagKind.CATEGORIES), sortLabel, sort, direction);
         updateArrangeShown();
     }
 
@@ -282,10 +295,108 @@ public final class ViewOptionsBar extends HBox {
         tagButtons.get(kind).getItems().setAll(items);
     }
 
-    /** The button's text: "Everyone", "People: 2", "No people"; "Every category", "Categories: 1", "No category". */
+    /**
+     * The button's text, short next to its icon (1.3.1): "All", the number ticked, or "None"; the tooltip says it in
+     * full: "Everyone", "People: 2", "No people"; "Every category", "Categories: 1", "No category".
+     */
     private void showChosenTags(TagKind kind) {
-        String label = options.get().tags(kind).label();
-        tagButtons.get(kind).setText(label == null ? kind.everything : label);
+        TagFilter chosen = options.get().tags(kind);
+        String label = chosen.label();
+        String full = label == null ? kind.everything : label;
+        MenuButton button = tagButtons.get(kind);
+        button.setText(shortTagText(chosen));
+        button.setAccessibleText(full);
+        button.getTooltip().setText(full + "\n" + kind.filterTip);
+    }
+
+    /** "All" (nothing filtered), the number of tags ticked, or "None" (only untagged items). */
+    static String shortTagText(TagFilter chosen) {
+        if (chosen.untagged()) {
+            return "None";
+        }
+        return chosen.ids().isEmpty() ? "All" : String.valueOf(chosen.ids().size());
+    }
+
+    /** Shown as its icon only when the bar is short of room (the main window's "Go to date"). */
+    public void iconWhenNarrow(Labeled control) {
+        iconWhenNarrow.add(control);
+        requestLayout();
+    }
+
+    /** Left out when the bar is short of room even then (the main window's thumbnail size slider). */
+    public void hideWhenNarrow(Node node) {
+        hiddenWhenNarrow.add(node);
+        requestLayout();
+    }
+
+    @Override
+    protected void layoutChildren() {
+        fit();
+        super.layoutChildren();
+    }
+
+    /**
+     * Makes the bar fit its width (1.3.1) in steps, stopping at the first that fits: everything; without the word
+     * "Sort"; then the {@link #iconWhenNarrow} controls as icons; then without the {@link #hiddenWhenNarrow} ones; then
+     * (a half-screen window) the People and Categories buttons as icons and the direction as an arrow.
+     * Only if even that is too wide do the controls shrink. Run before each layout, so it follows the window's size
+     * and the buttons' changing texts, and everything comes back when there is room again.
+     */
+    private void fit() {
+        if (fitting || getWidth() <= 0) {
+            return;
+        }
+        fitting = true;
+        try {
+            for (int level = 0; level <= 4; level++) {
+                narrow(level);
+                if (level == 4 || prefWidth(-1) <= getWidth()) {
+                    return;
+                }
+            }
+        } finally {
+            fitting = false;
+        }
+    }
+
+    private void narrow(int level) {
+        boolean sortWord = level < 1;
+        sortLabel.setVisible(sortWord);
+        sortLabel.setManaged(sortWord);
+        for (Labeled control : iconWhenNarrow) {
+            control.setContentDisplay(level >= 2 ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT);
+        }
+        for (Node node : hiddenWhenNarrow) {
+            node.setVisible(level < 3);
+            node.setManaged(level < 3);
+        }
+        ContentDisplay tags = level >= 4 ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.LEFT;
+        tagButtons.values().forEach(button -> button.setContentDisplay(tags));
+        direction.setContentDisplay(level >= 4 ? ContentDisplay.GRAPHIC_ONLY : ContentDisplay.TEXT_ONLY);
+        if (level >= 4) {
+            if (!direction.getStyleClass().contains("compact")) {
+                direction.getStyleClass().add("compact"); // no minimum width (prismo.css)
+            }
+        } else {
+            direction.getStyleClass().remove("compact");
+        }
+    }
+
+    /** The direction button: its text, an arrow for the icon-only form, and the tooltip saying which (1.3.1). */
+    private void showDirection(MediaSort shownSort, boolean descending) {
+        String label = shownSort.directionLabel(descending);
+        direction.setText(label);
+        direction.setGraphic((descending ? Icon.ARROW_DOWN : Icon.ARROW_UP).node(16));
+        direction.getTooltip().setText(label + "\nReverse the order");
+    }
+
+    /** Which steps {@link #fit} took, for tests: the word "Sort" shown, icons only, the others hidden. */
+    String narrowState() {
+        boolean icons = !iconWhenNarrow.isEmpty()
+                && iconWhenNarrow.getFirst().getContentDisplay() == ContentDisplay.GRAPHIC_ONLY;
+        boolean hidden = !hiddenWhenNarrow.isEmpty() && !hiddenWhenNarrow.getFirst().isManaged();
+        return "sort=" + sortLabel.isManaged() + " icons=" + icons + " hidden=" + hidden + " compact="
+                + direction.getStyleClass().contains("compact");
     }
 
     /** Shows the View menu (the Grid, Collections › Folders) or hides it and its space (elsewhere). */
@@ -355,7 +466,7 @@ public final class ViewOptionsBar extends HBox {
         } finally {
             quiet = false;
         }
-        direction.setText(shown.sort().directionLabel(shown.descending()));
+        showDirection(shown.sort(), shown.descending());
         sort.setDisable(sortLocked);
         direction.setDisable(sortLocked);
     }

@@ -110,4 +110,11 @@ class TagFilterTest {
         assertEquals(TagFilter.NO_CATEGORIES.withTag(2, true),
                 ViewOptions.DEFAULT.withTags(TagFilter.NO_CATEGORIES.withTag(2, true)).tags(TagKind.CATEGORIES));
     }
+
+    @Test
+    void theFilterButtonsShortTextFitsNextToItsIcon() {
+        assertEquals("All", ViewOptionsBar.shortTagText(TagFilter.NO_PEOPLE));
+        assertEquals("2", ViewOptionsBar.shortTagText(TagFilter.NO_CATEGORIES.withTag(1, true).withTag(4, true)));
+        assertEquals("None", ViewOptionsBar.shortTagText(TagFilter.NO_PEOPLE.withUntagged(true)));
+    }
 }
