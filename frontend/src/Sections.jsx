@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ITEMS } from './library.js'
-import { Down, Folder, GitHub, Left, LinuxMark, Plus, Right, WindowsMark } from './icons.jsx'
+import { Check, Copy, Down, Folder, GitHub, Left, LinuxMark, Plus, Right, WindowsMark } from './icons.jsx'
 
 const REPO = 'https://github.com/mihirvr/prismo'
 
@@ -20,13 +20,101 @@ function Head({ title, intro, center, id }) {
   )
 }
 
+/* ---------- the two windows beside the story play on their own while on screen ---------- */
+
+// True while the element is at least partly on screen, and never when the visitor asked for less motion.
+function useLive(ref) {
+  const [live, setLive] = useState(false)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const io = new IntersectionObserver(([e]) => setLive(e.isIntersecting), { threshold: 0.3 })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [ref])
+  return live
+}
+
+const ROOT = [['DCIM', '412 items'], ['Camera', '96 items'], ['WhatsApp Images', '1,208 items'], ['Screenshots', '57 items'], ['Edited', '23 items']]
+const INSIDE = {
+  DCIM: [['100ANDRO', '38 items'], ['Camera', '214 items'], ['.thumbnails', '160 items']],
+  Camera: [['2024', '51 items'], ['2025', '45 items']],
+  'WhatsApp Images': [['Sent', '903 items'], ['Private', '305 items']],
+}
+// Today: point at a folder, open it, find only more folders, go back, try the next one, and so on.
+const EXPLORER_STEPS = [0, 1, 2].flatMap((i) => [{ hi: i }, { hi: i }, { open: i }, { open: i }])
+
+function LiveExplorer() {
+  const ref = useRef(null)
+  const live = useLive(ref)
+  const [t, setT] = useState(0)
+  useEffect(() => {
+    if (!live) return
+    const id = setInterval(() => setT((n) => n + 1), 1100)
+    return () => clearInterval(id)
+  }, [live])
+  // still (off screen, or less motion): the folder list with one row picked
+  const f = live ? EXPLORER_STEPS[t % EXPLORER_STEPS.length] : { hi: 2 }
+  const name = f.open != null ? ROOT[f.open][0] : null
+  const rows = name ? INSIDE[name] : ROOT
+  return (
+    <div className="mini" data-ui aria-hidden="true" ref={ref}>
+      <div className="path">This PC › D: › Photos › 2024 › Goa trip{name && ` › ${name}`}</div>
+      <div className="rows" key={name || 'root'}>
+        {rows.map(([n, c], i) => (
+          <div key={n} className={!name && f.hi === i ? 'hi' : undefined}><Folder />{n}<small>{c}</small></div>
+        ))}
+      </div>
+      <div className="mfoot">{name ? `${rows.length} more folders inside. Back, then the next one.` : '5 folders. The photos are somewhere inside.'}</div>
+    </div>
+  )
+}
+
+// With Prismo: one timeline that just scrolls, with the day staying on top.
+const TIMELINE = [['Saturday, 3 May', [0, 1, 2, 3, 4, 5, 6, 7]], ['Sunday, 27 April', [8, 9, 10]], ['Friday, 11 April', [3, 6, 9, 1]], ['Saturday, 29 March', [2, 5, 8, 0, 7]], ['Sunday, 16 March', [10, 4, 1]]]
+
+function LiveTimeline() {
+  const ref = useRef(null)
+  const box = useRef(null)
+  const live = useLive(ref)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    if (!live) { el.scrollTop = 0; return }
+    const id = setInterval(() => {
+      const row = (el.querySelector('img')?.offsetHeight || 57) + 3
+      const end = el.scrollHeight - el.clientHeight
+      el.scrollTo({ top: el.scrollTop >= end - 2 ? 0 : Math.min(end, el.scrollTop + row), behavior: 'smooth' })
+    }, 1600)
+    return () => clearInterval(id)
+  }, [live])
+  return (
+    <div className="mini" data-ui aria-hidden="true" ref={ref}>
+      <div className="path">Grid › Timeline</div>
+      <div className="tl" ref={box}>
+        {TIMELINE.map(([day, ids]) => (
+          <section key={day}>
+            <div className="day">{day}</div>
+            <div className="tiles">{ids.map((k, j) => <img key={j} src={ITEMS[k].src} alt="" loading="lazy" />)}</div>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /* ---------- why Prismo: the Picasa gap ---------- */
 
 function Story() {
   return (
     <section className="section container" id="why" aria-labelledby="why-h">
+      {/* three columns: the old way on the left, the story in the middle, the Prismo way on the right */}
       <div className="story">
-        <div>
+        <figure className="story-fig rise" style={{ '--i': 1 }}>
+          <figcaption>Today: folder by folder<span>Open, look, go back, repeat.</span></figcaption>
+          <LiveExplorer />
+        </figure>
+        <div className="story-text">
           <Head id="why-h" title="Picasa did this. Then it was gone." />
           <div className="body">
             <p className="rise">Years ago, Google Picasa gave Windows a gallery that felt like a phone: every photo on your PC, by date, one scroll away. Google retired it in 2016.</p>
@@ -34,30 +122,10 @@ function Story() {
             <p className="rise" style={{ '--i': 2 }}><strong>Prismo sets out to fill that gap:</strong> a phone-style gallery for your PC that is open source, offline and fast.</p>
           </div>
         </div>
-        <div className="compare">
-          <figure className="rise" style={{ '--i': 1 }}>
-            <figcaption>Today: folder by folder<span>Open, look, go back, repeat.</span></figcaption>
-            <div className="mini" data-ui aria-hidden="true">
-              <div className="path">This PC › D: › Photos › 2024 › Goa trip</div>
-              <div className="rows">
-                {[['DCIM', '412 items'], ['Camera', '96 items'], ['WhatsApp Images', '1,208 items'], ['Screenshots', '57 items'], ['Edited', '23 items']].map(([n, c]) => (
-                  <div key={n}><Folder />{n}<small>{c}</small></div>
-                ))}
-              </div>
-              <div className="mfoot">5 folders. The photos are somewhere inside.</div>
-            </div>
-          </figure>
-          <figure className="rise" style={{ '--i': 2 }}>
-            <figcaption>With Prismo: one timeline<span>Every folder and drive, by date.</span></figcaption>
-            <div className="mini" data-ui aria-hidden="true">
-              <div className="path">Grid › Timeline · 11 photos and videos</div>
-              <div className="day">Saturday, 3 May</div>
-              <div className="tiles">{ITEMS.slice(0, 8).map((it) => <img key={it.id} src={it.src} alt="" loading="lazy" />)}</div>
-              <div className="day">Sunday, 27 April</div>
-              <div className="tiles">{ITEMS.slice(8, 11).map((it) => <img key={it.id} src={it.src} alt="" loading="lazy" />)}</div>
-            </div>
-          </figure>
-        </div>
+        <figure className="story-fig rise" style={{ '--i': 2 }}>
+          <figcaption>With Prismo: one timeline<span>Every folder and drive, by date.</span></figcaption>
+          <LiveTimeline />
+        </figure>
       </div>
     </section>
   )
@@ -67,122 +135,121 @@ function Story() {
 
 const CARDS = [
   {
+    head: 'Grid',
+    name: 'Every photo by date, or by folder',
+    text: 'One timeline by day, month or year, your real folders, or every file in one list.',
+    body: (
+      <>
+        <div className="row2"><b>View</b><span>Timeline · Folders · All files</span></div>
+        {[['Saturday, 3 May', '8'], ['Sunday, 27 April', '3'], ['March 2025', '41']].map(([n, c]) => (
+          <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
+        ))}
+        <p style={{ color: 'var(--muted)' }}>Date headers: smart, day, week, month or year</p>
+      </>
+    ),
+  },
+  {
     head: 'Search',
-    name: 'Search that reads the whole library',
-    text: 'Type a name, a folder, a camera, a date or a size. Results come from a local index, so they appear as you type.',
+    name: 'Search and filters',
+    text: 'Find files by name, folder, camera or date, then narrow to photos, videos, screenshots or a file type.',
     body: (
       <>
         <div className="row2"><b>“x-t5 coast”</b><span>3 results</span></div>
         {[['IMG_2413.JPG', 'Holidays'], ['IMG_2426.JPG', 'Holidays'], ['IMG_2439.MP4', 'Camera']].map(([n, f]) => (
           <div className="row2" key={n}><span>{n}</span><span>{f}</span></div>
         ))}
-        <p style={{ color: 'var(--muted)' }}>Filters: Photos, Videos, Portrait, Screenshots… and file types: JPG, HEIC, PNG…</p>
+        <p style={{ color: 'var(--muted)' }}>Photos · Videos · Portrait · Screenshots · JPG · HEIC</p>
       </>
     ),
   },
   {
-    head: 'People… and Categories…',
-    name: 'Tag who is in them, and what they are, by hand',
-    text: 'Right-click a photo, a selection or a whole folder, People…, and tick who is in them; Categories… works the same for Nature, Documents, Portraits or anything you like, and a photo can have both. Type a new name to add one on the spot. Prismo never looks at faces; the tags stay on your PC.',
+    head: 'Viewer',
+    name: 'A viewer made for browsing',
+    text: 'Zoom, rotate, full screen, a filmstrip through the folder, and a slideshow.',
     body: (
       <>
-        <div className="row2"><b>Who is in “Goa trip”?</b><span>12 items</span></div>
-        {[['✓ Asha', 'all 12'], ['– Ravi', 'in 2 of 12'], ['+ Add “Meera”', 'new person']].map(([n, c]) => (
-          <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
-        ))}
-        <p style={{ color: 'var(--muted)' }}>People and Categories filters: all of them together, any of them, or nothing tagged yet</p>
-      </>
-    ),
-  },
-  {
-    head: 'Grid › Folders',
-    name: 'By date, or by folder',
-    text: 'Switch the grid between Timeline, Folders and All files. Arrange sets which comes first and how folders sort, and names count like people do: 1, 2, 10.',
-    body: (
-      <>
-        <div className="row2"><b>View</b><span>Timeline · Folders · All files</span></div>
-        {[['Trip 1', '24'], ['Trip 2', '31'], ['Trip 10', '18']].map(([n, c]) => (
-          <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
-        ))}
-        <p style={{ color: 'var(--muted)' }}>Arrange: folders first, A to Z</p>
-      </>
-    ),
-  },
-  {
-    head: 'Info',
-    name: 'Details for every file',
-    text: 'Camera settings and GPS position for a photo; formats and tracks for a video. Press I in the viewer.',
-    body: (
-      <>
-        <div className="row2"><span>Camera</span><span>X-T5</span></div>
-        <div className="row2"><span>Lens</span><span>23 mm f/2</span></div>
-        <div className="row2"><span>Exposure</span><span>1/500 s, f/5.6, ISO 160</span></div>
-        <div className="row2"><span>Size</span><span>7728 × 5152</span></div>
-        <div className="row2"><span>Position</span><span>sample coordinates</span></div>
+        <div className="row2"><span>Zoom in · out · fit</span><span>+ · − · 0</span></div>
+        <div className="row2"><span>Rotate</span><span>R</span></div>
+        <div className="row2"><span>Full screen</span><span>F</span></div>
+        <div className="row2"><span>Slideshow</span><span>Space</span></div>
+        <div className="row2"><span>Filmstrip</span><span>12 of 42</span></div>
       </>
     ),
   },
   {
     head: 'Video',
-    name: 'Videos remember where you stopped',
-    text: 'MP4, MOV, MKV, WebM and AVI play inside the app, with speed, sound tracks and .srt subtitles. A thin bar on the thumbnail shows how far you watched.',
+    name: 'Videos play right inside',
+    text: 'MP4, MOV, MKV, WebM and AVI, with subtitles, sound tracks, a preview on the seek bar, and resume.',
     body: (
       <>
         <div className="meter"><i /></div>
         <div className="row2"><span>0:14 / 0:38</span><span>Speed 1×</span></div>
         <div className="row2"><span>Sound</span><span>English (2 tracks)</span></div>
-        <div className="row2"><span>Subtitles</span><span>clip.srt, delay +0.0 s</span></div>
+        <div className="row2"><span>Subtitles</span><span>clip.srt</span></div>
       </>
     ),
   },
   {
-    head: 'Open with › Prismo',
-    name: 'Open a photo straight from File Explorer',
-    text: 'Right-click a photo, Open with, Prismo: it shows at once, and the filmstrip steps through that folder. Keys work like YouTube’s.',
+    head: 'People and Categories',
+    name: 'Tag people and categories',
+    text: 'Right-click photos or a whole folder and tick who is in them or what they show. No face scanning.',
+    body: (
+      <>
+        <div className="row2"><b>Who is in “Goa trip”?</b><span>12 items</span></div>
+        {[['✓ Asha', 'all 12'], ['– Ravi', 'in 2 of 12'], ['✓ Beach', 'category']].map(([n, c]) => (
+          <div className="row2" key={n}><span>{n}</span><span>{c}</span></div>
+        ))}
+        <p style={{ color: 'var(--muted)' }}>Filter: all of them, any of them, or untagged</p>
+      </>
+    ),
+  },
+  {
+    head: 'Collections',
+    name: 'Favorites, Hidden and Trash',
+    text: 'Favorite or hide anything with one shortcut. Deleted files wait in Trash until you remove them for good.',
+    body: (
+      <>
+        <div className="row2"><span>Favorites</span><span>Ctrl+D</span></div>
+        <div className="row2"><span>Hidden</span><span>Ctrl+H</span></div>
+        <div className="row2"><span>Trash</span><span>Delete</span></div>
+        <div className="row2"><span>Recently added</span><span>newest first</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'Rename and Move',
+    name: 'Rename and move files',
+    text: 'Rename with F2, or move files to another folder. Prismo follows the file, favorite and all.',
+    body: (
+      <>
+        <div className="row2"><span>Rename</span><span>F2</span></div>
+        <div className="row2"><span>Move to folder…</span><span>one or a selection</span></div>
+        <div className="row2"><span>Name already taken</span><span>keep both · skip</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'HEIC and RAW',
+    name: 'iPhone and camera RAW photos',
+    text: 'HEIC and RAW files (CR2, NEF, ARW, DNG…) get thumbnails and open in the viewer. Nothing extra to install.',
+    body: (
+      <>
+        <div className="row2"><span>IMG_0412.HEIC</span><span>iPhone</span></div>
+        <div className="row2"><span>DSC_2210.NEF</span><span>Nikon</span></div>
+        <div className="row2"><span>_MG_8841.CR2</span><span>Canon</span></div>
+        <div className="row2"><span>DSC01957.ARW</span><span>Sony</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'Open with',
+    name: 'Your default photo viewer',
+    text: 'Open a photo or video from File Explorer and it shows at once, with its folder on the filmstrip.',
     body: (
       <>
         <div className="row2"><span>Opened from</span><span>File Explorer</span></div>
         <div className="row2"><span>Filmstrip</span><span>this folder, 1 of 42</span></div>
-        <div className="row2"><span>Play · back · on</span><span>K · J · L</span></div>
-        <div className="row2"><span>Full screen</span><span>F</span></div>
-      </>
-    ),
-  },
-  {
-    head: 'Drag out',
-    name: 'Drag photos into other apps',
-    text: 'Drag a photo, or a whole selection, into WhatsApp Web, an email or a folder, just like from File Explorer. Dropping on a folder makes a copy.',
-    body: (
-      <>
-        <div className="row2"><b>3 selected</b><span>dragging…</span></div>
-        <div className="row2"><span>WhatsApp Web</span><span>3 attached</span></div>
-        <div className="row2"><span>A folder</span><span>copied, originals stay</span></div>
-      </>
-    ),
-  },
-  {
-    head: 'Library folders',
-    name: 'A drive goes away, nothing is lost',
-    text: 'An unplugged drive or a network share that is off shows as offline. Its tiles go grey, and everything comes back with the drive.',
-    body: (
-      <>
-        <div className="row2"><span>Camera</span><span>ready</span></div>
-        <div className="row2"><span>Holidays</span><span>ready</span></div>
-        <div className="row2"><span>NAS · Family</span><span>can’t be reached</span></div>
-        <p className="warnbox">Its files stay in your library and come back when it does.</p>
-      </>
-    ),
-  },
-  {
-    head: 'Settings › Look',
-    name: 'Light, Dark, AMOLED black, or follow Windows',
-    text: 'The look can change with Windows, title bar included. Every setting is kept after a restart.',
-    body: (
-      <>
-        <div className="sw"><i style={{ background: '#ffffff' }} /><i style={{ background: '#14172a' }} /><i style={{ background: '#000' }} /></div>
-        <div className="row2"><span>Light</span><span>Dark · AMOLED</span></div>
-        <div className="row2"><span>Follow system</span><span>on</span></div>
-        <div className="row2"><span>Thumbnail cache</span><span>Clear thumbnails</span></div>
+        <div className="row2"><span>Waits for the library</span><span>no</span></div>
       </>
     ),
   },
@@ -211,7 +278,7 @@ function Showcase() {
   return (
     <section className="section container" id="features" aria-labelledby="feat-h">
       <div className="show snap-block">
-        <Head id="feat-h" title="Everything a gallery should do." intro="Search, people, folders, details, videos, Open with, drag and drop, offline drives and looks. Use the arrows, swipe, or click the card behind." center />
+        <Head id="feat-h" title="Everything a gallery should do." intro="What Prismo does, one card each. Use the arrows, swipe, or click the card behind." center />
         <div className="stack rise" style={{ '--i': 2 }} tabIndex={0} onKeyDown={onKey} onPointerDown={down} onPointerUp={up} onPointerCancel={() => (x0.current = null)} aria-roledescription="carousel" aria-label="App features">
           {CARDS.map((c, i) => {
             const k = i - at
@@ -231,8 +298,12 @@ function Showcase() {
           })}
         </div>
         <div className="cap" aria-live="polite">
-          <h3 key={at}>{CARDS[at].name}</h3>
-          <p>{CARDS[at].text}</p>
+          {CARDS.map((c, i) => (
+            <div className="capi" data-on={i === at} aria-hidden={i !== at} key={c.head}>
+              <h3>{c.name}</h3>
+              <p>{c.text}</p>
+            </div>
+          ))}
         </div>
         <div className="dots">
           {CARDS.map((c, i) => (
@@ -284,15 +355,16 @@ function Principles() {
 /* ---------- how it works: the window holds still while the steps sharpen past it ---------- */
 
 const STEPS = [
-  { h: 'Point it at a folder.', p: 'A folder, a USB drive or a network share. Nothing is imported or copied; your files stay put.' },
-  { h: 'It reads and remembers.', p: 'Dates and camera data are read once, in the background, and thumbnails are cached. You can browse while it works.' },
-  { h: 'Then browse like a phone.', p: 'A timeline by day, or your folders, with search, filters, people, favorites, hidden and trash. New files appear by themselves within a second or two.' },
+  { h: 'Point it at your folders.', p: 'A folder, a USB drive or a network share. Nothing is imported or copied.' },
+  { h: 'It reads them once.', p: 'Dates and camera details are read in the background, and thumbnails are kept. Browse while it works.' },
+  { h: 'Browse by date.', p: 'Every photo and video on one timeline, the way your phone shows them.' },
+  { h: 'It keeps up by itself.', p: 'Files you add, rename or delete show up on their own. An unplugged drive goes grey and comes back with it.' },
 ]
 
 function PinWindow({ on }) {
   return (
     <div className="window" data-ui>
-      <div className="titlebar"><img src="/brand/prismo-mark.png" alt="" /><b>{['Library folders', 'Indexing', 'Grid'][on]}</b></div>
+      <div className="titlebar"><img src="/brand/prismo-mark.png" alt="" /><b>{['Library folders', 'Indexing', 'Grid', 'Grid'][on]}</b></div>
       <div className="fill" key={on}>
         {on === 0 && (
           <div className="prog">
@@ -313,10 +385,22 @@ function PinWindow({ on }) {
           </div>
         )}
         {on === 2 && (
-          <div className="grid" style={{ padding: 12, width: '100%', alignSelf: 'start', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))' }}>
-            {ITEMS.slice(0, 11).map((it) => (
-              <div className="tile" key={it.id}><img src={it.src} alt="" loading="lazy" /></div>
+          <div className="tlwin">
+            {[['Saturday, 3 May', [0, 1, 2, 3, 4, 5, 6, 7]], ['Sunday, 27 April', [8, 9, 10]]].map(([day, ids]) => (
+              <div key={day}>
+                <b>{day}</b>
+                <div className="grid">{ids.map((k) => <div className="tile" key={k}><img src={ITEMS[k].src} alt="" loading="lazy" /></div>)}</div>
+              </div>
             ))}
+          </div>
+        )}
+        {on === 3 && (
+          <div className="prog">
+            {[['IMG_2450.JPG', 'added · just now'], ['Trip 2 → Goa 2025', 'renamed'], ['IMG_2391.JPG', 'deleted'], ['NAS · Family', 'offline']].map(([f, st], i) => (
+              <div className="line" key={f} style={{ opacity: i === 3 ? 0.6 : 1 }}><span>{f}</span><span>{st}</span></div>
+            ))}
+            <div className="thumbs">{ITEMS.slice(0, 6).map((it, k) => <img key={it.id} src={it.src} alt="" style={{ '--k': k }} className={k > 3 ? 'off' : undefined} />)}</div>
+            <p className="note">The greyed tiles are on the drive that is off. They come back with it.</p>
           </div>
         )}
       </div>
@@ -409,14 +493,60 @@ function Built() {
 
 /* ---------- questions ---------- */
 
+// Each answer is a list of short parts: a plain sentence, or [label, sentence], or { cmd } for a command line.
+const LINUX_FILE = DOWNLOADS.linux.split('/').pop()
 const FAQ = [
-  ['Does it recognise faces?', 'No, on purpose. You tag people yourself: right-click a photo, a selection or a folder, People…, and tick who is in them. Prismo never looks at the pictures, and the tags stay in Prismo on your PC; your files are not changed.'],
-  ['Windows says “Windows protected your PC”. Is it safe?', 'The installer isn’t code-signed yet, so Windows warns about it as it does for any new download from an unknown publisher. Click More info, then Run anyway. It needs no admin rights. The code is public, and every release on GitHub lists the files’ SHA-256 checksums so you can check your download.'],
-  ['Will it cope with a big library?', 'Yes. The first time, it reads every file once and makes thumbnails in the background, which can take a while for a big library on a slow disk; you can browse meanwhile. After that the thumbnails are kept and only what is on screen is loaded, so it opens and scrolls quickly.'],
-  ['How do I update or uninstall it?', 'Update: run the newer installer over the old one; your library, people, favorites and settings stay. Uninstall: Settings › Apps › Installed apps › Prismo. Your library data stays in %LOCALAPPDATA%\\Prismo until you delete that folder; your photos and videos are never touched.'],
-  ['Which files does it open?', 'JPEG, PNG, WebP, GIF, HEIC, and RAW files (CR2, CR3, NEF, ARW, DNG and more) through the preview inside them. Videos: MP4, MOV, MKV, WebM and AVI.'],
-  ['Does it run on Linux or Mac?', 'Linux: yes, as an early preview, so expect some rough edges. It comes as a .deb package for Ubuntu, Debian and their relatives; install it with sudo apt install ./prismo_1.3.1_amd64.deb so the libraries it needs come along. Mac: not yet.'],
+  ['Does it recognise faces?', [
+    'No, on purpose.',
+    ['You tag people yourself:', 'right-click a photo, a selection or a folder, choose People…, and tick who is in them.'],
+    'Prismo never looks at the pictures. The tags stay in Prismo on your PC, and your files are not changed.',
+  ]],
+  ['Windows says “Windows protected your PC”. Is it safe?', [
+    'The installer isn’t code-signed yet, so Windows warns about it, as it does for any new download from an unknown publisher.',
+    ['To install:', 'click More info, then Run anyway. It needs no admin rights.'],
+    ['To check it:', 'the code is public, and every release on GitHub lists the SHA-256 checksums of its files.'],
+  ]],
+  ['Will it cope with a big library?', [
+    'Yes.',
+    ['The first time:', 'it reads every file once and makes thumbnails in the background. On a big library or a slow disk this takes a while, but you can browse meanwhile.'],
+    ['After that:', 'thumbnails are kept and only what is on screen is loaded, so it opens and scrolls quickly.'],
+  ]],
+  ['How do I update or uninstall it?', [
+    ['Update:', 'run the newer installer over the old one. Your library, people, favorites and settings stay.'],
+    ['Uninstall:', 'Settings › Apps › Installed apps › Prismo.'],
+    ['Your data:', 'the library data stays in %LOCALAPPDATA%\\Prismo until you delete that folder. Your photos and videos are never touched.'],
+  ]],
+  ['Which files does it open?', [
+    ['Photos:', 'JPEG, PNG, WebP, GIF and HEIC.'],
+    ['RAW:', 'CR2, CR3, NEF, ARW, DNG and more, through the preview stored inside them.'],
+    ['Videos:', 'MP4, MOV, MKV, WebM and AVI.'],
+  ]],
+  ['Does it run on Linux or Mac?', [
+    ['Linux:', 'yes, as an early preview, so expect some rough edges. It comes as a .deb package for Ubuntu, Debian and their relatives.'],
+    'Install it with this command, so the libraries it needs come along:',
+    { cmd: `sudo apt install ./${LINUX_FILE}` },
+    ['Mac:', 'not yet.'],
+  ]],
 ]
+
+// A command in a box with a one-click Copy button.
+function CopyCmd({ cmd }) {
+  const [done, setDone] = useState(false)
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(cmd) } catch {
+      // older browsers or no clipboard permission: copy the selected text instead
+      const t = document.createElement('textarea'); t.value = cmd; document.body.appendChild(t); t.select()
+      document.execCommand('copy'); t.remove()
+    }
+    setDone(true); setTimeout(() => setDone(false), 1600)
+  }
+  return (
+    <div className="cmd">
+      <code>{cmd}</code>
+      <button type="button" onClick={copy} aria-label={done ? 'Copied' : 'Copy the command'}>{done ? <Check /> : <Copy />}<span>{done ? 'Copied' : 'Copy'}</span></button>
+    </div>
+  )
+}
 
 function Faq() {
   const [sel, setSel] = useState(0)
@@ -437,7 +567,15 @@ function Faq() {
                 <button className="q" aria-expanded={sel === i} aria-controls={`faq-${i}`} onClick={() => setSel(sel === i ? -1 : i)}>
                   {q}<Plus />
                 </button>
-                <div className="a" id={`faq-${i}`} role="region"><div><p>{a}</p></div></div>
+                <div className="a" id={`faq-${i}`} role="region">
+                  <div>
+                    {a.map((part, j) =>
+                      part.cmd ? <CopyCmd cmd={part.cmd} key={j} />
+                        : Array.isArray(part) ? <p key={j}><b>{part[0]}</b> {part[1]}</p>
+                          : <p key={j}>{part}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
           </div>

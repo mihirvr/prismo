@@ -135,6 +135,7 @@ export default function App() {
       <header className={`nav${barHidden ? ' up' : ''}`}>
         <div className="container">
           <span className="logo-space" />
+          <a className="wordmark" href="#top" onClick={toTop} tabIndex={-1} aria-hidden="true"><img className="word word-light" src="/brand/prismo-word-light.png" alt="" /><img className="word word-dark" src="/brand/prismo-word-dark.png" alt="" /></a>
           <a className="link hide-sm" href="#why">Why Prismo</a>
           <a className="link hide-sm" href="#features">Features</a>
           <a className="link hide-sm" href="#how">How it works</a>

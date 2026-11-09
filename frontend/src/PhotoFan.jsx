@@ -10,8 +10,8 @@ const CARDS = [
   { i: 5, x: 0, y: 56, w: 34, r: 5, d: 0.6 },
   { i: 0, x: 26, y: 26, w: 48, r: -2, d: 1, badge: 'Saturday, 3 May' },
   { i: 3, x: 40, y: 68, w: 30, r: -6, d: 0.8, video: '0:35' },
-  // the app's own icon, floating with the photos just above the date
-  { logo: true, x: 42, y: -4, w: 15, r: -5, d: 0.9 },
+  // the app's own icon with its name under it, like an app tile; the front-most card, so nothing covers the name
+  { logo: true, x: 42, y: -7, w: 14, r: -5, d: 1.15 },
 ]
 
 export default function PhotoFan() {
@@ -49,6 +49,7 @@ export default function PhotoFan() {
             <img src={c.logo ? '/brand/prismo-mark.png' : ITEMS[c.i].src} alt="" />
             {c.video && <span className="vb">▶ {c.video}</span>}
             {c.badge && <span className="day">{c.badge}</span>}
+            {c.logo && <figcaption><img className="word word-light" src="/brand/prismo-word-light.png" alt="" /><img className="word word-dark" src="/brand/prismo-word-dark.png" alt="" /></figcaption>}
           </figure>
         ))}
       </div>

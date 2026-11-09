@@ -200,7 +200,10 @@ a { color: inherit; }
 }
 .nav .container > * { transition: opacity 0.2s var(--ease); }
 .nav.up .container > * { opacity: 0; pointer-events: none; }
-.logo-space { width: 40px; margin-right: auto; }
+.logo-space { width: 40px; }
+/* the name beside the logo; it fades with the links when the bar folds, so only the logo stays */
+.wordmark { margin-left: -16px; margin-right: auto; display: flex; align-items: center; }
+.wordmark .word { height: 22px; width: auto; }
 .logo {
   position: fixed; z-index: 31; top: calc(var(--nav-top) + (var(--nav-h) - 40px) / 2); left: calc(var(--nav-side) + 11px);
   transition: left 0.35s var(--ease), top 0.35s var(--ease), transform 0.3s var(--ease);
@@ -262,6 +265,13 @@ a { color: inherit; }
 .fan .vb { position: absolute; left: 14px; bottom: 14px; padding: 2px 8px; border-radius: 6px; background: rgba(10, 12, 24, 0.72); color: #fff; font: 600 13px var(--ui); }
 .fan .day { position: absolute; left: 50%; top: 0; translate: -50% -55%; display: inline-flex; align-items: center; gap: 0.5em; white-space: nowrap; padding: 0.4em 0.95em; border-radius: 999px; background: var(--btn); color: var(--on-btn); font: 600 clamp(12px, 1.9cqw, 17px) var(--ui); }
 .fan .logo-card img { aspect-ratio: 1; object-fit: contain; transform: scale(1.12); }
+/* the app's name under its icon, inside the glass card, like an app tile; the README logo's own lettering */
+.fan .logo-card figcaption { display: grid; place-items: center; padding: 0.35em 0 0.2em; }
+.fan .logo-card figcaption .word { width: 78%; aspect-ratio: auto; object-fit: contain; transform: none; border-radius: 0; }
+/* the README logo's lettering: dark letters in light mode, white letters in dark mode */
+.word { display: block; height: auto; }
+.word-dark, :root[data-theme='dark'] .word-light { display: none; }
+:root[data-theme='dark'] .word-dark { display: block; }
 @keyframes float { from { translate: 0 -6px; } to { translate: 0 8px; } }
 
 /* the working window gets a screen of its own */
@@ -356,22 +366,28 @@ a { color: inherit; }
 .info dd { margin: 2px 0 0; }
 
 /* ---------- story: why Prismo exists ---------- */
-.story { display: grid; grid-template-columns: 5fr 7fr; gap: clamp(28px, 4vw, 64px); align-items: center; }
+.story { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 56px); align-items: center; }
 .story .shead { margin-bottom: 20px; }
-.story .body { display: grid; gap: 16px; font-size: var(--step-lead); line-height: 1.5; }
+.story .title { font-size: calc(var(--step-h2) * 0.92); }
+.story .body { display: grid; gap: 1.15em; font-size: calc(var(--step-lead) - 1pt); line-height: 1.5; }
 .story .body p.muted { color: var(--muted); }
 .story .body strong { font-weight: 600; }
-.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.compare figure { margin: 0; display: grid; gap: 12px; align-content: start; }
-.compare figcaption { font-weight: 600; font-size: 16px; }
-.compare figcaption span { display: block; font-weight: 400; color: var(--muted); font-size: 15px; }
+.story-fig { margin: 0; display: grid; gap: 12px; align-content: start; }
+.story .mini { height: 380px; }
+.story-fig figcaption { font-weight: 600; font-size: calc(16px + 1pt); }
+.story-fig figcaption span { display: block; font-weight: 400; color: var(--muted); font-size: calc(15px + 1pt); }
 .mini { background: var(--ui-bg); color: var(--ui-ink); border-radius: 12px; overflow: hidden; font-size: 13px; height: 300px; display: flex; flex-direction: column; }
 .mini .path { padding: 8px 10px; background: var(--ui-side); border-bottom: 1px solid var(--ui-line); color: var(--ui-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* fixed height: the path and day lines keep their height; extra tiles are cut at the bottom instead */
 .mini .path, .mini .day { flex: none; }
 .mini .rows { padding: 6px; display: grid; gap: 2px; }
 .mini .rows div { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; }
-.mini .rows div:nth-child(3) { background: var(--ui-raise); }
+.mini .rows { animation: focusin 0.35s var(--ease); }
+.mini .rows div { transition: background 0.25s; }
+.mini .rows div.hi { background: var(--ui-raise); }
+/* the timeline scrolls inside its window; the day header stays on top while its photos pass */
+.mini .tl { flex: 1; min-height: 0; overflow: hidden; padding-bottom: 10px; }
+.mini .tl .day { position: sticky; top: 0; z-index: 1; background: var(--ui-bg); }
 .mini .rows svg { width: 16px; height: 16px; color: #e6a23c; flex: none; }
 .mini .rows small { margin-left: auto; color: var(--ui-muted); }
 .mini .mfoot { margin-top: auto; padding: 8px 10px; color: var(--ui-muted); border-top: 1px solid var(--ui-line); }
@@ -406,8 +422,12 @@ a { color: inherit; }
 .card .meter { height: 8px; background: color-mix(in srgb, var(--ink) 12%, transparent); border-radius: 4px; overflow: hidden; }
 .card .meter i { display: block; width: 38%; height: 100%; background: #ff8a3d; }
 .card .warnbox { background: var(--ui-warn-bg); color: var(--ui-warn-ink); padding: 8px 10px; border-radius: 8px; }
-.show .cap { margin-top: 22px; max-width: 60ch; min-height: 96px; }
-.show .cap h3 { font-family: var(--display); font-weight: 600; font-size: clamp(1.4rem, 1.1rem + 0.9vw, 1.9rem); letter-spacing: -0.025em; line-height: 1.1; animation: focusin 0.45s var(--ease); }
+.show .cap { margin-top: 22px; max-width: 60ch; display: grid; }
+/* every caption sits in the same cell, so the box is as tall as the longest one and the dots never jump */
+.show .capi { grid-area: 1 / 1; visibility: hidden; }
+.show .capi[data-on='true'] { visibility: visible; }
+.show .cap h3 { font-family: var(--display); font-weight: 600; font-size: clamp(1.4rem, 1.1rem + 0.9vw, 1.9rem); letter-spacing: -0.025em; line-height: 1.1; }
+.show .capi[data-on='true'] h3 { animation: focusin 0.45s var(--ease); }
 .show .cap p { margin-top: 10px; color: var(--muted); font-size: 18px; }
 .dots { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
 .dots button { width: 10px; height: 10px; padding: 0; border: 0; border-radius: 5px; background: color-mix(in srgb, var(--ink) 25%, transparent); transition: width 0.3s var(--ease), background 0.3s; }
@@ -476,6 +496,12 @@ a { color: inherit; }
 .prog .thumbs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 10px; }
 .prog .thumbs img { aspect-ratio: 1; width: 100%; object-fit: cover; border-radius: 3px; opacity: 0; animation: pop 0.4s var(--ease) forwards; animation-delay: calc(var(--k) * 110ms + 0.3s); }
 @keyframes pop { from { opacity: 0; scale: 0.85; } to { opacity: 1; scale: 1; } }
+/* How it works, step 3: a timeline with its date headers; step 4: tiles of a drive that is off */
+.tlwin { align-self: start; width: 100%; padding: 12px; display: grid; gap: 10px; }
+.tlwin b { display: block; margin-bottom: 6px; font-weight: 600; }
+.tlwin .grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+.prog .thumbs img.off { animation-name: popoff; }
+@keyframes popoff { from { opacity: 0; scale: 0.85; } to { opacity: 0.35; scale: 1; filter: grayscale(1); } }
 .prog .addbtn { justify-self: start; display: inline-flex; align-items: center; height: 30px; padding: 0 14px; border-radius: 15px; background: var(--ui-accent); color: #fff; }
 
 /* ---------- built on ---------- */
@@ -503,7 +529,14 @@ a { color: inherit; }
 .item .a { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.35s var(--ease); }
 .item[data-open='true'] .a { grid-template-rows: 1fr; }
 .item .a > div { overflow: hidden; }
-.item .a p { padding: 0 4px 16px; color: var(--muted); font-size: 18px; line-height: 1.55; max-width: 62ch; }
+.item .a > div > :last-child { margin-bottom: 18px; }
+.item .a p { padding: 0 4px; margin-bottom: 10px; color: var(--muted); font-size: 16px; line-height: 1.6; max-width: 62ch; }
+.item .a p b { color: var(--ink); font-weight: 600; }
+.item .a .cmd { display: flex; align-items: center; gap: 10px; width: fit-content; max-width: 100%; margin: 0 4px 10px; padding: 6px 6px 6px 12px; border-radius: 10px; border: 1px solid var(--line); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.item .a .cmd code { color: var(--ink); font: 14px/1.5 ui-monospace, 'Cascadia Mono', Consolas, monospace; overflow-wrap: anywhere; }
+.item .a .cmd button { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 7px; background: color-mix(in srgb, var(--ink) 10%, transparent); color: var(--ink); font: 500 13px var(--copy); cursor: pointer; transition: background 0.2s; }
+.item .a .cmd button:hover { background: color-mix(in srgb, var(--ink) 18%, transparent); }
+.item .a .cmd button svg { width: 15px; height: 15px; }
 
 /* ---------- download ---------- */
 .cta { text-align: center; display: grid; justify-items: center; max-width: 1240px; margin-inline: auto; }
@@ -530,11 +563,16 @@ a { color: inherit; }
 
 /* ---------- tablet and phone ---------- */
 @media (max-width: 1080px) {
-  .story { grid-template-columns: 1fr; }
+  /* the story on top, the two windows side by side under it */
+  .story { grid-template-columns: 1fr 1fr; }
+  .story-text { grid-column: 1 / -1; order: -1; }
+  .story .mini { height: 320px; }
   .pgrid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 860px) {
   :root { --radius: 22px; }
+  /* the folded logo floats at the top left: keep centred titles clear of it */
+  .shead.center .title { padding-inline: 46px; }
   .nav .hide-sm { display: none; }
   .hero { grid-template-columns: 1fr; min-height: 0; padding-top: 96px; row-gap: 40px; }
   .fan { height: 340px; }
@@ -546,6 +584,7 @@ a { color: inherit; }
   .stack { height: 290px; }
   .card { transform: translateX(calc(-50% + var(--k) * 16px)) scale(calc(1 - var(--k) * 0.05)); }
   .nav .container { gap: 10px; }
+  .wordmark { margin-left: 0; }
   .hero h1 { font-size: clamp(2.4rem, 11vw, 3.8rem); }
   .window { height: 480px; }
   .winbody { grid-template-columns: 1fr; }
@@ -554,8 +593,9 @@ a { color: inherit; }
   .viewer { grid-template-columns: 1fr; }
   .info { display: none; }
   .viewer .pic { padding: 48px 12px 16px; }
-  .compare { grid-template-columns: 1fr; }
-  .mini { height: auto; padding-bottom: 10px; }
+  .story { grid-template-columns: 1fr; }
+  .story .mini { height: auto; padding-bottom: 10px; }
+  .mini .tl { flex: none; height: 230px; }
   .card { width: 82vw; }
   .scroll .grid { grid-template-columns: repeat(3, 1fr); }
   .pgrid { grid-template-columns: 1fr; }
