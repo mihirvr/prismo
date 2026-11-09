@@ -6,7 +6,7 @@ import io.github.mihirvr.prismo.collections.HiddenMode;
 import io.github.mihirvr.prismo.collections.ItemActions;
 import io.github.mihirvr.prismo.collections.LibraryFoldersDialog;
 import io.github.mihirvr.prismo.collections.MediaFlags;
-import io.github.mihirvr.prismo.collections.PeopleUi;
+import io.github.mihirvr.prismo.collections.TagsUi;
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.db.LibraryRootStore;
 import io.github.mihirvr.prismo.db.PlaybackPositions;
@@ -41,6 +41,7 @@ import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.OfflineFolders;
 import io.github.mihirvr.prismo.ui.StatusNote;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
+import io.github.mihirvr.prismo.ui.TagKind;
 import io.github.mihirvr.prismo.ui.Theme;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
@@ -69,6 +70,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -282,8 +284,8 @@ public final class PrismoApp extends Application {
     private TimelineView searchResults;
     private SearchBar searchBar;
     private MediaViewer viewer;
-    /** People tags (1.2.0). */
-    private PeopleUi people;
+    /** Manual tags: People (1.2.0) and Categories (1.3.0), one each. */
+    private final Map<TagKind, TagsUi> tags = new EnumMap<>(TagKind.class);
     private CollectionsPage collections;
     private ViewOptionsBar viewBar;
     private final ToggleButton timelineTab = new ToggleButton("Grid");
@@ -529,13 +531,17 @@ public final class PrismoApp extends Application {
         searchResults.setOsHiddenShown(osHiddenShown::get);
         collections.grid().setOsHiddenShown(osHiddenShown::get);
         viewer.setOsHiddenShown(osHiddenShown::get);
-        // 1.2.0: People tags (manual): right-click › People… in every grid and the viewer, the People page, folders.
-        people = new PeopleUi(database, () -> stage, this::libraryChanged, status::say);
-        for (TimelineView grid : List.of(timeline, searchResults, collections.grid())) {
-            grid.setOnPeople(people::editItems);
+        // Manual tags, People (1.2.0) and Categories (1.3.0): right-click › People… / Categories… in every grid and the
+        // viewer, their Collections pages, folders.
+        for (TagKind kind : TagKind.values()) {
+            TagsUi ui = new TagsUi(kind, database, () -> stage, this::libraryChanged, status::say);
+            tags.put(kind, ui);
+            for (TimelineView grid : List.of(timeline, searchResults, collections.grid())) {
+                grid.setOnTags(kind, ui::editItems);
+            }
+            viewer.setOnTags(kind, ui::editItems);
+            collections.setTags(ui);
         }
-        viewer.setOnPeople(people::editItems);
-        collections.setPeople(people);
         viewer.setOffline(offlineFolders::get);
         offlineFolders.addListener((_, _, offline) -> {
             for (TimelineView grid : List.of(timeline, searchResults, collections.grid())) {
@@ -598,11 +604,13 @@ public final class PrismoApp extends Application {
         HBox tabBar = new HBox(timelineTab, collectionsTab);
         tabBar.getStyleClass().add("tabs");
         viewBar = new ViewOptionsBar(viewOptions.withOsHiddenShown(false), gridView, folderArrange);
-        viewBar.setPeople(() -> { // 1.2.0: the People filter's names, read each time its menu opens
-            Map<Long, String> names = new LinkedHashMap<>();
-            people.people().forEach(person -> names.put(person.id(), person.name()));
-            return names;
-        });
+        for (TagKind kind : TagKind.values()) {
+            viewBar.setTags(kind, () -> { // the People / Categories filter's names, read each time its menu opens
+                Map<Long, String> names = new LinkedHashMap<>();
+                tags.get(kind).tags().forEach(tag -> names.put(tag.id(), tag.name()));
+                return names;
+            });
+        }
         applyGridLayout();
         viewBar.gridViewProperty().addListener((_, _, chosen) -> {
             settings.put(GRID_VIEW_SETTING, chosen.settingValue());

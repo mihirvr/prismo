@@ -20,7 +20,6 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.sound.sampled.AudioFormat;
-import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.SourceDataLine;
 import org.bytedeco.ffmpeg.avcodec.AVCodecParameters;
@@ -288,6 +287,19 @@ public final class VideoPlayer implements AutoCloseable {
         soundActive = false;
         startSound(); // the old sound thread sees the new generation and stops
         clock.soundEnded(); // the wall clock carries on until the new track's device is open
+    }
+
+    /**
+     * Opens the sound again on the device now picked in {@link SoundOutputs} (1.3.0), from the current moment, the
+     * same way as a change of track.
+     */
+    public void reopenSound() {
+        if (closed || durationMicros <= 0) {
+            return;
+        }
+        soundActive = false;
+        startSound(); // the old sound thread sees the new generation and stops (its device closes)
+        clock.soundEnded(); // the wall clock carries on until the new device is open
     }
 
     /** The sound track playing (a {@link Track#stream()}), -1 if none. */
@@ -563,7 +575,7 @@ public final class VideoPlayer implements AutoCloseable {
                 grabber.start();
                 rate = grabber.getSampleRate();
                 AudioFormat format = new AudioFormat(rate, 16, 2, true, false);
-                line = AudioSystem.getSourceDataLine(format);
+                line = SoundOutputs.open(format); // 1.3.0: the device picked this run, or the default
                 line.open(format, rate * BYTES_PER_SAMPLE_FRAME * SOUND_BUFFER_MILLIS / 1000);
             } catch (FrameGrabber.Exception | LineUnavailableException | IllegalArgumentException | SecurityException e) {
                 log.info("No sound for {}: {}", file, e.toString());

@@ -3,18 +3,21 @@ package io.github.mihirvr.prismo.viewer;
 import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.ui.FileItems;
+import io.github.mihirvr.prismo.ui.DragOut;
 import io.github.mihirvr.prismo.ui.Filmstrip;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.Menus;
 import io.github.mihirvr.prismo.ui.OfflineFolders;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
+import io.github.mihirvr.prismo.ui.TagKind;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -152,8 +155,8 @@ public final class MediaViewer extends StackPane {
     private boolean infoOpen;
     /** The right-click menu or the More button's menu, while one is open. */
     private ContextMenu menu;
-    /** "People…" in the right-click menu (1.2.0); null = not offered. */
-    private Consumer<List<TimelineItem>> onPeople;
+    /** "People…" (1.2.0) and "Categories…" (1.3.0) in the right-click menu; a kind left out = not offered. */
+    private final Map<TagKind, Consumer<List<TimelineItem>>> onTags = new EnumMap<>(TagKind.class);
     /** Full screen: hides the controls and pointer after {@link #IDLE_TIME} without a mouse move. */
     private final PauseTransition idle = new PauseTransition(IDLE_TIME);
     private boolean chromeHidden;
@@ -171,6 +174,8 @@ public final class MediaViewer extends StackPane {
     /** The filmstrip hides after {@link #IDLE_TIME} without a mouse move, in a window and in full screen alike. */
     private final PauseTransition stripIdle = new PauseTransition(IDLE_TIME);
     private boolean stripHidden;
+    /** True while a slideshow that started in a window runs in full screen (1.3.0): it goes back when it stops. */
+    private boolean slideshowMadeFullScreen;
     /** False in the standalone viewer: no Favorite / Hide / Trash, as there is no library. */
     private boolean itemActionsShown = true;
 
@@ -823,8 +828,13 @@ public final class MediaViewer extends StackPane {
         return getScene() == null ? null : getScene().getWindow();
     }
 
+    /** R: a quarter turn clockwise of the view only (the file never changes); videos too since 1.3.0. */
     private void rotate() {
-        if (imageView.getImage() != null && !video.isVisible()) {
+        if (video.isVisible()) {
+            video.rotateView();
+            return;
+        }
+        if (imageView.getImage() != null) {
             transform.rotateClockwise();
             applyTransform();
         }
@@ -879,6 +889,14 @@ public final class MediaViewer extends StackPane {
             dragY = event.getY();
             applyTransform();
         });
+        // 1.3.0: dragging a photo that isn't zoomed drags its file out (as from the grid); zoomed in, dragging pans.
+        imageLayer.addEventHandler(MouseEvent.DRAG_DETECTED, event -> {
+            if (event.getButton() == MouseButton.PRIMARY && imageView.getImage() != null && transform.isFitted()) {
+                dragOut(imageLayer, imageView.getImage());
+                event.consume();
+            }
+        });
+        video.setOnDragOut(picture -> dragOut(video, picture));
         imageLayer.addEventHandler(MouseEvent.MOUSE_RELEASED, _ -> applyTransform()); // cursor back to open hand
         imageLayer.addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
             if (event.getButton() == MouseButton.PRIMARY && event.getClickCount() == 2 && event.isStillSincePress()
@@ -887,6 +905,14 @@ public final class MediaViewer extends StackPane {
                 applyTransform();
             }
         });
+    }
+
+    /** Drags the shown item's file out of Prismo from {@code source} (1.3.0), {@code picture} small under the mouse. */
+    private void dragOut(Node source, javafx.scene.image.Image picture) {
+        TimelineItem item = current();
+        if (item != null) {
+            DragOut.start(source, List.of(item.ref().path()), picture);
+        }
     }
 
     // --- Keys and the top bar ---
@@ -1169,6 +1195,9 @@ public final class MediaViewer extends StackPane {
             }));
             view.add(Menus.item("Rotate", Icon.ROTATE, new KeyCodeCombination(KeyCode.R), this::rotate));
         }
+        if (mode == ViewMode.VIDEO && video.player() != null) {
+            view.add(Menus.item("Rotate", Icon.ROTATE, new KeyCodeCombination(KeyCode.R), this::rotate));
+        }
         boolean full = stage() instanceof Stage stage && stage.isFullScreen();
         view.add(Menus.item(full ? "Leave full screen" : "Full screen",
                 full ? Icon.EXIT_FULL_SCREEN : Icon.FULL_SCREEN, new KeyCodeCombination(KeyCode.F),
@@ -1191,8 +1220,9 @@ public final class MediaViewer extends StackPane {
                 case DELETE_PERMANENTLY -> removing.add(entry);
                 default -> settings.add(entry);
             }
-            if ((action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) && onPeople != null) {
-                settings.add(Menus.item("People…", Icon.PEOPLE, null, () -> onPeople.accept(List.of(item))));
+            if (action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) {
+                onTags.forEach((kind, handler) -> settings.add(Menus.item(kind.menuText(), Icon.of(kind), null,
+                        () -> handler.accept(List.of(item)))));
             }
         }
         if (!itemActionsShown) {
@@ -1217,11 +1247,15 @@ public final class MediaViewer extends StackPane {
     }
 
     /**
-     * What "People…" in the right-click menu does (1.2.0): opens the People window for the item on screen. Null (the
-     * default, and the standalone viewer) leaves the entry out.
+     * What "People…" (1.2.0) or "Categories…" (1.3.0) in the right-click menu does: opens that tag window for the item
+     * on screen. Null (the default, and the standalone viewer) leaves the entry out.
      */
-    public void setOnPeople(Consumer<List<TimelineItem>> onPeople) {
-        this.onPeople = onPeople;
+    public void setOnTags(TagKind kind, Consumer<List<TimelineItem>> handler) {
+        if (handler == null) {
+            onTags.remove(kind);
+        } else {
+            onTags.put(kind, handler);
+        }
     }
 
     /** The More button: the file items, and the File Explorer Hidden mark where there is one. */
@@ -1275,15 +1309,24 @@ public final class MediaViewer extends StackPane {
         addEventFilter(MouseEvent.MOUSE_MOVED, _ -> mouseActive());
         addEventFilter(MouseEvent.MOUSE_DRAGGED, _ -> mouseActive());
         addEventFilter(MouseEvent.MOUSE_PRESSED, _ -> mouseActive());
+        // 1.3.0: a slideshow runs in full screen; when it stops the window goes back to how it was.
         slideshow.runningProperty().subscribe(on -> {
             if (on) {
                 hideChromeNow();
                 hideStripNow();
+                slideshowMadeFullScreen = !isFullScreen() && stage() instanceof Stage;
+                if (slideshowMadeFullScreen) {
+                    ((Stage) stage()).setFullScreen(true);
+                }
             } else {
                 showChrome();
                 showStrip();
                 stripIdle.playFromStart();
                 restartIdle();
+                if (slideshowMadeFullScreen && stage() instanceof Stage stage && stage.isFullScreen()) {
+                    stage.setFullScreen(false);
+                }
+                slideshowMadeFullScreen = false;
             }
         });
         sceneProperty().flatMap(Scene::windowProperty)

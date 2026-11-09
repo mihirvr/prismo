@@ -1740,17 +1740,17 @@
     -fx-font-weight: normal;
 }
 
-/* 1.2.0: the People window. Notes ("in 12 of 40", the empty list) muted; the summary of what Save will do. */
-.people-dialog .people-note {
+/* 1.2.0: the People window (1.3.0: and the Categories window, the same class). Notes ("in 12 of 40", the empty list) muted; the summary of what Save will do. */
+.tag-dialog .tag-note {
     -fx-text-fill: -prismo-text-muted;
 }
 
-.people-dialog .people-summary {
+.tag-dialog .tag-summary {
     -fx-text-fill: -prismo-text;
     -fx-font-weight: bold;
 }
 
-.people-dialog .people-list {
+.tag-dialog .tag-list {
     -fx-background-color: transparent;
     -fx-background-insets: 0;
     -fx-padding: 0;

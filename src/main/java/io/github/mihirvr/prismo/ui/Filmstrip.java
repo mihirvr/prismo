@@ -3,15 +3,18 @@ package io.github.mihirvr.prismo.ui;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.IntConsumer;
+import javafx.scene.SnapshotParameters;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.Pane;
 import javafx.scene.layout.StackPane;
+import javafx.scene.paint.Color;
 import javafx.scene.shape.Rectangle;
 
 /**
  * The filmstrip (1.1.0): a row of small thumbnails under the photo, the current one in the middle and outlined, the
- * edges fading out. A click opens that item, the mouse wheel steps one item at a time. Shared by the main viewer
+ * edges fading out. A click opens that item, the mouse wheel steps one item at a time, dragging a tile drags its
+ * file out of Prismo (1.3.0, {@link DragOut}). Shared by the main viewer
  * and the standalone viewer; only the tiles that fit are made, so a list of 100,000 costs the same as one of 20.
  *
  * <p><b>The fade</b> (1.2.0): the tiles themselves fade near the left and right edges ({@link #edgeOpacity}). 1.1.0
@@ -135,9 +138,19 @@ public final class Filmstrip extends StackPane {
             double x = middle + (at - index) * step;
             tile.relocate(x, top);
             tile.setOpacity(edgeOpacity(x + TILE_SIZE / 2, width));
+            // A click (no move in between) opens the tile; dragging it a little drags its file out (1.3.0), as from
+            // the grid. The wheel keeps stepping. JavaFX starts a drag only after the mouse moved with the button down.
             tile.setOnMouseClicked(event -> {
-                if (event.getButton() == MouseButton.PRIMARY) {
+                if (event.getButton() == MouseButton.PRIMARY && event.isStillSincePress()) {
                     pick(at);
+                    event.consume();
+                }
+            });
+            tile.setOnDragDetected(event -> {
+                if (event.getButton() == MouseButton.PRIMARY) {
+                    SnapshotParameters transparent = new SnapshotParameters();
+                    transparent.setFill(Color.TRANSPARENT);
+                    DragOut.start(tile, List.of(item.ref().path()), tile.snapshot(transparent, null));
                     event.consume();
                 }
             });

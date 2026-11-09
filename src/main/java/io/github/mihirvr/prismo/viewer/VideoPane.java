@@ -5,6 +5,7 @@ import io.github.mihirvr.prismo.ui.Menus;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.WatchProgress;
+import io.github.mihirvr.prismo.video.SoundOutputs;
 import io.github.mihirvr.prismo.video.SubtitleSources;
 import io.github.mihirvr.prismo.video.Subtitles;
 import io.github.mihirvr.prismo.video.Track;
@@ -113,6 +114,8 @@ final class VideoPane extends StackPane {
     /** The seek preview card's frame: this much on the top and sides, and this tall at the bottom (the time). */
     private static final double PREVIEW_PADDING = 6;
     private static final double PREVIEW_BOTTOM = 26;
+    /** The card is never narrower than this (plus padding), so "1:02:03" fits under a tall video's thin picture. */
+    private static final double PREVIEW_MIN_TEXT_WIDTH = 72;
     private static final double PREVIEW_RADIUS = 12;
     private static final double PICTURE_RADIUS = 6;
     /** The glass: blur radius, the extra snapshot around the card (so the blur has no dark edge), and the lens. */
@@ -161,10 +164,24 @@ final class VideoPane extends StackPane {
     private final StackPane previewCard;
     /** The open video's preview pictures (made in the background); none while no video is open. */
     private SeekPreviews previews = SeekPreviews.none();
-    /** The preview picture area: {@link SeekPreviews#WIDTH} wide, this tall (from the video's shape). */
-    private double previewHeight = SeekPreviews.WIDTH * 9.0 / 16;
+    /** The open video's upright shape (its own rotation tag applied), for the preview's size; 0 = unknown. */
+    private double uprightWidth;
+    private double uprightHeight;
+    /** The preview picture area (1.3.0: capped by {@link SeekPreviews#pictureSize}, turned with the view). */
+    private double previewWidth = SeekPreviews.WIDE_WIDTH;
+    private double previewHeight = SeekPreviews.WIDE_HEIGHT;
+    /** Where the mouse last was on the seek bar, so a picture made while it rests can be shown (1.3.0). */
+    private double hoverX;
+    private double hoverScreenX;
+    /**
+     * The user's turn of the view (1.3.0, R as for photos): clockwise quarter turns in degrees, on top of the file's
+     * own {@link #rotation}. Only the view: the file is never changed; back to 0 on the next item.
+     */
+    private int viewRotation;
     private final MenuButton subtitlesButton = new MenuButton();
     private final MenuButton soundButton = new MenuButton();
+    /** The devices that can play sound ({@link SoundOutputs#list}), read again whenever a video opens (1.3.0). */
+    private List<String> outputs = List.of();
     private final MenuButton speedButton = new MenuButton();
     private final ToggleButton loopButton = new ToggleButton();
     private final Button mute = new Button();
@@ -197,6 +214,8 @@ final class VideoPane extends StackPane {
     private boolean pictureShown;
     private Runnable onFirstPicture = () -> { };
     private Runnable onDoubleClick = () -> { };
+    /** A drag started on the video (1.3.0); gets the picture on screen for the drag image (may be null). */
+    private Consumer<javafx.scene.image.Image> onDragOut = _ -> { };
     /** Told what the player found in the file once it's open, and null when it's closed (the Info panel). */
     private Consumer<VideoPlayer.Info> onInfo = _ -> { };
     /** Bumped on every {@link #play} and {@link #stop}: reports for an older player are dropped. */
@@ -237,13 +256,15 @@ final class VideoPane extends StackPane {
         HBox.setHgrow(seek, Priority.ALWAYS);
         // Hovering the seek bar shows the picture and the time under the mouse, just above the bar (seek-preview).
         previewPicture.setPreserveRatio(true);
-        previewPicture.setFitWidth(SeekPreviews.WIDTH);
+        StackPane.setAlignment(previewPicture, Pos.CENTER);
         previewFrame.getStyleClass().add("seek-preview-picture");
         previewTime.getStyleClass().add("seek-preview-time");
         previewTime.setMaxWidth(Double.MAX_VALUE);
         previewTime.setAlignment(Pos.CENTER);
         javafx.scene.layout.VBox polaroid = new javafx.scene.layout.VBox(previewFrame, previewTime);
         polaroid.getStyleClass().add("seek-preview-content");
+        polaroid.setAlignment(Pos.TOP_CENTER);
+        previewTime.setMinWidth(PREVIEW_MIN_TEXT_WIDTH);
         // Glass: the frame shows what is behind it, blurred, a little brighter and slightly magnified (a lens), so it
         // reads as see-through. A popup can't blur the window under it, so the card paints a snapshot of that part.
         ColorAdjust brighter = new ColorAdjust(0, -0.1, 0.08, 0);
@@ -343,7 +364,9 @@ final class VideoPane extends StackPane {
         subtitlesButton.setGraphic(Icon.SUBTITLES.node(ICON_SIZE));
         subtitlesButton.setTooltip(new Tooltip("Subtitles (C on / off, V next)"));
         soundButton.setGraphic(Icon.SOUND_TRACK.node(ICON_SIZE));
-        soundButton.setTooltip(new Tooltip("Sound track (B)"));
+        soundButton.setTooltip(new Tooltip("Sound track (B) and the device to play on"));
+        // 1.3.0: a device plugged in while the video plays shows up when the menu opens
+        soundButton.setOnShowing(_ -> refreshOutputs());
         speedButton.setTooltip(new Tooltip("Speed (< slower, > faster, = normal)"));
         speedButton.getStyleClass().add("viewer-speed");
         speed.addListener((_, _, value) -> {
@@ -399,6 +422,14 @@ final class VideoPane extends StackPane {
         StackPane.setMargin(note, new Insets(76, 0, 0, 0));
         noteTimer.setOnFinished(_ -> note.setVisible(false));
 
+        // 1.3.0: dragging the video itself (not the controls) drags its file out, as from the grid.
+        addEventHandler(MouseEvent.DRAG_DETECTED, event -> {
+            boolean onVideo = event.getTarget() == this || event.getTarget() == picture;
+            if (onVideo && event.getButton() == MouseButton.PRIMARY && item != null) {
+                onDragOut.accept(picture.getImage());
+                event.consume();
+            }
+        });
         addEventHandler(MouseEvent.MOUSE_CLICKED, event -> {
             boolean onVideo = event.getTarget() == this || event.getTarget() == picture;
             if (onVideo && event.getButton() == MouseButton.PRIMARY && event.isStillSincePress()) {
@@ -436,9 +467,14 @@ final class VideoPane extends StackPane {
         showSoundButton();
     }
 
-    /** The sound-track button: only for a video with more than one track, and only when there is room. */
+    /**
+     * The sound button: for a video with more than one track, or with sound when there is more than one device to play
+     * it on (1.3.0); only when there is room.
+     */
     private void showSoundButton() {
-        show(soundButton, soundRoom && info != null && info.audioTracks().size() > 1);
+        boolean tracks = info != null && info.audioTracks().size() > 1;
+        boolean devices = info != null && !info.audioTracks().isEmpty() && outputs.size() > 1;
+        show(soundButton, soundRoom && (tracks || devices));
     }
 
     private static void show(Control control, boolean shown) {
@@ -466,6 +502,11 @@ final class VideoPane extends StackPane {
     /** What the player found in the file, or null before it opened (or if it couldn't). */
     VideoPlayer.Info info() {
         return info;
+    }
+
+    /** What a drag on the video does (the viewer: drags the file out, 1.3.0). */
+    void setOnDragOut(Consumer<javafx.scene.image.Image> onDragOut) {
+        this.onDragOut = onDragOut;
     }
 
     /** What a double click on the video does (the viewer: full screen). */
@@ -509,10 +550,11 @@ final class VideoPane extends StackPane {
                         seek.setMax(Math.max(0.001, opened.durationMicros() / 1e6));
                         startPreviews(video.ref().path(), opened);
                         rotation = opened.rotation();
-                        picture.setRotate(rotation);
+                        picture.setRotate(rotation + viewRotation);
                         fitPicture();
                         findSubtitles(mine);
                         updateMenus();
+                        refreshOutputs();
                         onInfo.accept(opened);
                     }
                 });
@@ -574,7 +616,7 @@ final class VideoPane extends StackPane {
 
     /** Fills the pane, keeping the shape; a picture turned by 90° swaps which side has to fit where. */
     private void fitPicture() {
-        boolean sideways = rotation % 180 != 0;
+        boolean sideways = (rotation + viewRotation) % 180 != 0;
         picture.setFitWidth(sideways ? getHeight() : getWidth());
         picture.setFitHeight(sideways ? getWidth() : getHeight());
     }
@@ -594,14 +636,51 @@ final class VideoPane extends StackPane {
     private void startPreviews(Path file, VideoPlayer.Info opened) {
         previews.cancel();
         boolean sideways = opened.rotation() % 180 != 0;
-        double width = sideways ? opened.height() : opened.width();
-        double height = sideways ? opened.width() : opened.height();
-        previewHeight = width > 0 && height > 0
-                ? Math.clamp(SeekPreviews.WIDTH * height / width, 40, SeekPreviews.WIDTH * 1.8)
-                : SeekPreviews.WIDTH * 9.0 / 16;
+        uprightWidth = sideways ? opened.height() : opened.width();
+        uprightHeight = sideways ? opened.width() : opened.height();
+        sizePreview();
+        long mine = generation;
+        // B (1.3.0): a picture made while the pointer rests on the bar replaces the stand-in at once.
+        Runnable madeOne = () -> Platform.runLater(() -> {
+            if (generation == mine && seekTip.isShowing()) {
+                showPreview(hoverX, hoverScreenX);
+            }
+        });
         previews = opened.hasPicture()
-                ? SeekPreviews.start(file, opened.durationMicros() / 1e6, VideoNatives::ffmpegExecutable)
+                ? SeekPreviews.start(file, opened.durationMicros() / 1e6, VideoNatives::ffmpegExecutable, madeOne)
                 : SeekPreviews.none();
+    }
+
+    /**
+     * The preview picture's size and turn (1.3.0): the video's shape as shown (turned by {@link #viewRotation}), capped
+     * by {@link SeekPreviews#pictureSize}; the pictures are upright, so the ImageView is turned like the video.
+     */
+    private void sizePreview() {
+        boolean turned = viewRotation % 180 != 0;
+        double[] size = SeekPreviews.pictureSize(turned ? uprightHeight : uprightWidth,
+                turned ? uprightWidth : uprightHeight);
+        previewWidth = size[0];
+        previewHeight = size[1];
+        previewPicture.setRotate(viewRotation);
+        previewPicture.setFitWidth(turned ? previewHeight : previewWidth);
+        previewPicture.setFitHeight(turned ? previewWidth : previewHeight);
+        previewFrame.setMinSize(previewWidth, previewHeight);
+        previewFrame.setPrefSize(previewWidth, previewHeight);
+        previewFrame.setMaxSize(previewWidth, previewHeight);
+    }
+
+    /**
+     * Turns the video's view a quarter turn clockwise (1.3.0, R, as for photos): only how it is shown, the file is
+     * never changed; the seek preview turns with it. Back to upright on the next item.
+     */
+    void rotateView() {
+        if (player == null) {
+            return;
+        }
+        viewRotation = (viewRotation + 90) % 360;
+        picture.setRotate(rotation + viewRotation);
+        fitPicture();
+        sizePreview();
     }
 
     /**
@@ -615,15 +694,17 @@ final class VideoPane extends StackPane {
             seekTip.hide();
             return;
         }
+        hoverX = x;
+        hoverScreenX = screenX;
+        previews.want(seconds); // A (1.3.0): this spot's picture is made next
         javafx.scene.image.Image shot = previews.at(seconds);
-        previewPicture.setImage(shot);
-        previewPicture.setFitHeight(previewHeight);
-        previewFrame.setMinSize(SeekPreviews.WIDTH, previewHeight);
-        previewFrame.setPrefSize(SeekPreviews.WIDTH, previewHeight);
-        previewFrame.setMaxSize(SeekPreviews.WIDTH, previewHeight);
+        if (previewPicture.getImage() != shot) {
+            previewPicture.setImage(shot);
+        }
         previewTime.setText(PlaybackTime.clock(seconds));
-        // The card's size: picture + its padding (see .seek-preview in prismo.css) + the time row.
-        double cardWidth = SeekPreviews.WIDTH + 2 * PREVIEW_PADDING;
+        // The card's size: picture + its padding (see .seek-preview in prismo.css) + the time row. At least wide
+        // enough for the time under a narrow (tall video's) picture.
+        double cardWidth = Math.max(previewWidth, PREVIEW_MIN_TEXT_WIDTH) + 2 * PREVIEW_PADDING;
         double cardHeight = previewHeight + PREVIEW_PADDING + PREVIEW_BOTTOM;
         double left = screenX - cardWidth / 2;
         if (getScene() != null && getScene().getWindow() != null) {
@@ -1023,7 +1104,7 @@ final class VideoPane extends StackPane {
     /** Rebuilds the subtitle, sound and speed menus for the current state. */
     private void updateMenus() {
         subtitlesButton.getItems().setAll(subtitleItems());
-        soundButton.getItems().setAll(soundItems());
+        soundButton.getItems().setAll(soundButtonItems());
         showSoundButton();
         speedButton.getItems().setAll(speedItems());
     }
@@ -1086,6 +1167,83 @@ final class VideoPane extends StackPane {
             menu.getItems().add(entry);
         }
         return menu;
+    }
+
+    /** The sound button's menu: the tracks, then (1.3.0) the devices to play on. */
+    private List<MenuItem> soundButtonItems() {
+        List<MenuItem> items = new ArrayList<>();
+        List<MenuItem> tracks = soundItems();
+        if (tracks.size() > 1) {
+            items.addAll(tracks);
+        }
+        List<MenuItem> devices = outputItems();
+        if (!devices.isEmpty()) {
+            if (!items.isEmpty()) {
+                items.add(new SeparatorMenuItem());
+            }
+            MenuItem heading = new MenuItem("Play sound on");
+            heading.setDisable(true);
+            items.add(heading);
+            items.addAll(devices);
+        }
+        return items;
+    }
+
+    /**
+     * The devices to play the sound on (1.3.0): "System default" (the device the operating system uses), then each
+     * device; empty when there is no choice (no sound, or one device only). The pick lasts while Prismo runs.
+     */
+    private List<MenuItem> outputItems() {
+        List<MenuItem> items = new ArrayList<>();
+        if (info == null || player == null || info.audioTracks().isEmpty() || outputs.size() < 2) {
+            return items;
+        }
+        ToggleGroup group = new ToggleGroup();
+        String shown = SoundOutputs.shown(outputs);
+        RadioMenuItem standard = new RadioMenuItem("System default");
+        standard.setToggleGroup(group);
+        standard.setSelected(shown == null);
+        standard.setOnAction(_ -> chooseOutput(null));
+        items.add(standard);
+        for (String name : outputs) {
+            RadioMenuItem choice = new RadioMenuItem(name);
+            choice.setMnemonicParsing(false);
+            choice.setToggleGroup(group);
+            choice.setSelected(name.equals(shown));
+            choice.setOnAction(_ -> chooseOutput(name));
+            items.add(choice);
+        }
+        return items;
+    }
+
+    /**
+     * Reads the sound devices again in the background (1.3.0; listing them can take a moment the first time), then
+     * updates the menus if they changed.
+     */
+    private void refreshOutputs() {
+        long mine = generation;
+        Thread.ofVirtual().name("prismo-sound-devices").start(() -> {
+            List<String> found = SoundOutputs.list();
+            Platform.runLater(() -> {
+                if (generation == mine && !found.equals(outputs)) {
+                    outputs = found;
+                    updateMenus();
+                }
+            });
+        });
+    }
+
+    /** Plays on {@code device} (null = the system default) from now on, for this run of Prismo (1.3.0). */
+    private void chooseOutput(String device) {
+        if (java.util.Objects.equals(device, SoundOutputs.shown(outputs))) {
+            return;
+        }
+        SoundOutputs.choose(device);
+        if (player != null) {
+            player.reopenSound();
+        }
+        showNote("Sound on: " + (device == null ? "System default" : device));
+        updateMenus();
     }
 
     private List<MenuItem> soundItems() {
@@ -1174,7 +1332,7 @@ final class VideoPane extends StackPane {
         return items;
     }
 
-    /** The sound tracks (when there is more than one), mute and volume. */
+    /** The sound tracks (when there is more than one), mute and volume, and (1.3.0) the device to play on. */
     private List<MenuItem> audioItems() {
         List<MenuItem> items = new ArrayList<>();
         List<MenuItem> sound = soundItems();
@@ -1186,6 +1344,13 @@ final class VideoPane extends StackPane {
                 new KeyCodeCombination(KeyCode.M), this::toggleMute));
         items.add(Menus.item("Volume up", null, new KeyCodeCombination(KeyCode.UP), this::volumeUp));
         items.add(Menus.item("Volume down", null, new KeyCodeCombination(KeyCode.DOWN), this::volumeDown));
+        List<MenuItem> devices = outputItems();
+        if (!devices.isEmpty()) { // 1.3.0: which device plays it
+            String shown = SoundOutputs.shown(outputs);
+            items.add(new SeparatorMenuItem());
+            items.add(Menus.submenu("Play sound on: " + (shown == null ? "System default" : shown), Icon.VOLUME,
+                    devices));
+        }
         return items;
     }
 
@@ -1244,7 +1409,11 @@ final class VideoPane extends StackPane {
         image = null;
         pictureShown = false;
         rotation = 0;
+        viewRotation = 0;
         picture.setRotate(0);
+        previewPicture.setRotate(0);
+        uprightWidth = 0;
+        uprightHeight = 0;
         followingPlayback = true;
         seek.setValue(0);
         followingPlayback = false;

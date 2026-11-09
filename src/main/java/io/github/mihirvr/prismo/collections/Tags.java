@@ -3,7 +3,8 @@ package io.github.mihirvr.prismo.collections;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.ui.Album;
 import io.github.mihirvr.prismo.ui.MediaScope;
-import io.github.mihirvr.prismo.ui.PeopleFilter;
+import io.github.mihirvr.prismo.ui.TagFilter;
+import io.github.mihirvr.prismo.ui.TagKind;
 import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.nio.file.Path;
 import java.sql.Connection;
@@ -21,33 +22,36 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * People tags (1.2.0): the database side. Entirely manual: the user makes a person and tags items with them; Prismo
- * never looks at the pictures and never writes into the files. Tables {@code person} and {@code media_person}
- * ({@code V7__people.sql}). Plain SQL on a given connection, so tests run it on a scratch database; writes go through
+ * Manual tags, the database side: People (1.2.0, tables {@code person} and {@code media_person},
+ * {@code V7__people.sql}) and Categories (1.3.0, {@code category} and {@code media_category},
+ * {@code V9__categories.sql}). Entirely manual: the user makes a tag and puts it on items; Prismo never looks at the
+ * pictures and never writes into the files. Every method takes the {@link TagKind}; the table names come from it (fixed
+ * text, never user input). Plain SQL on a given connection, so tests run it on a scratch database; writes go through
  * {@code Database.write} (one transaction each).
  */
-public final class People {
+public final class Tags {
 
     /** Ids go into {@code IN (...)} lists in chunks of this many (SQLite allows 32,766 parameters; this stays small). */
     static final int CHUNK = 500;
 
-    private People() {
+    private Tags() {
     }
 
-    /** A person: their id and name. */
-    public record Person(long id, String name) {
+    /** A tag (a person or a category): its id and name. */
+    public record Tag(long id, String name) {
     }
 
-    /** Every person, by name (A to Z, case ignored). */
-    public static List<Person> all(Connection connection) throws SQLException {
-        List<Person> people = new ArrayList<>();
+    /** Every tag of {@code kind}, by name (A to Z, case ignored). */
+    public static List<Tag> all(Connection connection, TagKind kind) throws SQLException {
+        List<Tag> tags = new ArrayList<>();
         try (Statement select = connection.createStatement();
-                ResultSet rows = select.executeQuery("SELECT id, name FROM person ORDER BY name COLLATE NOCASE, id")) {
+                ResultSet rows = select.executeQuery(
+                        "SELECT id, name FROM " + kind.table + " ORDER BY name COLLATE NOCASE, id")) {
             while (rows.next()) {
-                people.add(new Person(rows.getLong(1), rows.getString(2)));
+                tags.add(new Tag(rows.getLong(1), rows.getString(2)));
             }
         }
-        return people;
+        return tags;
     }
 
     /** The name, trimmed, with runs of spaces made one; empty if nothing is left. */
@@ -57,51 +61,54 @@ public final class People {
     }
 
     /**
-     * Makes a person, or returns the one with that name already (names are unique, case ignored: "asha" is Asha).
+     * Makes a tag, or returns the one with that name already (names are unique per kind, case ignored: "asha" is
+     * Asha, "nature" is Nature). A person and a category may share a name: they are different kinds.
      *
      * @throws IllegalArgumentException for an empty name
      */
-    public static Person create(Connection connection, String name) throws SQLException {
+    public static Tag create(Connection connection, TagKind kind, String name) throws SQLException {
         String clean = cleanName(name).orElseThrow(() -> new IllegalArgumentException("A name is needed"));
-        Optional<Person> existing = named(connection, clean);
+        Optional<Tag> existing = named(connection, kind, clean);
         if (existing.isPresent()) {
             return existing.get();
         }
         try (PreparedStatement insert = connection.prepareStatement(
-                "INSERT INTO person (name, created_at) VALUES (?, ?)", Statement.RETURN_GENERATED_KEYS)) {
+                "INSERT INTO " + kind.table + " (name, created_at) VALUES (?, ?)", Statement.RETURN_GENERATED_KEYS)) {
             insert.setString(1, clean);
             insert.setLong(2, System.currentTimeMillis());
             insert.executeUpdate();
             try (ResultSet keys = insert.getGeneratedKeys()) {
                 keys.next();
-                return new Person(keys.getLong(1), clean);
+                return new Tag(keys.getLong(1), clean);
             }
         }
     }
 
-    /** The person with this name (case ignored), if any. */
-    public static Optional<Person> named(Connection connection, String name) throws SQLException {
-        try (PreparedStatement select = connection.prepareStatement("SELECT id, name FROM person WHERE name = ?")) {
+    /** The tag of {@code kind} with this name (case ignored), if any. */
+    public static Optional<Tag> named(Connection connection, TagKind kind, String name) throws SQLException {
+        try (PreparedStatement select = connection.prepareStatement(
+                "SELECT id, name FROM " + kind.table + " WHERE name = ?")) {
             select.setString(1, name);
             try (ResultSet rows = select.executeQuery()) {
-                return rows.next() ? Optional.of(new Person(rows.getLong(1), rows.getString(2))) : Optional.empty();
+                return rows.next() ? Optional.of(new Tag(rows.getLong(1), rows.getString(2))) : Optional.empty();
             }
         }
     }
 
     /**
-     * Renames a person.
+     * Renames a tag.
      *
-     * @return false if another person already has that name (nothing changed)
+     * @return false if another tag of the same kind already has that name (nothing changed)
      * @throws IllegalArgumentException for an empty name
      */
-    public static boolean rename(Connection connection, long id, String name) throws SQLException {
+    public static boolean rename(Connection connection, TagKind kind, long id, String name) throws SQLException {
         String clean = cleanName(name).orElseThrow(() -> new IllegalArgumentException("A name is needed"));
-        Optional<Person> other = named(connection, clean);
+        Optional<Tag> other = named(connection, kind, clean);
         if (other.isPresent() && other.get().id() != id) {
             return false;
         }
-        try (PreparedStatement update = connection.prepareStatement("UPDATE person SET name = ? WHERE id = ?")) {
+        try (PreparedStatement update = connection.prepareStatement(
+                "UPDATE " + kind.table + " SET name = ? WHERE id = ?")) {
             update.setString(1, clean);
             update.setLong(2, id);
             update.executeUpdate();
@@ -109,23 +116,24 @@ public final class People {
         return true;
     }
 
-    /** Deletes a person and their tags (the files stay; ON DELETE CASCADE). */
-    public static void delete(Connection connection, long id) throws SQLException {
-        try (PreparedStatement delete = connection.prepareStatement("DELETE FROM person WHERE id = ?")) {
+    /** Deletes a tag and takes it off every item (the files stay; ON DELETE CASCADE). */
+    public static void delete(Connection connection, TagKind kind, long id) throws SQLException {
+        try (PreparedStatement delete = connection.prepareStatement("DELETE FROM " + kind.table + " WHERE id = ?")) {
             delete.setLong(1, id);
             delete.executeUpdate();
         }
     }
 
     /**
-     * For each person, how many of {@code mediaIds} they are tagged in (people in none are left out). The People
-     * window turns this into its tick boxes: all = ticked, some = a dash, none = empty.
+     * For each tag of {@code kind}, how many of {@code mediaIds} have it (tags on none are left out). The tag window
+     * turns this into its tick boxes: all = ticked, some = a dash, none = empty.
      */
-    public static Map<Long, Integer> counts(Connection connection, Collection<Long> mediaIds) throws SQLException {
+    public static Map<Long, Integer> counts(Connection connection, TagKind kind, Collection<Long> mediaIds)
+            throws SQLException {
         Map<Long, Integer> counts = new HashMap<>();
         for (List<Long> chunk : chunks(mediaIds)) {
-            String sql = "SELECT person_id, count(*) FROM media_person WHERE media_id IN (" + marks(chunk.size())
-                    + ") GROUP BY person_id";
+            String sql = "SELECT " + kind.column + ", count(*) FROM " + kind.linkTable + " WHERE media_id IN ("
+                    + marks(chunk.size()) + ") GROUP BY " + kind.column;
             try (PreparedStatement select = connection.prepareStatement(sql)) {
                 bind(select, chunk, 1);
                 try (ResultSet rows = select.executeQuery()) {
@@ -139,26 +147,26 @@ public final class People {
     }
 
     /**
-     * Tags every item of {@code mediaIds} with {@code add} and untags {@code remove} (other tags stay as they are).
+     * Puts {@code add} on every item of {@code mediaIds} and takes {@code remove} off (other tags stay as they are).
      *
      * @return how many tags were added plus how many removed
      */
-    public static int apply(Connection connection, Collection<Long> mediaIds, Set<Long> add, Set<Long> remove)
-            throws SQLException {
+    public static int apply(Connection connection, TagKind kind, Collection<Long> mediaIds, Set<Long> add,
+            Set<Long> remove) throws SQLException {
         int changed = 0;
         try (PreparedStatement insert = connection.prepareStatement(
-                "INSERT OR IGNORE INTO media_person (media_id, person_id) VALUES (?, ?)");
+                "INSERT OR IGNORE INTO " + kind.linkTable + " (media_id, " + kind.column + ") VALUES (?, ?)");
                 PreparedStatement delete = connection.prepareStatement(
-                        "DELETE FROM media_person WHERE media_id = ? AND person_id = ?")) {
+                        "DELETE FROM " + kind.linkTable + " WHERE media_id = ? AND " + kind.column + " = ?")) {
             for (long media : new LinkedHashSet<>(mediaIds)) {
-                for (long person : add) {
+                for (long tag : add) {
                     insert.setLong(1, media);
-                    insert.setLong(2, person);
+                    insert.setLong(2, tag);
                     changed += insert.executeUpdate();
                 }
-                for (long person : remove) {
+                for (long tag : remove) {
                     delete.setLong(1, media);
-                    delete.setLong(2, person);
+                    delete.setLong(2, tag);
                     changed += delete.executeUpdate();
                 }
             }
@@ -167,7 +175,7 @@ public final class People {
     }
 
     /**
-     * The ids of every item directly in one of {@code folders} (each folder exactly, not below it: the People window
+     * The ids of every item directly in one of {@code folders} (each folder exactly, not below it: the tag window
      * lists the subfolders it wants one by one). Hidden items count too (they are the user's files all the same);
      * items in Trash don't.
      */
@@ -192,37 +200,38 @@ public final class People {
     }
 
     /**
-     * The People page's cards: every person, A to Z, with how many of their items the shared filter shows and the
-     * newest as the cover (as {@link Albums} does for folders; the same "bare columns" rule of SQLite). A person
-     * with nothing to show still has a card (count 0, no cover), so a new person can be found and used. When the
-     * People filter names people, only their cards; "No people" leaves no card.
+     * The People or Categories page's cards: every tag of {@code kind}, A to Z, with how many of its items the shared
+     * filter shows and the newest as the cover (as {@link Albums} does for folders; the same "bare columns" rule of
+     * SQLite). A tag with nothing to show still has a card (count 0, no cover), so a new one can be found and used.
+     * When this kind's filter names tags, only their cards; "No people" / "No category" leaves no card. The other
+     * kind's filter narrows the counts like any other filter.
      */
-    public static List<Album> cards(Connection connection, ViewOptions options) throws SQLException {
-        PeopleFilter wanted = options.people();
+    public static List<Album> cards(Connection connection, TagKind kind, ViewOptions options) throws SQLException {
+        TagFilter wanted = options.tags(kind);
         if (wanted.untagged()) {
             return List.of();
         }
-        ViewOptions others = options.withPeople(PeopleFilter.NONE); // counts follow the other filters only
+        ViewOptions others = options.withTags(TagFilter.none(kind)); // counts follow the other filters only
         String where = MediaScope.LIBRARY.sqlCondition(others.osHiddenShown())
                 + (others.sqlCondition() == null ? "" : " AND " + others.sqlCondition());
         Map<Long, Integer> counts = new HashMap<>();
         Map<Long, MediaRef> covers = new HashMap<>();
-        String sql = "SELECT mp.person_id, count(*), id, path, extension, date_modified, max(sort_date)"
-                + " FROM media_person mp JOIN media ON media.id = mp.media_id WHERE " + where
-                + " GROUP BY mp.person_id";
+        String sql = "SELECT link." + kind.column + ", count(*), id, path, extension, date_modified, max(sort_date)"
+                + " FROM " + kind.linkTable + " link JOIN media ON media.id = link.media_id WHERE " + where
+                + " GROUP BY link." + kind.column;
         try (Statement select = connection.createStatement(); ResultSet rows = select.executeQuery(sql)) {
             while (rows.next()) {
-                long person = rows.getLong(1);
-                counts.put(person, rows.getInt(2));
-                covers.put(person, new MediaRef(rows.getLong(3), Path.of(rows.getString(4)), rows.getString(5),
+                long tag = rows.getLong(1);
+                counts.put(tag, rows.getInt(2));
+                covers.put(tag, new MediaRef(rows.getLong(3), Path.of(rows.getString(4)), rows.getString(5),
                         rows.getLong(6)));
             }
         }
         List<Album> cards = new ArrayList<>();
-        for (Person person : all(connection)) {
-            if (wanted.people().isEmpty() || wanted.people().contains(person.id())) {
-                cards.add(Album.person(person.id(), person.name(), counts.getOrDefault(person.id(), 0),
-                        covers.get(person.id())));
+        for (Tag tag : all(connection, kind)) {
+            if (wanted.ids().isEmpty() || wanted.ids().contains(tag.id())) {
+                cards.add(Album.tag(kind, tag.id(), tag.name(), counts.getOrDefault(tag.id(), 0),
+                        covers.get(tag.id())));
             }
         }
         return cards;

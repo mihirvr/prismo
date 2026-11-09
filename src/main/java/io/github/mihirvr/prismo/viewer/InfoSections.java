@@ -55,6 +55,9 @@ final class InfoSections {
         if (!details.people().isEmpty()) { // 1.2.0: the people tagged in it
             add(sections, "People", List.of(new Line("", String.join(", ", details.people()))));
         }
+        if (!details.categories().isEmpty()) { // 1.3.0: its categories
+            add(sections, "Categories", List.of(new Line("", String.join(", ", details.categories()))));
+        }
         List<Line> camera = new ArrayList<>();
         if (!details.camera().isEmpty()) {
             camera.add(new Line("Camera", details.camera()));

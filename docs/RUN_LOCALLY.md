@@ -39,7 +39,12 @@ video with sound, a screenshot).
    the photo shows the neighbours; in a window it always stays, and in full screen it floats over the photo on a
    soft dark band with no hard edge (also over a video's control bar) and hides when the mouse rests. During a
    slideshow only the photos show (moving the mouse brings nothing back); any click or key stops it and does nothing
-   else. Around the photo the viewer is pitch black in every look.
+   else. Around the photo the viewer is pitch black in every look. A slideshow started in a window goes full screen and comes back
+   to the window when it stops. Drag the photo (not zoomed in) or a filmstrip tile onto a folder: a copy lands there.
+   On a video: R turns it, and hovering the seek bar shows the picture there at once. With several sound devices, the
+   sound menu's "Play sound on" moves the sound to another one (and back to System default after a restart).
+   Right-click › Categories… adds a category (type a name, Enter, Save); it shows on Collections › Categories, in the
+   Categories filter and in the Info panel.
 5. **Video:** a phone video plays with sound in sync. Space / K, J / L, Left / Right, 0 to 9, Up / Down, M,
    < / >, C (subtitles on / off), V (next subtitles), B (sound track), Shift+L (loop), double-click for full screen.
    Video thumbnails always show a frame of the video (1.2.0: never a cover picture stored in the file), about 10 % in, never a black fade-in or a

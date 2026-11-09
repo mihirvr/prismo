@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.ui;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,10 +53,13 @@ public final class ViewOptionsBar extends HBox {
     private final MenuButton typesButton = new MenuButton();
     private List<String> availableTypes = List.of();
     private final Map<String, CheckBox> typeBoxes = new HashMap<>();
-    /** The People menu (1.2.0): a tick per person, "No people", and all of them together or any of them. */
-    private final MenuButton peopleButton = new MenuButton();
-    /** Every person, id to name, A to Z; read each time the menu opens. */
-    private Supplier<Map<Long, String>> people = Map::of;
+    /**
+     * The People menu (1.2.0) and the Categories menu (1.3.0): a tick per tag, "No people" / "No category", and all of
+     * them together or any of them.
+     */
+    private final Map<TagKind, MenuButton> tagButtons = new EnumMap<>(TagKind.class);
+    /** Every tag of each kind, id to name, A to Z; read each time its menu opens. */
+    private final Map<TagKind, Supplier<Map<Long, String>>> tagNames = new EnumMap<>(TagKind.class);
     private boolean sortLocked;
     /** True while the controls are set by code (locking), so their listeners don't change the choice. */
     private boolean quiet;
@@ -111,18 +115,25 @@ public final class ViewOptionsBar extends HBox {
             }
         });
 
-        peopleButton.getStyleClass().add("view-people");
-        peopleButton.setTooltip(new Tooltip("Show only some people's photos and videos"));
-        peopleButton.setOnShowing(_ -> fillPeopleMenu());
-        showChosenPeople();
+        for (TagKind kind : TagKind.values()) {
+            MenuButton button = new MenuButton();
+            button.getStyleClass().add(kind == TagKind.PEOPLE ? "view-people" : "view-categories");
+            button.setTooltip(new Tooltip(kind.filterTip));
+            button.setOnShowing(_ -> fillTagMenu(kind));
+            tagButtons.put(kind, button);
+            tagNames.put(kind, Map::of);
+            showChosenTags(kind);
+        }
         options.addListener((_, old, value) -> {
-            if (!old.people().equals(value.people())) {
-                showChosenPeople();
+            for (TagKind kind : TagKind.values()) {
+                if (!old.tags(kind).equals(value.tags(kind))) {
+                    showChosenTags(kind);
+                }
             }
         });
 
-        getChildren().setAll(view, arrangeButton, filter, typesButton, peopleButton, new Label("Sort"), sort,
-                direction);
+        getChildren().setAll(view, arrangeButton, filter, typesButton, tagButtons.get(TagKind.PEOPLE),
+                tagButtons.get(TagKind.CATEGORIES), new Label("Sort"), sort, direction);
         updateArrangeShown();
     }
 
@@ -175,7 +186,7 @@ public final class ViewOptionsBar extends HBox {
     private void showChosenTypes() {
         Set<String> chosen = options.get().types();
         typesButton.setText(chosen.isEmpty() ? "All types"
-                : chosen.size() <= 2 ? options.get().withFilter(MediaFilter.ALL).withPeople(PeopleFilter.NONE)
+                : chosen.size() <= 2 ? new ViewOptions(MediaFilter.ALL, MediaSort.DATE_TAKEN, true, false, chosen)
                         .filterLabel()
                 : chosen.size() + " types");
         if (!typeBoxes.keySet().containsAll(chosen)) {
@@ -196,56 +207,65 @@ public final class ViewOptionsBar extends HBox {
 
     /** Where the People menu reads the people from (1.2.0): id to name, A to Z. */
     public void setPeople(Supplier<Map<Long, String>> people) {
-        this.people = people;
+        setTags(TagKind.PEOPLE, people);
+    }
+
+    /** Where the menu of {@code kind} reads its tags from: id to name, A to Z. */
+    public void setTags(TagKind kind, Supplier<Map<Long, String>> names) {
+        tagNames.put(kind, names);
+    }
+
+    MenuButton tagButton(TagKind kind) {
+        return tagButtons.get(kind);
     }
 
     /**
-     * The People menu, made fresh each time it opens (people come and go): Everyone; all of them together or any of
-     * them; No people; one tick per person. Ticking stays in the menu; a person deleted meanwhile drops out of the
-     * filter.
+     * The People or Categories menu, made fresh each time it opens (tags come and go): Everyone / Every category; all
+     * of them together or any of them; No people / No category; one tick per tag. Ticking stays in the menu; a tag
+     * deleted meanwhile drops out of the filter.
      */
-    private void fillPeopleMenu() {
-        Map<Long, String> everyone = people.get();
-        PeopleFilter chosen = options.get().people().keepOnly(everyone.keySet());
-        if (!chosen.equals(options.get().people())) {
-            options.set(options.get().withPeople(chosen));
+    private void fillTagMenu(TagKind kind) {
+        Map<Long, String> every = tagNames.get(kind).get();
+        TagFilter chosen = options.get().tags(kind).keepOnly(every.keySet());
+        if (!chosen.equals(options.get().tags(kind))) {
+            options.set(options.get().withTags(chosen));
         }
-        MenuItem all = new MenuItem("Everyone");
-        all.setOnAction(_ -> options.set(options.get().withPeople(PeopleFilter.NONE)));
+        MenuItem all = new MenuItem(kind.everything);
+        all.setOnAction(_ -> options.set(options.get().withTags(TagFilter.none(kind))));
         ToggleGroup mode = new ToggleGroup();
         RadioMenuItem together = new RadioMenuItem("All of them together");
         RadioMenuItem any = new RadioMenuItem("Any of them");
         together.setToggleGroup(mode);
         any.setToggleGroup(mode);
         (chosen.together() ? together : any).setSelected(true);
-        together.setOnAction(_ -> options.set(options.get().withPeople(options.get().people().withTogether(true))));
-        any.setOnAction(_ -> options.set(options.get().withPeople(options.get().people().withTogether(false))));
+        together.setOnAction(_ -> options.set(options.get().withTags(options.get().tags(kind).withTogether(true))));
+        any.setOnAction(_ -> options.set(options.get().withTags(options.get().tags(kind).withTogether(false))));
         List<MenuItem> items = new ArrayList<>(List.of(all, new SeparatorMenuItem(), together, any,
                 new SeparatorMenuItem()));
-        CheckBox untagged = new CheckBox("No people");
+        CheckBox untagged = new CheckBox(kind.untagged);
         untagged.setSelected(chosen.untagged());
         untagged.selectedProperty().addListener((_, _, on) ->
-                options.set(options.get().withPeople(options.get().people().withUntagged(on))));
+                options.set(options.get().withTags(options.get().tags(kind).withUntagged(on))));
         CustomMenuItem untaggedItem = new CustomMenuItem(untagged, false);
         untaggedItem.getStyleClass().add("type-item");
         items.add(untaggedItem);
-        if (everyone.isEmpty()) {
-            MenuItem none = new MenuItem("No people yet");
+        if (every.isEmpty()) {
+            MenuItem none = new MenuItem(kind.noneYet());
             none.setDisable(true);
             items.add(none);
         }
         List<CheckBox> boxes = new ArrayList<>();
         boolean[] clearing = {false}; // the boxes are being unticked for "No people": not the user's own clicks
-        everyone.forEach((id, name) -> {
+        every.forEach((id, name) -> {
             CheckBox box = new CheckBox(name);
             box.setMnemonicParsing(false);
-            box.setSelected(chosen.people().contains(id));
+            box.setSelected(chosen.ids().contains(id));
             box.selectedProperty().addListener((_, _, on) -> {
                 if (clearing[0]) {
                     return;
                 }
-                options.set(options.get().withPeople(options.get().people().withPerson(id, on)));
-                untagged.setSelected(options.get().people().untagged());
+                options.set(options.get().withTags(options.get().tags(kind).withTag(id, on)));
+                untagged.setSelected(options.get().tags(kind).untagged());
             });
             boxes.add(box);
             CustomMenuItem item = new CustomMenuItem(box, false);
@@ -259,13 +279,13 @@ public final class ViewOptionsBar extends HBox {
                 clearing[0] = false;
             }
         });
-        peopleButton.getItems().setAll(items);
+        tagButtons.get(kind).getItems().setAll(items);
     }
 
-    /** The People button's text: "Everyone", "People: 2", "No people". */
-    private void showChosenPeople() {
-        String label = options.get().people().label();
-        peopleButton.setText(label == null ? "Everyone" : label);
+    /** The button's text: "Everyone", "People: 2", "No people"; "Every category", "Categories: 1", "No category". */
+    private void showChosenTags(TagKind kind) {
+        String label = options.get().tags(kind).label();
+        tagButtons.get(kind).setText(label == null ? kind.everything : label);
     }
 
     /** Shows the View menu (the Grid, Collections › Folders) or hides it and its space (elsewhere). */

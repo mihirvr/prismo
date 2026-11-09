@@ -27,10 +27,21 @@ import java.util.Optional;
  */
 public record MediaDetails(Path path, String extension, String mediaType, long sizeBytes, Long dateTaken,
         long dateModified, long dateAdded, int width, int height, String cameraMake, String cameraModel,
-        double duration, boolean favorite, boolean hidden, boolean osHidden, boolean trashed, List<String> people) {
+        double duration, boolean favorite, boolean hidden, boolean osHidden, boolean trashed, List<String> people,
+        List<String> categories) {
 
     public MediaDetails {
         people = people == null ? List.of() : List.copyOf(people);
+        categories = categories == null ? List.of() : List.copyOf(categories);
+    }
+
+    /** Without categories (1.3.0 added them). */
+    public MediaDetails(Path path, String extension, String mediaType, long sizeBytes, Long dateTaken,
+            long dateModified, long dateAdded, int width, int height, String cameraMake, String cameraModel,
+            double duration, boolean favorite, boolean hidden, boolean osHidden, boolean trashed,
+            List<String> people) {
+        this(path, extension, mediaType, sizeBytes, dateTaken, dateModified, dateAdded, width, height, cameraMake,
+                cameraModel, duration, favorite, hidden, osHidden, trashed, people, List.of());
     }
 
     /** Without people (1.2.0 added them). */
@@ -64,17 +75,18 @@ public record MediaDetails(Path path, String extension, String mediaType, long s
                 return Optional.of(new MediaDetails(Path.of(row.getString(1)), row.getString(2), row.getString(3),
                         row.getLong(4), dateTaken, row.getLong(6), row.getLong(7), row.getInt(8), row.getInt(9),
                         row.getString(10), row.getString(11), row.getDouble(12), row.getBoolean(13),
-                        row.getBoolean(14), row.getBoolean(15), row.getBoolean(16), peopleIn(connection, id)));
+                        row.getBoolean(14), row.getBoolean(15), row.getBoolean(16),
+                        tagsOn(connection, TagKind.PEOPLE, id), tagsOn(connection, TagKind.CATEGORIES, id)));
             }
         }
     }
 
-    /** The names of the people tagged in item {@code id}, A to Z (1.2.0). */
-    static List<String> peopleIn(Connection connection, long id) throws SQLException {
+    /** The names of the tags of {@code kind} on item {@code id}, A to Z (people 1.2.0, categories 1.3.0). */
+    static List<String> tagsOn(Connection connection, TagKind kind, long id) throws SQLException {
         List<String> names = new ArrayList<>();
-        try (PreparedStatement select = connection.prepareStatement("""
-                SELECT p.name FROM media_person mp JOIN person p ON p.id = mp.person_id
-                WHERE mp.media_id = ? ORDER BY p.name COLLATE NOCASE""")) {
+        try (PreparedStatement select = connection.prepareStatement("SELECT t.name FROM " + kind.linkTable
+                + " link JOIN " + kind.table + " t ON t.id = link." + kind.column
+                + " WHERE link.media_id = ? ORDER BY t.name COLLATE NOCASE")) {
             select.setLong(1, id);
             try (ResultSet rows = select.executeQuery()) {
                 while (rows.next()) {

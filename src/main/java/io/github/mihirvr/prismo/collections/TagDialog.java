@@ -1,10 +1,11 @@
 package io.github.mihirvr.prismo.collections;
 
-import io.github.mihirvr.prismo.collections.PeopleChoice.Box;
-import io.github.mihirvr.prismo.collections.PeopleChoice.Decision;
-import io.github.mihirvr.prismo.collections.PeopleChoice.State;
+import io.github.mihirvr.prismo.collections.TagChoice.Box;
+import io.github.mihirvr.prismo.collections.TagChoice.Decision;
+import io.github.mihirvr.prismo.collections.TagChoice.State;
 import io.github.mihirvr.prismo.ui.Appearance;
 import io.github.mihirvr.prismo.ui.DialogTexts;
+import io.github.mihirvr.prismo.ui.TagKind;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -39,18 +40,18 @@ import javafx.stage.Window;
 import javafx.util.StringConverter;
 
 /**
- * The People window (1.2.0): who is in an item, a selection, or a whole folder. One tick box per person; the rules
- * of a box are in {@link PeopleChoice} (it only adds unless the user unticks someone). A search box finds a person,
- * or adds a new one with Enter. Before saving, a line says what will change. For a folder: "Include subfolders" and
+ * The People window (1.2.0) and the Categories window (1.3.0), one class for both ({@link TagKind}): which tags an
+ * item, a selection, or a whole folder has. One tick box per tag; the rules of a box are in {@link TagChoice} (it
+ * only adds unless the user unticks one). A search box finds a tag, or adds a new one with Enter. Before saving, a line says what will change. For a folder: "Include subfolders" and
  * a tree of its subfolders, each with its own tick, to choose exactly which folders' files are tagged; the files are
  * counted again (in the background) when that choice changes. Files added to the folder later stay untagged: the
  * window tags the files there now.
  *
  * <p>Runs on the JavaFX Application Thread; counting goes to a virtual thread.
  */
-final class PeopleDialog {
+final class TagDialog {
 
-    /** How many files are chosen and, per person, how many of them have that person. */
+    /** How many files are chosen and, per tag, how many of them have that tag. */
     record Counts(int total, Map<Long, Integer> have) {
     }
 
@@ -61,15 +62,15 @@ final class PeopleDialog {
     }
 
     /**
-     * What to save: people to add to every chosen file, people to remove from every one, new names to make and add,
+     * What to save: tags to add to every chosen file, tags to remove from every one, new names to make and add,
      * and (folder mode) the folders whose files are meant.
      */
-    record Result(Set<Long> add, Set<Long> remove, List<String> newPeople, List<String> folders) {
+    record Result(Set<Long> add, Set<Long> remove, List<String> newTags, List<String> folders) {
     }
 
-    private static final long NEW_PERSON = -1;
+    private static final long NEW_TAG = -1;
 
-    /** One person's row. A new name typed in this window has no id yet ({@link #NEW_PERSON}). */
+    /** One tag's row. A new name typed in this window has no id yet ({@link #NEW_TAG}). */
     private final class Row {
         final long id;
         final String name;
@@ -86,11 +87,11 @@ final class PeopleDialog {
             box.setAllowIndeterminate(true);
             box.setMnemonicParsing(false);
             box.setOnAction(_ -> {
-                decision = PeopleChoice.click(state, decision);
+                decision = TagChoice.click(state, decision);
                 show();
                 summarize();
             });
-            note.getStyleClass().add("people-note");
+            note.getStyleClass().add("tag-note");
             Region gap = new Region();
             HBox.setHgrow(gap, Priority.ALWAYS);
             node = new HBox(8, box, gap, note);
@@ -98,7 +99,7 @@ final class PeopleDialog {
         }
 
         void show() {
-            Box shown = PeopleChoice.box(state, decision);
+            Box shown = TagChoice.box(state, decision);
             box.setIndeterminate(shown == Box.DASH);
             box.setSelected(shown == Box.TICKED);
             int have = counts.have().getOrDefault(id, 0);
@@ -110,8 +111,9 @@ final class PeopleDialog {
     private final Dialog<Result> dialog = new Dialog<>();
     private final List<Row> rows = new ArrayList<>();
     private final VBox list = new VBox(4);
-    private final Label empty = new Label("No people yet. Type a name above to add someone.");
-    /** Under the rows while the typed name is nobody yet: says that Enter makes a new person (1.2.0 app check). */
+    private final TagKind kind;
+    private final Label empty;
+    /** Under the rows while the typed name is no tag yet: says that Enter makes a new one (1.2.0 app check). */
     private final Label newName = new Label();
     private final Label summary = new Label();
     private final TextField search = new TextField();
@@ -123,17 +125,19 @@ final class PeopleDialog {
     private List<String> folders = List.of();
     private boolean counting;
 
-    private PeopleDialog(Window owner, String header, List<People.Person> people) {
+    private TagDialog(TagKind kind, Window owner, String header, List<Tags.Tag> tags) {
+        this.kind = kind;
+        empty = new Label(kind.emptyList());
         dialog.initOwner(owner);
         Appearance.matchOwner(dialog);
-        dialog.setTitle("People");
+        dialog.setTitle(kind.title);
         dialog.setHeaderText(header);
         dialog.getDialogPane().getButtonTypes().addAll(save, ButtonType.CANCEL);
-        dialog.getDialogPane().getStyleClass().add("people-dialog");
-        for (People.Person person : people) {
-            rows.add(new Row(person.id(), person.name()));
+        dialog.getDialogPane().getStyleClass().add("tag-dialog");
+        for (Tags.Tag tag : tags) {
+            rows.add(new Row(tag.id(), tag.name()));
         }
-        search.setPromptText("Find or add a person");
+        search.setPromptText(kind.searchPrompt());
         HBox.setHgrow(search, Priority.ALWAYS);
         search.textProperty().subscribe(this::filter);
         search.setOnKeyPressed(event -> {
@@ -143,19 +147,19 @@ final class PeopleDialog {
             }
         });
         add.setOnAction(_ -> addOrTick());
-        empty.getStyleClass().add("people-note");
+        empty.getStyleClass().add("tag-note");
         empty.setWrapText(true);
-        newName.getStyleClass().add("people-note");
+        newName.getStyleClass().add("tag-note");
         newName.setWrapText(true);
-        summary.getStyleClass().add("people-summary");
+        summary.getStyleClass().add("tag-summary");
         summary.setWrapText(true);
         summary.setMaxWidth(420);
         dialog.setResultConverter(button -> button == save ? result() : null);
     }
 
     /** One item or several: their ids are known, so are the counts. */
-    static Optional<Result> forItems(Window owner, String header, List<People.Person> people, Counts counts) {
-        PeopleDialog window = new PeopleDialog(owner, header, people);
+    static Optional<Result> forItems(TagKind kind, Window owner, String header, List<Tags.Tag> tags, Counts counts) {
+        TagDialog window = new TagDialog(kind, owner, header, tags);
         window.counts = counts;
         window.layOut(null);
         window.refreshRows();
@@ -163,15 +167,15 @@ final class PeopleDialog {
     }
 
     /**
-     * A folder (from the Collections tree): which of its subfolders count, then who is in their files.
+     * A folder (from the Collections tree): which of its subfolders count, then which tags their files get.
      *
      * @param folder  the folder
      * @param counter counts the files of the folders chosen
      */
-    static Optional<Result> forFolder(Window owner, FolderTree.Node folder, List<People.Person> people,
+    static Optional<Result> forFolder(TagKind kind, Window owner, FolderTree.Node folder, List<Tags.Tag> tags,
             Counter counter) {
-        PeopleDialog window = new PeopleDialog(owner, "Who is in " + DialogTexts.quoted(name(folder.path())) + "?",
-                people);
+        TagDialog window = new TagDialog(kind, owner, kind.folderQuestion(DialogTexts.quoted(name(folder.path()))),
+                tags);
         window.layOut(window.folderChooser(folder, counter));
         window.recount(counter);
         return window.show();
@@ -190,7 +194,7 @@ final class PeopleDialog {
         scroll.setFitToWidth(true);
         scroll.setPrefViewportHeight(260);
         scroll.setPrefViewportWidth(360);
-        scroll.getStyleClass().add("people-list");
+        scroll.getStyleClass().add("tag-list");
         list.setPadding(new Insets(4));
         VBox content = new VBox(10);
         if (above != null) {
@@ -211,7 +215,7 @@ final class PeopleDialog {
         TreeView<FolderTree.Node> tree = new TreeView<>(root);
         tree.setShowRoot(false);
         tree.setPrefHeight(150);
-        tree.getStyleClass().add("people-folders");
+        tree.getStyleClass().add("tag-folders");
         tree.setCellFactory(_ -> new CheckBoxTreeCell<>(item -> ((CheckBoxTreeItem<FolderTree.Node>) item)
                 .selectedProperty(), new StringConverter<>() {
                     @Override
@@ -275,7 +279,7 @@ final class PeopleDialog {
         List<String> picked = List.copyOf(folders);
         counting = true;
         summarize();
-        Thread.ofVirtual().name("prismo-people-count").start(() -> {
+        Thread.ofVirtual().name("prismo-tags-count").start(() -> {
             Counts fresh;
             try {
                 fresh = counter.count(picked);
@@ -295,8 +299,8 @@ final class PeopleDialog {
 
     private void refreshRows() {
         for (Row row : rows) {
-            row.state = row.id == NEW_PERSON ? State.NONE
-                    : PeopleChoice.state(counts.have().getOrDefault(row.id, 0), counts.total());
+            row.state = row.id == NEW_TAG ? State.NONE
+                    : TagChoice.state(counts.have().getOrDefault(row.id, 0), counts.total());
             row.show();
         }
         filter(search.getText());
@@ -312,10 +316,10 @@ final class PeopleDialog {
                 shown.add(row.node);
             }
         }
-        Optional<String> name = People.cleanName(text);
+        Optional<String> name = Tags.cleanName(text);
         boolean someoneNew = name.isPresent() && exact(name.get()) == null;
         if (someoneNew) {
-            newName.setText("Press Enter or Add to add " + DialogTexts.quoted(name.get()) + " as a new person.");
+            newName.setText(kind.addsNew(DialogTexts.quoted(name.get())));
             shown.add(newName);
         } else if (rows.isEmpty()) {
             shown.add(empty);
@@ -334,19 +338,19 @@ final class PeopleDialog {
         return null;
     }
 
-    /** Enter or the button: ticks the person with that name, or adds a new one (made when saving). */
+    /** Enter or the button: ticks the tag with that name, or adds a new one (made when saving). */
     private void addOrTick() {
-        Optional<String> name = People.cleanName(search.getText());
+        Optional<String> name = Tags.cleanName(search.getText());
         if (name.isEmpty()) {
             return;
         }
         Row row = exact(name.get());
         if (row == null) {
-            row = new Row(NEW_PERSON, name.get());
+            row = new Row(NEW_TAG, name.get());
             rows.add(row);
             rows.sort((a, b) -> a.name.compareToIgnoreCase(b.name));
         }
-        if (PeopleChoice.box(row.state, row.decision) != Box.TICKED) {
+        if (TagChoice.box(row.state, row.decision) != Box.TICKED) {
             row.decision = Decision.ADD;
         }
         search.clear();
@@ -361,7 +365,7 @@ final class PeopleDialog {
             ok.setDisable(true);
             return;
         }
-        if (counts.total() == 0 && rows.stream().noneMatch(r -> r.id == NEW_PERSON)) {
+        if (counts.total() == 0 && rows.stream().noneMatch(r -> r.id == NEW_TAG)) {
             summary.setText(folders.isEmpty() ? "" : "No files in the folders chosen.");
             ok.setDisable(true);
             return;
@@ -369,7 +373,7 @@ final class PeopleDialog {
         List<String> parts = new ArrayList<>();
         for (Row row : rows) {
             int have = counts.have().getOrDefault(row.id, 0);
-            int changed = PeopleChoice.changes(row.decision, row.id == NEW_PERSON ? 0 : have, counts.total());
+            int changed = TagChoice.changes(row.decision, row.id == NEW_TAG ? 0 : have, counts.total());
             if (changed == 0) {
                 continue;
             }
@@ -386,7 +390,7 @@ final class PeopleDialog {
         Set<Long> removing = new LinkedHashSet<>();
         List<String> created = new ArrayList<>();
         for (Row row : rows) {
-            if (row.id == NEW_PERSON) {
+            if (row.id == NEW_TAG) {
                 if (row.decision == Decision.ADD) {
                     created.add(row.name);
                 }

@@ -1,20 +1,21 @@
 package io.github.mihirvr.prismo.collections;
 
 /**
- * The People window's tick box for one person (1.2.0), without JavaFX: what the box shows and what a click does.
+ * The tag window's tick box for one person or category (1.2.0; categories 1.3.0), without JavaFX: what the box shows
+ * and what a click does.
  *
- * <p>Two things are kept apart: how many of the chosen files have the person now ({@link #state}: all, some, none),
+ * <p>Two things are kept apart: how many of the chosen files have the tag now ({@link #state}: all, some, none),
  * and what the user decided ({@link Decision}: leave as it is, add to every file, remove from every file). The box
  * shows the decision, or the current state while nothing was decided. So the window only ever ADDS unless the user
- * unticks someone: leaving a person alone changes nothing, whatever the files had. Keeping them apart also lets the
+ * unticks a tag: leaving a tag alone changes nothing, whatever the files had. Keeping them apart also lets the
  * window count the files again (the subfolders picked changed) without losing what the user ticked.
  *
  * <p>A click steps through what makes sense for the state: some → ticked (add) → empty (remove) → dash (as it is);
  * all → empty (remove) → ticked (as it is); none → ticked (add) → empty (as it is).
  */
-public final class PeopleChoice {
+public final class TagChoice {
 
-    /** How many of the chosen files have the person now. */
+    /** How many of the chosen files have the tag now. */
     public enum State { ALL, SOME, NONE }
 
     /** What the user decided. */
@@ -23,10 +24,10 @@ public final class PeopleChoice {
     /** What the box shows. */
     public enum Box { TICKED, DASH, EMPTY }
 
-    private PeopleChoice() {
+    private TagChoice() {
     }
 
-    /** The state from a count: {@code have} of {@code total} files have the person. No files: none. */
+    /** The state from a count: {@code have} of {@code total} files have the tag. No files: none. */
     public static State state(int have, int total) {
         if (total <= 0 || have <= 0) {
             return State.NONE;
@@ -62,8 +63,8 @@ public final class PeopleChoice {
     }
 
     /**
-     * How many files the decision changes: for ADD the files without the person, for REMOVE the files with them, else
-     * none. ({@code have} of {@code total} have the person now.)
+     * How many files the decision changes: for ADD the files without the tag, for REMOVE the files with it, else
+     * none. ({@code have} of {@code total} have the tag now.)
      */
     public static int changes(Decision decision, int have, int total) {
         return switch (decision) {

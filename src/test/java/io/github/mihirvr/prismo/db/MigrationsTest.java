@@ -119,12 +119,14 @@ class MigrationsTest {
                         VALUES (7, 'D:\\a.mkv', 'D:\\', 'a.mkv', 'mkv', 'video', 1, 0, 0)""");
             }
 
-            assertEquals(8, new Migrations().migrate(connection)); // 1.2.0: V7 people, V8 MKV re-read
+            assertEquals(9, new Migrations().migrate(connection)); // 1.2.0: V7 people, V8 MKV re-read; 1.3.0: V9
 
             try (Statement statement = connection.createStatement()) {
                 assertTrue(tableExists(connection, "video_choices"));
                 assertTrue(tableExists(connection, "person"));
                 assertTrue(tableExists(connection, "media_person"));
+                assertTrue(tableExists(connection, "category"));
+                assertTrue(tableExists(connection, "media_category"));
                 statement.executeUpdate("""
                         INSERT INTO video_choices (media_id, audio_stream, subtitle, subtitle_stream)
                         VALUES (7, 1, 'track', 3)""");

@@ -11,7 +11,8 @@ import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.Menus;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.MediaScope;
-import io.github.mihirvr.prismo.ui.PeopleFilter;
+import io.github.mihirvr.prismo.ui.TagFilter;
+import io.github.mihirvr.prismo.ui.TagKind;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
@@ -22,8 +23,10 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
@@ -87,7 +90,7 @@ public final class CollectionsPage extends BorderPane {
     /** The pages, in the order of the list on the left. */
     public enum Page {
         FOLDERS("Folders", Icon.FOLDER), ALBUMS("Albums", Icon.ALBUMS), PEOPLE("People", Icon.PEOPLE),
-        FAVORITES("Favorites", Icon.HEART),
+        CATEGORIES("Categories", Icon.CATEGORY), FAVORITES("Favorites", Icon.HEART),
         RECENTLY_ADDED("Recently Added", Icon.CLOCK), HIDDEN("Hidden", Icon.EYE_OFF), TRASH("Trash", Icon.TRASH);
 
         private final String label;
@@ -100,6 +103,11 @@ public final class CollectionsPage extends BorderPane {
 
         public Icon icon() {
             return icon;
+        }
+
+        /** The tags this page shows (People 1.2.0, Categories 1.3.0), or null for the other pages. */
+        public TagKind tagKind() {
+            return this == PEOPLE ? TagKind.PEOPLE : this == CATEGORIES ? TagKind.CATEGORIES : null;
         }
 
         @Override
@@ -117,7 +125,8 @@ public final class CollectionsPage extends BorderPane {
 
         public Spot {
             folder = page == Page.FOLDERS ? folder : null;
-            album = page == Page.ALBUMS || page == Page.PEOPLE ? album : null; // People (1.2.0): the person open
+            // People (1.2.0) / Categories (1.3.0): the person or category open
+            album = page == Page.ALBUMS || page.tagKind() != null ? album : null;
         }
     }
 
@@ -133,12 +142,24 @@ public final class CollectionsPage extends BorderPane {
     private final Label title = new Label();
     private final Label hint = new Label();
     private final Button backToAlbums = new Button("Albums", Icon.CHEVRON_LEFT.node(PAGE_ICON_SIZE));
-    /** 1.2.0: the People page's cards (a person is an {@link Album} with a person id), and its buttons. */
-    private final AlbumGrid peopleGrid;
-    private final Button backToPeople = new Button("People", Icon.CHEVRON_LEFT.node(PAGE_ICON_SIZE));
-    private final Button newPerson = new Button("New person", Icon.PLUS.node(PAGE_ICON_SIZE));
-    /** Makes, renames and deletes people, and opens the People window for a folder; null = not offered. */
-    private PeopleUi people;
+    /**
+     * A tag page's parts (People 1.2.0, Categories 1.3.0): the cards (a tag is an {@link Album} with a tag id), Back
+     * and New, and what makes, renames and deletes tags and opens the tag window for a folder (null = not offered).
+     */
+    private static final class TagPage {
+        final AlbumGrid cards;
+        final Button back;
+        final Button add;
+        TagsUi tags;
+
+        TagPage(TagKind kind, AlbumGrid cards) {
+            this.cards = cards;
+            back = new Button(kind.title, Icon.CHEVRON_LEFT.node(PAGE_ICON_SIZE));
+            add = new Button(kind.newButton(), Icon.PLUS.node(PAGE_ICON_SIZE));
+        }
+    }
+
+    private final Map<TagKind, TagPage> tagPages = new EnumMap<>(TagKind.class);
     private final Label placeholder = new Label();
     private final SplitPane folderSplit = new SplitPane();
     private final StackPane gridHolder = new StackPane();
@@ -189,38 +210,41 @@ public final class CollectionsPage extends BorderPane {
             refresh();
             navigated();
         });
-        peopleGrid = new AlbumGrid(loader);
-        peopleGrid.thumbnailSizeProperty().bind(grid.thumbnailSizeProperty());
-        Label noPeople = new Label("No people yet. Add someone with New person, or right-click a photo \u203a People\u2026");
-        noPeople.getStyleClass().add("collections-placeholder");
-        noPeople.setWrapText(true);
-        peopleGrid.setPlaceholder(noPeople);
-        peopleGrid.setOnOpen(person -> {
-            openAlbum = person;
-            refresh();
-            navigated();
-        });
-        peopleGrid.setOnMenu((person, event) -> {
-            if (people == null) {
-                return;
-            }
-            ContextMenu menu = new ContextMenu(
-                    Menus.item("Rename\u2026", Icon.RENAME, null, () -> people.rename(person)),
-                    Menus.item("Delete person\u2026", Icon.TRASH, null, () -> people.delete(person)));
-            menu.show(peopleGrid, event.getScreenX(), event.getScreenY());
-        });
-        backToPeople.getStyleClass().add("back-button");
-        backToPeople.setTooltip(new Tooltip("Back to everyone"));
-        backToPeople.setOnAction(_ -> {
-            openAlbum = null;
-            refresh();
-            navigated();
-        });
-        newPerson.setOnAction(_ -> {
-            if (people != null) {
-                people.newPerson();
-            }
-        });
+        for (TagKind kind : TagKind.values()) {
+            TagPage page = new TagPage(kind, new AlbumGrid(loader));
+            tagPages.put(kind, page);
+            page.cards.thumbnailSizeProperty().bind(grid.thumbnailSizeProperty());
+            Label none = new Label(kind.emptyPage());
+            none.getStyleClass().add("collections-placeholder");
+            none.setWrapText(true);
+            page.cards.setPlaceholder(none);
+            page.cards.setOnOpen(tag -> {
+                openAlbum = tag;
+                refresh();
+                navigated();
+            });
+            page.cards.setOnMenu((tag, event) -> {
+                if (page.tags == null) {
+                    return;
+                }
+                ContextMenu menu = new ContextMenu(
+                        Menus.item("Rename\u2026", Icon.RENAME, null, () -> page.tags.rename(tag)),
+                        Menus.item("Delete " + kind.one + "\u2026", Icon.TRASH, null, () -> page.tags.delete(tag)));
+                menu.show(page.cards, event.getScreenX(), event.getScreenY());
+            });
+            page.back.getStyleClass().add("back-button");
+            page.back.setTooltip(new Tooltip(kind.backTip()));
+            page.back.setOnAction(_ -> {
+                openAlbum = null;
+                refresh();
+                navigated();
+            });
+            page.add.setOnAction(_ -> {
+                if (page.tags != null) {
+                    page.tags.newTag();
+                }
+            });
+        }
         gridHolder.getChildren().add(grid);
 
         pages.getItems().setAll(Page.values());
@@ -290,11 +314,11 @@ public final class CollectionsPage extends BorderPane {
     }
 
     /**
-     * People tags (1.2.0): the People page's New person, Rename and Delete, and right-click \u203a People\u2026 on a
-     * folder in the tree.
+     * Manual tags of {@code tags.kind()} (People 1.2.0, Categories 1.3.0): the page's New, Rename and Delete, and
+     * right-click \u203a People\u2026 / Categories\u2026 on a folder in the tree.
      */
-    public void setPeople(PeopleUi people) {
-        this.people = people;
+    public void setTags(TagsUi tags) {
+        tagPages.get(tags.kind()).tags = tags;
     }
 
     /** Folders' "Include subfolders" box; kept across restarts (P7). */
@@ -418,14 +442,15 @@ public final class CollectionsPage extends BorderPane {
                 yield new Loaded(null, null, null, scope, request.options(),
                         TimelineQuery.load(c, scope, request.options(), zone));
             }
-            case PEOPLE -> {
+            case PEOPLE, CATEGORIES -> {
+                TagKind kind = request.page().tagKind();
                 if (request.album() == null) {
-                    yield new Loaded(null, null, People.cards(c, request.options()), null, request.options(),
+                    yield new Loaded(null, null, Tags.cards(c, kind, request.options()), null, request.options(),
                             List.of());
                 }
-                // A person's own page shows all their items: the People filter is for choosing whom to see.
-                ViewOptions options = request.options().withPeople(PeopleFilter.NONE);
-                MediaScope scope = MediaScope.person(request.album().personId());
+                // A tag's own page shows all its items: the People / Categories filter is for choosing which to see.
+                ViewOptions options = request.options().withTags(TagFilter.none(kind));
+                MediaScope scope = MediaScope.tag(kind, request.album().tagId());
                 yield new Loaded(null, null, null, scope, options, TimelineQuery.load(c, scope, options, zone));
             }
             case FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH -> {
@@ -442,7 +467,7 @@ public final class CollectionsPage extends BorderPane {
             case RECENTLY_ADDED -> MediaScope.RECENTLY_ADDED;
             case HIDDEN -> MediaScope.HIDDEN;
             case TRASH -> MediaScope.TRASH;
-            case FOLDERS, ALBUMS, PEOPLE -> MediaScope.LIBRARY;
+            case FOLDERS, ALBUMS, PEOPLE, CATEGORIES -> MediaScope.LIBRARY;
         };
     }
 
@@ -467,9 +492,9 @@ public final class CollectionsPage extends BorderPane {
             hint.setText(folder == null ? "" : folder);
         }
         if (loaded.albums() != null) {
-            boolean everyone = request.page() == Page.PEOPLE;
-            (everyone ? peopleGrid : albumGrid).setAlbums(loaded.albums());
-            title.setText(titled(everyone ? "People" : "Albums", loaded.albums().size()));
+            TagKind kind = request.page().tagKind();
+            (kind != null ? tagPages.get(kind).cards : albumGrid).setAlbums(loaded.albums());
+            title.setText(titled(kind != null ? kind.title : "Albums", loaded.albums().size()));
             return;
         }
         if (request.album() != null) {
@@ -530,6 +555,7 @@ public final class CollectionsPage extends BorderPane {
                     : "Nothing directly in this folder" + filtered;
             case ALBUMS -> "Nothing in this album" + filtered;
             case PEOPLE -> "No items tagged with " + request.album().name() + filtered;
+            case CATEGORIES -> "Nothing in " + request.album().name() + filtered;
             case FAVORITES -> "No favorites" + filtered;
             case RECENTLY_ADDED -> "Nothing added yet" + filtered;
             case HIDDEN -> "Nothing hidden" + filtered;
@@ -571,12 +597,13 @@ public final class CollectionsPage extends BorderPane {
                     setCenter(new BorderPane(gridHolder, header, null, null, null));
                 }
             }
-            case PEOPLE -> {
+            case PEOPLE, CATEGORIES -> {
+                TagPage tagPage = tagPages.get(page.tagKind());
                 if (openAlbum == null) {
-                    header.getChildren().addAll(title, spacer, newPerson);
-                    setCenter(new BorderPane(peopleGrid, header, null, null, null));
+                    header.getChildren().addAll(title, spacer, tagPage.add);
+                    setCenter(new BorderPane(tagPage.cards, header, null, null, null));
                 } else {
-                    header.getChildren().addAll(backToPeople, title);
+                    header.getChildren().addAll(tagPage.back, title);
                     setCenter(new BorderPane(gridHolder, header, null, null, null));
                 }
             }
@@ -666,12 +693,23 @@ public final class CollectionsPage extends BorderPane {
             guides.getStyleClass().add("tree-guide");
             guides.setManaged(false);
             guides.setMouseTransparent(true);
-            // 1.2.0: right-click a folder \u203a People\u2026 tags the files in it (and the subfolders chosen).
+            // 1.2.0: right-click a folder \u203a People\u2026 tags the files in it (and the subfolders chosen);
+            // 1.3.0: Categories\u2026 the same way.
             setOnContextMenuRequested(event -> {
                 FolderTree.Node node = getItem();
-                if (people != null && node != null && !isEmpty()) {
-                    new ContextMenu(Menus.item("People\u2026", Icon.PEOPLE, null, () -> people.editFolder(node)))
-                            .show(this, event.getScreenX(), event.getScreenY());
+                if (node == null || isEmpty()) {
+                    return;
+                }
+                ContextMenu menu = new ContextMenu();
+                for (TagPage tagPage : tagPages.values()) {
+                    TagsUi tags = tagPage.tags;
+                    if (tags != null) {
+                        menu.getItems().add(Menus.item(tags.kind().menuText(), Icon.of(tags.kind()), null,
+                                () -> tags.editFolder(node)));
+                    }
+                }
+                if (!menu.getItems().isEmpty()) {
+                    menu.show(this, event.getScreenX(), event.getScreenY());
                     event.consume();
                 }
             });

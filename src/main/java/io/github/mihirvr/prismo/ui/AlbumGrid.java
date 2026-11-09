@@ -34,7 +34,7 @@ public final class AlbumGrid extends StackPane {
     private List<Album> albums = List.of();
     private GridLayout layout = new GridLayout(1, TimelineView.DEFAULT_THUMBNAIL_SIZE);
     private Consumer<Album> onOpen = _ -> { };
-    /** A right-click on a card (1.2.0: Rename / Delete a person); null = no menu. */
+    /** A right-click on a card (Rename / Delete a person, 1.2.0, or a category, 1.3.0); null = no menu. */
     private BiConsumer<Album, ContextMenuEvent> onMenu;
 
     public AlbumGrid(ThumbnailLoader loader) {
@@ -59,7 +59,7 @@ public final class AlbumGrid extends StackPane {
         this.onOpen = onOpen;
     }
 
-    /** Called on a right-click on a card (1.2.0: the People page's Rename / Delete). */
+    /** Called on a right-click on a card (the People and Categories pages' Rename / Delete). */
     public void setOnMenu(BiConsumer<Album, ContextMenuEvent> onMenu) {
         this.onMenu = onMenu;
     }
@@ -165,7 +165,7 @@ public final class AlbumGrid extends StackPane {
             name.setText(newAlbum.name());
             name.setMaxWidth(size);
             count.setText("%,d".formatted(newAlbum.count()));
-            path.setText(newAlbum.isPerson() ? newAlbum.name() : newAlbum.folder()); // a person has no folder
+            path.setText(newAlbum.isTag() ? newAlbum.name() : newAlbum.folder()); // a tag has no folder
         }
 
         void clear() {

@@ -64,9 +64,23 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.2.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0, 1.2.0 and 1.2.1 are described below). Windows first; the Linux package is an early preview.
+**Version 1.3.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.0 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.3.0:** **Categories** (Nature, Documents, Portraits, anything you like), made by hand
+exactly like People: right-click one item, a selection or a whole folder › Categories… and tick the categories; type a
+new name there to add one (or use New category on Collections › Categories). A photo can have people and categories
+at the same time. A Categories filter next to People shows the items in the categories ticked (all of them together or
+any of them), or the items with no category yet; both filters together show only what matches both. The Info panel
+lists an item's categories. **Choose where the sound plays**: when the PC has more than one sound device (laptop
+speakers, headphones, a TV), the video's sound menu and right-click › Audio › Play sound on list them; the choice holds
+for every video until Prismo is closed, and the next start uses the system's default device again. The seek-bar
+preview now shows the picture under the mouse at once (it is made first), even while the mouse rests, has many more
+pictures on long videos, takes the exact frame on short clips, and stays small for phone videos. R turns a video's
+view a quarter turn, as for photos (the file isn't changed; the next item starts upright). A slideshow started in a
+window goes full screen and comes back to the window when it stops. Drag a photo (when it isn't zoomed in), a video,
+or a tile of the filmstrip out of the viewer into another app or a folder, as from the grid (a folder gets a copy).
 
 **1.2.1:** hovering a video's seek bar shows a **preview picture** of that moment
 with its time, in a see-through glass card that follows the mouse (the pictures are made in the background when the
@@ -182,7 +196,7 @@ next subtitles and Z / X for the delay.)
 | I | Info panel |
 | Ctrl+D / Ctrl+H / Delete, Ctrl+C, F2 | As on the grid |
 | Space | Slideshow (photos) |
-| R | Rotate (view only, the file isn't changed) |
+| R | Rotate (view only, the file isn't changed; videos too since 1.3.0) |
 | + / - / 0 | Zoom in / out / fit to window |
 | Double-click a photo | Zoom to 100 %, or back to fit |
 
@@ -271,10 +285,10 @@ prismo/
 │   │   │   ├── thumbs/             # Thumbnail cache: subsampled decode, EXIF rotation, well-lit video frames via ffmpeg (key frames only), HEIC (ffmpeg) and RAW previews, on-screen-first queue, cache size / clear
 │   │   │   ├── ui/                 # Timeline: virtualized grid of date-grouped rows, thumbnail tiles (watch-progress bar), loader, keyboard focus; shared Filters + Sort; date grouping; selection; offline folders; page scopes, item actions, album grid; looks (themes), icons, menus, file items (Show in folder, Copy…), window and dialog placement; the Back / Forward history; the subtitle background choices
 │   │   │   ├── search/             # Search: query words → FTS5/LIKE SQL, background search thread, search box
-│   │   │   ├── collections/        # Collections tab: folder tree, albums, Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, hide modes, Library folders dialog
+│   │   │   ├── collections/        # Collections tab: folder tree, albums, People and Categories tags (one shared tag window and page), Favorites / Recently Added / Hidden / Trash, favorite-hide-trash-delete actions, hide modes, Library folders dialog
 │   │   │   ├── settings/           # The Settings window: pages for the look, hidden items, ignored folders, date headers, video (subtitle background), performance, keyboard shortcuts, About
 │   │   │   ├── watch/              # Filesystem watcher: whole-tree (Windows) or per-folder watching, debounced batches
-│   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, speed, sound and subtitle tracks, subtitles (.srt), which tracks a video starts with
+│   │   │   ├── video/              # Video player on FFmpeg (JavaCV): picture + sound threads, sound-card clock, the sound device picked for this run, speed, sound and subtitle tracks, subtitles (.srt), which tracks a video starts with
 │   │   │   └── viewer/             # Media viewer: full-size stills, zoom/pan/rotate, slideshow, full screen, video controls, seek-bar previews, Info panel
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)

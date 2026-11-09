@@ -6,8 +6,10 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
@@ -125,8 +127,8 @@ public final class TimelineView extends StackPane {
     private BiConsumer<List<TimelineItem>, Integer> onOpen = (_, _) -> { };
     private BiConsumer<List<TimelineItem>, Integer> onInfo = (_, _) -> { };
     private ItemAction.Handler onAction = (_, _) -> false;
-    /** "People…" in the right-click menu (1.2.0); null = not offered. */
-    private Consumer<List<TimelineItem>> onPeople;
+    /** "People…" (1.2.0) and "Categories…" (1.3.0) in the right-click menu; a kind left out = not offered. */
+    private final Map<TagKind, Consumer<List<TimelineItem>>> onTags = new EnumMap<>(TagKind.class);
     private FileItems fileItems = FileItems.NONE;
     /** The Settings switch "Show files hidden in File Explorer" (which actions an item gets). */
     private BooleanSupplier osHiddenShown = () -> false;
@@ -775,8 +777,8 @@ public final class TimelineView extends StackPane {
                 case DELETE_PERMANENTLY -> removing.add(entry); // alone, last but Info: it can't be undone
                 default -> settings.add(entry);
             }
-            if ((action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) && onPeople != null) {
-                settings.add(peopleItem(List.of(item)));
+            if (action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) {
+                settings.addAll(tagItems(List.of(item)));
             }
         }
         List<MenuItem> info = List.of(Menus.item("Info", Icon.INFO, INFO, () -> openInfo(item.ref().id())));
@@ -815,18 +817,27 @@ public final class TimelineView extends StackPane {
         board.setDragView(picture, picture.getWidth() / 2, picture.getHeight() / 2);
     }
 
-    /** "People…": who is in these items (1.2.0, manual tags); only when {@link #setOnPeople} was given. */
-    private MenuItem peopleItem(List<TimelineItem> chosen) {
-        Consumer<List<TimelineItem>> handler = onPeople;
-        return Menus.item("People…", Icon.PEOPLE, null, () -> handler.accept(chosen));
+    /**
+     * "People…" (who is in these items, 1.2.0) and "Categories…" (1.3.0): manual tags; only the kinds given with
+     * {@link #setOnTags}.
+     */
+    private List<MenuItem> tagItems(List<TimelineItem> chosen) {
+        List<MenuItem> entries = new ArrayList<>();
+        onTags.forEach((kind, handler) ->
+                entries.add(Menus.item(kind.menuText(), Icon.of(kind), null, () -> handler.accept(chosen))));
+        return entries;
     }
 
     /**
-     * What "People…" in the right-click menu does (1.2.0): opens the People window for the item or the selection.
-     * Null (the default) leaves the entry out.
+     * What "People…" (1.2.0) or "Categories…" (1.3.0) in the right-click menu does: opens that tag window for the item
+     * or the selection. Null leaves the entry out (the default).
      */
-    public void setOnPeople(Consumer<List<TimelineItem>> onPeople) {
-        this.onPeople = onPeople;
+    public void setOnTags(TagKind kind, Consumer<List<TimelineItem>> handler) {
+        if (handler == null) {
+            onTags.remove(kind);
+        } else {
+            onTags.put(kind, handler);
+        }
     }
 
     /**
@@ -849,8 +860,8 @@ public final class TimelineView extends StackPane {
                 case DELETE_PERMANENTLY -> removing.add(entry);
                 default -> settings.add(entry);
             }
-            if ((action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) && onPeople != null) {
-                settings.add(peopleItem(chosen));
+            if (action == ItemAction.FAVORITE || action == ItemAction.UNFAVORITE) {
+                settings.addAll(tagItems(chosen));
             }
         }
         List<MenuItem> selecting = List.of(

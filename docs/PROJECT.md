@@ -126,6 +126,16 @@ Trash
 
 ---
 
+## People and Categories (manual tags)
+
+People (1.2.0) and Categories (1.3.0: Nature, Documents, Portraits...) are tags the user puts on photos and videos by
+hand; Prismo never looks at the pictures, and the tags live only in Prismo's database (the files are never changed).
+Both work the same way, with one shared window, page and filter: right-click an item, a selection or a folder ›
+People… / Categories…, tick (only adds unless you untick), type a new name to make one. Each has its own Collections
+page (cards with the newest item as cover; Rename, Delete) and its own filter next to Types (all of them together,
+any of them, or nothing tagged yet). An item can have both people and categories; the two filters together show what
+matches both.
+
 ## Albums
 
 - Auto-generated per media-containing folder (Downloads, WhatsApp, Screenshots, Camera, etc.)
@@ -176,8 +186,11 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 
 - **Previous / next:** round buttons at the left and right edges (photos and videos; hidden at the ends of the list), Page Up / Page Down for both, Left / Right for photos. In a video Left / Right skip 5 s instead, and the video bar has its own previous / next buttons next to Play. Moving on saves the video's watch position first.
 - **Full screen** (F11, the button, or a double-click on a video): the top bar, the edge buttons, the video controls and the pointer fade out after 2.5 s without mouse movement (not while a menu is open or the pointer rests on a control) and come back when the mouse moves. The filmstrip does the same in full screen; in a window it always stays (1.2.1).
-- **Slideshow** (1.2.1): only the photos show, in a window and in full screen: no bars, no filmstrip, no pointer, and moving the mouse brings nothing back. Any click or key press only stops the slideshow (the press is eaten: it doesn't also step, open a menu or leave full screen); then the controls come back.
-- **Seek bar** (1.2.1): hovering shows a preview picture of that moment with its time in a see-through glass card (rounded, thicker at the bottom where the time is) that follows the mouse. The pictures (up to 100 per video, key frames only) are made in the background by the bundled `ffmpeg` when the video opens, spread over the whole video first and then filled in; until one is ready the card shows only the time. A click just above or below the thin bar seeks too, and the bar is thicker under the pointer.
+- **Slideshow** (1.2.1): only the photos show, in a window and in full screen: no bars, no filmstrip, no pointer, and moving the mouse brings nothing back. Any click or key press only stops the slideshow (the press is eaten: it doesn't also step, open a menu or leave full screen); then the controls come back. Since 1.3.0 a slideshow started in a window goes full screen, and the window comes back when it stops (one started in full screen stays there).
+- **Seek bar** (1.2.1): hovering shows a preview picture of that moment with its time in a see-through glass card (rounded, thicker at the bottom where the time is) that follows the mouse. The pictures (up to 100 per video, key frames only) are made in the background by the bundled `ffmpeg` when the video opens, spread over the whole video first and then filled in; until one is ready the card shows only the time. A click just above or below the thin bar seeks too, and the bar is thicker under the pointer. Since 1.3.0: the picture under the mouse is made first (and shows even while the mouse rests), long videos get one picture per 10 s (up to 400), short clips (under 2 minutes) the exact frame, and the card is at most 160 x 90 for wide videos and 120 px tall for tall ones.
+- **Rotate** (R): a quarter turn of the view, for photos and (1.3.0) videos; the file is never changed, and the next item starts upright. The seek-bar preview turns with the video.
+- **Drag out** (1.3.0): drag a photo that isn't zoomed in, a video, or a filmstrip tile into another app or a folder, as from the grid (a copy only). Zoomed in, dragging pans as before.
+- **Sound device** (1.3.0): when there is more than one, the video's sound menu and right-click › Audio › Play sound on choose where the sound plays. The choice lasts until Prismo closes; each start uses the system default device again.
 - **Background:** pitch black around photos and videos in every look (1.2.1).
 - **Info panel** (the metadata panel above, built): the Info button in the viewer's top bar, the I key, or "Info" in the right-click menus (on a grid, I or Alt+Enter opens the viewer with the panel). Closed with the button, I or Esc. Shows name, folder, type, size, dimensions (photos), dates, camera, full path; for photos also exposure, ISO, aperture, focal length, lens, flash and GPS ("lat, long") from EXIF; for videos length, formats (codecs), resolution, frame rate, sound tracks and subtitle tracks; a RAW file also says its picture is the preview stored inside it (the raw data is not developed). Values the file doesn't have are left out. It replaces a separate Properties window built earlier in this round.
 - **Right-click menus** (grids and viewer) show each item's shortcut: Open, favorite / hide / Hide in File Explorer / Trash, Show in folder, Open with default app, Copy, Info. On an open video also Play / Pause, skips, previous / next, Subtitles, Sound track, Speed, Loop, Mute, Full screen; on a photo Slideshow, Rotate, zoom, previous / next, Full screen. The viewer's "More" button has the file items.
