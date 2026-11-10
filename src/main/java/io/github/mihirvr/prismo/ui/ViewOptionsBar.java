@@ -187,12 +187,23 @@ public final class ViewOptionsBar extends HBox {
                 }
                 options.set(options.get().withTypes(now));
             });
-            CustomMenuItem item = new CustomMenuItem(box, false);
-            item.getStyleClass().add("type-item");
-            items.add(item);
+            items.add(tickItem(box));
         }
         typesButton.getItems().setAll(items);
         showChosenTypes();
+    }
+
+    /**
+     * A menu row with a tick box that stays open when used (2026-11-10). The mouse ticks the box itself, as before;
+     * Enter and Space on the highlighted row fire the row (a mouse click on the box does not), and the row's action
+     * flips the box. Before, the row had no action, so Enter and Space did nothing.
+     */
+    private static CustomMenuItem tickItem(CheckBox box) {
+        box.setFocusTraversable(false);
+        CustomMenuItem item = new CustomMenuItem(box, false);
+        item.getStyleClass().add("type-item");
+        item.setOnAction(_ -> box.setSelected(!box.isSelected()));
+        return item;
     }
 
     /** The button text and the ticks follow the chosen types, without rebuilding the (maybe open) menu. */
@@ -259,9 +270,7 @@ public final class ViewOptionsBar extends HBox {
         untagged.setSelected(chosen.untagged());
         untagged.selectedProperty().addListener((_, _, on) ->
                 options.set(options.get().withTags(options.get().tags(kind).withUntagged(on))));
-        CustomMenuItem untaggedItem = new CustomMenuItem(untagged, false);
-        untaggedItem.getStyleClass().add("type-item");
-        items.add(untaggedItem);
+        items.add(tickItem(untagged));
         if (every.isEmpty()) {
             MenuItem none = new MenuItem(kind.noneYet());
             none.setDisable(true);
@@ -281,9 +290,7 @@ public final class ViewOptionsBar extends HBox {
                 untagged.setSelected(options.get().tags(kind).untagged());
             });
             boxes.add(box);
-            CustomMenuItem item = new CustomMenuItem(box, false);
-            item.getStyleClass().add("type-item");
-            items.add(item);
+            items.add(tickItem(box));
         });
         untagged.selectedProperty().addListener((_, _, on) -> {
             if (on) {

@@ -27,6 +27,8 @@
     -prismo-hover: #eceef3;
     -prismo-pressed: #e1e4eb;
     -prismo-tile: #e3e5eb;
+    -prismo-thumb-edge-out: rgba(20, 24, 40, 0.24);
+    -prismo-thumb-edge-in: rgba(20, 24, 40, 0.10);
     -prismo-tile-failed: #f1dede;
     -prismo-favorite: #ff3d6e;
     -prismo-warning: #b4541f;
@@ -41,6 +43,17 @@
     -prismo-tooltip-bg: #1f2433;
     -prismo-tooltip-text: #ffffff;
     -prismo-card: #ffffff;       /* rows and cards inside dialogs */
+    /* Glass (UI overhaul): see-through bars over the main window's colour background (ui/Backdrop). */
+    -prismo-glass: rgba(255, 255, 255, 0.28);
+    -prismo-glass-line: rgba(255, 255, 255, 0.70);
+    -prismo-glass-edge: rgba(20, 24, 40, 0.10);
+    -prismo-glass-button: rgba(255, 255, 255, 0.40);
+    -prismo-glass-hover: rgba(255, 255, 255, 0.65);
+    -prismo-glass-track: rgba(20, 24, 40, 0.22);
+    -prismo-glass-deep: rgba(232, 236, 246, 0.55);
+    -prismo-menu-glass: rgba(250, 251, 255, 0.62); /* over the frost (ui/Frost.java) */
+    -prismo-glass-thumb: #5d6274;
+    -prismo-viewer-panel: rgba(250, 251, 255, 0.94);
     -prismo-viewer-bg: #000000;  /* 1.2.1: pitch black in every theme (immersive; no grey edges round a photo or video) */
 
     /* Modena's names, so standard controls (lists, menus, text fields, check boxes) use the same colours. */
@@ -131,9 +144,18 @@
     -fx-background-insets: 0, 2;
 }
 
-.combo-box-base > .arrow-button {
+/* Drop-downs hold their text in an inner box that JavaFX pads by about 4 px all round, which made them 8 px taller
+ * than plain buttons (38 vs 30) and pushed the text right. The button's own padding is enough (2026-11-10). The
+ * viewer's menu buttons keep their own look (only the Filters bar's menu buttons). */
+.combo-box-base > .list-cell,
+.view-options-bar .menu-button > .label {
+    -fx-padding: 0;
+}
+
+.combo-box-base > .arrow-button,
+.view-options-bar .menu-button > .arrow-button {
     -fx-background-color: transparent;
-    -fx-padding: 0 8 0 4;
+    -fx-padding: 0 0 0 10;
 }
 
 .combo-box-base > .arrow-button > .arrow {
@@ -169,6 +191,8 @@
     -fx-background-insets: 0, 1;
     -fx-background-radius: 7, 6;
     -fx-padding: 5 10 5 10;
+    /* As tall as the buttons beside it (Ignored folders: the box was 27 px, Add and Choose folder 30). */
+    -fx-min-height: 30;
 }
 
 .text-field:focused {
@@ -207,9 +231,11 @@
 /* Menus, drop-down lists and tooltips: rounded cards. */
 .context-menu,
 .combo-box-popup > .list-view {
-    -fx-background-color: -prismo-border, -prismo-surface;
+    /* glass: a see-through card with a thin light rim (menus are their own small windows, so the app shows
+       through them, not the colour background) */
+    -fx-background-color: -prismo-glass-edge, -prismo-menu-glass;
     -fx-background-insets: 0, 1;
-    -fx-background-radius: 8, 7;
+    -fx-background-radius: 10, 9;
     -fx-padding: 4;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.18), 12, 0, 0, 3);
 }
@@ -545,6 +571,21 @@
     -fx-background-color: transparent;
 }
 
+/* 2026-11-10: a 2 px edge just inside every thumbnail (Grid, Collections, album covers), so a picture the same colour
+   as the page still shows where it ends. Two lines, strong outside and soft inside, read as a small shadow; plain
+   borders, no blur effect, so it costs nothing while scrolling. Dark looks use a faint light line (a dark line
+   vanishes on a dark page). Not on the viewer's filmstrip. */
+.thumb-tile .thumb-edge {
+    -fx-border-color: -prismo-thumb-edge-out, -prismo-thumb-edge-in;
+    -fx-border-width: 1, 1;
+    -fx-border-insets: 0, 1;
+    -fx-border-radius: 6, 5;
+}
+
+.filmstrip .thumb-tile .thumb-edge {
+    -fx-border-color: transparent;
+}
+
 /* Darkens a little: shows on light and dark pictures alike. */
 .thumb-tile:hover .thumb-hover {
     -fx-background-color: rgba(0, 0, 0, 0.14);
@@ -852,7 +893,8 @@
 
 /* --- Collections: the page list on the left, a header row over each page --- */
 
-.collections-pages,
+/* The page list sits in a side panel (2026-11-10) with its fold button on top; the panel carries the background. */
+.collections-side,
 .collections .tree-view {
     -fx-background-color: -prismo-surface;
     -fx-background-insets: 0;
@@ -860,8 +902,35 @@
     -fx-font-size: 13px;
 }
 
-.collections-pages {
+.collections-side {
+    -fx-padding: 0;
     -fx-border-color: transparent -prismo-border transparent transparent;
+}
+
+.collections-pages {
+    -fx-background-color: transparent;
+    -fx-background-insets: 0;
+    -fx-padding: 0 8 8 8;
+}
+
+/* The fold button on the left, its icon in line with the page icons below (list 8 + cell 10 = 12 + 1 px border + 5). */
+.collections-side-top {
+    -fx-padding: 8 8 4 12;
+    -fx-alignment: center-left;
+}
+
+.collections-side .side-toggle,
+.collections-header .tree-toggle {
+    -fx-padding: 5;
+}
+
+/* Folded: the same padding as open, so nothing moves while it folds (Mihir: icons stay put, the text goes, then
+ * it closes); the strip is just wide enough for the icons to end up centred in it (CollectionsPage, 54 px). */
+
+.collections-pages .scroll-bar:horizontal {
+    -fx-opacity: 0;
+    -fx-pref-height: 0;
+    -fx-max-height: 0;
 }
 
 .collections-pages .list-cell,
@@ -1464,22 +1533,28 @@
     -fx-padding: 4;
 }
 
+/* The dot is the ring's own third layer (2026-11-10), not the separate .dot box inside it: JavaFX snapped that box
+ * to whole pixels on its own while the ring was drawn where the text put it, so the dot sat a pixel low and right
+ * (Mihir's screenshot). Layers of one shape are always concentric. The .dot box only gives the size: 4+8+4 = 16. */
 .choice-card .radio-button:selected > .radio {
-    -fx-background-color: -prismo-accent, -prismo-surface;
+    -fx-background-color: -prismo-accent, -prismo-surface, -prismo-accent;
+    -fx-background-insets: 0, 1.5, 4;
 }
 
-.choice-card .radio-button > .radio > .dot {
+.choice-card .radio-button > .radio > .dot,
+.choice-card .radio-button:selected > .radio > .dot {
     -fx-background-color: transparent;
     -fx-background-radius: 1em;
-    -fx-padding: 3.5;
-}
-
-.choice-card .radio-button:selected > .radio > .dot {
-    -fx-background-color: -prismo-accent;
+    -fx-padding: 4;
 }
 
 .choice-card .radio-button:focus-visible > .radio {
     -fx-background-color: -prismo-accent, -prismo-accent-tint;
+}
+
+.choice-card .radio-button:selected:focus-visible > .radio {
+    -fx-background-color: -prismo-accent, -prismo-accent-tint, -prismo-accent;
+    -fx-background-insets: 0, 1.5, 4;
 }
 
 /* A switch on a card ("Show files hidden in File Explorer"): a square box, filled with the accent when on. */
@@ -1687,7 +1762,7 @@
 }
 
 .date-jump-weekday {
-    -fx-min-width: 36;
+    -fx-min-width: 26;
     -fx-alignment: center;
     -fx-font-size: 11px;
     -fx-text-fill: -prismo-text-muted;
@@ -1701,13 +1776,21 @@
 }
 
 .date-jump-day {
-    -fx-min-width: 36;
-    -fx-min-height: 32;
+    -fx-min-width: 26;
+    -fx-min-height: 24;
+    -fx-pref-width: 26;
+    -fx-pref-height: 24;
+    -fx-padding: 0;
+    -fx-font-size: 11px;
 }
 
 .date-jump-month {
-    -fx-min-width: 64;
-    -fx-min-height: 40;
+    -fx-min-width: 50;
+    -fx-min-height: 32;
+    -fx-pref-width: 50;
+    -fx-pref-height: 32;
+    -fx-padding: 0;
+    -fx-font-size: 12px;
 }
 
 .date-jump-cell:hover {
@@ -1759,4 +1842,443 @@
     -fx-background-color: transparent;
     -fx-background-insets: 0;
     -fx-padding: 0;
+}
+
+/* --- Glass (UI overhaul, step 1: the main window's bars and grid) ---
+ * The main window's root carries "glass": its background is painted by ui/Backdrop (soft colour blobs), and the
+ * areas on top are see-through, with a thin light line along their top edge and a faint line under them, like the
+ * website's glass. No blur pass: the blobs are soft already, so a see-through bar over them reads as frosted. */
+.glass,
+.glass .timeline-list {
+    -fx-background-color: transparent;
+}
+.glass .top-bar {
+    -fx-background-color: -prismo-glass;
+    -fx-background-insets: 0;
+    /* the light line is a 1 px border, not a layer under the glass (a layer would tint the see-through bar) */
+    -fx-border-color: -prismo-glass-line transparent transparent transparent;
+    -fx-border-width: 1 0 0 0;
+}
+.glass .view-options-bar {
+    -fx-background-color: -prismo-glass;
+    -fx-background-insets: 0;
+    -fx-border-color: transparent transparent -prismo-glass-edge transparent;
+}
+/* The thumbnail-size slider and other sliders on the bars: a track solid enough to see over any colour. */
+.glass .view-options-bar .slider > .track,
+.glass .settings-dialog .slider > .track {
+    /* Settings' "How much colour shows" too (2026-11-10: its plain border colour was hard to see in Light) */
+    -fx-background-color: -prismo-glass-track;
+}
+
+/* The name beside the app icon, in the logo's own lettering (dark letters here; theme-dark.css swaps in white). */
+.app-wordmark {
+    -fx-image: url("logo/prismo-word-light.png");
+}
+
+/* Glass buttons on the main window's bars: see-through, with the same light top line as the bars. Hover and
+ * pressed only make them a little more solid. */
+.glass .top-bar .button,
+.glass .top-bar .toggle-button,
+.glass .view-options-bar .button,
+.glass .view-options-bar .menu-button,
+.glass .view-options-bar .toggle-button,
+.glass .view-options-bar .combo-box-base,
+.glass .view-options-bar .choice-box {
+    -fx-background-color: -prismo-glass-button;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 8;
+}
+.glass .top-bar .button:hover,
+.glass .top-bar .toggle-button:hover,
+.glass .view-options-bar .button:hover,
+.glass .view-options-bar .menu-button:hover,
+.glass .view-options-bar .toggle-button:hover,
+.glass .view-options-bar .combo-box-base:hover,
+.glass .view-options-bar .choice-box:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+.glass .top-bar .toggle-button:selected {
+    -fx-background-color: -prismo-accent-tint;
+}
+/* The search box on the glass top bar: see-through like the buttons, a little more solid while typing. */
+.glass .top-bar .search-field {
+    -fx-background-color: -prismo-glass-edge, -prismo-glass-button;
+    -fx-background-insets: 0, 1;
+}
+.glass .top-bar .search-field:focused {
+    -fx-background-color: -prismo-accent, -prismo-glass-hover;
+}
+
+/* Glass on the Collections tab: the page list and the folder tree are see-through side panels, the pages on the
+ * right sit straight on the colour background (step 2). */
+.glass .split-pane,
+.glass .collections-placeholder {
+    -fx-background-color: transparent;
+}
+.glass .collections-side {
+    -fx-background-color: -prismo-glass;
+    -fx-background-insets: 0;
+}
+/* The folder tree: a full-height side panel, a shade deeper than the page list beside it. */
+.glass .collections .tree-view {
+    -fx-background-color: -prismo-glass-deep;
+    -fx-background-insets: 0;
+}
+.glass .collections-side {
+    -fx-border-color: transparent -prismo-glass-edge transparent transparent;
+}
+.glass .split-pane > .split-pane-divider {
+    -fx-background-color: -prismo-glass-edge;
+}
+.glass .collections-pages .list-cell:hover,
+.glass .collections .tree-view .tree-cell:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+/* The two fold buttons (page list, folder tree): the same glass buttons as on the bars above. */
+.glass .collections .side-toggle,
+.glass .collections .tree-toggle {
+    -fx-background-color: -prismo-glass-button;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 8;
+}
+.glass .collections .side-toggle:hover,
+.glass .collections .tree-toggle:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+
+
+/* The Grid / Collections switch on glass: one see-through pill; the chosen side softly tinted, not a box. */
+.glass .top-bar .tabs {
+    -fx-background-color: -prismo-glass-button;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 9;
+    -fx-background-radius: 9;
+}
+.glass .top-bar .tabs .toggle-button {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-effect: null;
+}
+.glass .top-bar .tabs .toggle-button:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+.glass .top-bar .tabs .toggle-button:selected {
+    -fx-background-color: -prismo-accent-tint;
+}
+
+/* Settings on glass: a still copy of the colour background (SettingsDialog), the side list and the cards are
+ * see-through panels. */
+.glass .settings-dialog,
+.glass .settings-scroll,
+.glass .settings-scroll > .viewport {
+    -fx-background-color: transparent;
+}
+.glass .settings-nav {
+    -fx-background-color: -prismo-glass-deep;
+    -fx-padding: 20 12 20 12;
+    -fx-min-width: 216; /* room for the longest entry ("Keyboard shortcuts") next to the padding */
+    -fx-border-color: transparent -prismo-glass-edge transparent transparent;
+}
+.glass .choice-card {
+    -fx-background-color: -prismo-glass-button;
+    -fx-background-insets: 0;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 10;
+}
+.glass .choice-card:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+.glass .choice-card:selected,
+.glass .choice-card:selected:hover {
+    -fx-background-color: -prismo-accent, -prismo-accent-tint;
+    -fx-background-insets: 0, 2;
+}
+
+/* Tooltips: small glass cards, like the menus. */
+.tooltip {
+    -fx-background-color: -prismo-glass-edge, -prismo-menu-glass;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 7, 6;
+    -fx-text-fill: -prismo-text;
+}
+.tooltip.seek-tip {
+    -fx-background-color: transparent;
+}
+
+/* Buttons inside the glass dialogs (Settings: Close, and the rest): see-through like the bars' buttons. */
+/* The Performance page's drop-down too (2026-11-10: it was the one solid box among glass buttons). */
+.glass .settings-dialog .button,
+.glass .settings-dialog .combo-box-base {
+    -fx-background-color: -prismo-glass-button;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 8;
+}
+.glass .settings-dialog .button:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+
+/* The viewer (pitch black in every look): its top bar, the video controls and the filmstrip strip are dark glass
+ * bands with a thin light top edge instead of plain shaded fades; buttons get the same edge; the Info panel is a
+ * glass card. */
+.viewer-top-bar {
+    -fx-background-color: rgba(16, 18, 26, 0.52);
+    -fx-border-color: transparent transparent rgba(255, 255, 255, 0.08) transparent;
+}
+.viewer-video-controls {
+    -fx-background-color: rgba(16, 18, 26, 0.52);
+    -fx-border-color: rgba(255, 255, 255, 0.12) transparent transparent transparent;
+}
+.filmstrip-band {
+    -fx-background-color: rgba(16, 18, 26, 0.46);
+    -fx-border-color: rgba(255, 255, 255, 0.10) transparent transparent transparent;
+}
+.viewer .button {
+    -fx-border-color: rgba(255, 255, 255, 0.20) rgba(255, 255, 255, 0.08) rgba(255, 255, 255, 0.08) rgba(255, 255, 255, 0.08);
+    -fx-border-radius: 6;
+}
+.viewer .info-panel {
+    /* follows the look (its text is dark in Light); nearly solid, because over the viewer's pure black a
+       see-through light card turns grey and its faint text gets hard to read */
+    -fx-background-color: -prismo-viewer-panel;
+    -fx-border-color: transparent transparent transparent -prismo-glass-edge;
+}
+
+/* Menus, drop-down lists, tooltips and the calendar are small windows whose root also gets the "root" style class,
+ * so the page colour above (.root) painted behind them and hid the glass. Their own window stays clear. */
+.root.popup {
+    -fx-background-color: transparent;
+}
+
+/* Every other dialog (Library folders, People / Categories, Rename, Move, questions): the window shows a still
+ * copy of the colour background (Appearance.matchOwner), the page is see-through, and lists, fields and buttons
+ * are glass like the main window's. */
+.root.glass,
+.glass.dialog-pane,
+.glass.dialog-pane > .button-bar > .container,
+.glass .dialog-pane > .content {
+    -fx-background-color: transparent;
+}
+.glass.dialog-pane .button,
+.glass.library-dialog .button,
+.glass.dialog-pane .list-view,
+.glass.dialog-pane .text-field {
+    -fx-background-color: -prismo-glass-edge, -prismo-glass-button;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 8, 7;
+}
+.glass.dialog-pane .button:hover,
+.glass.library-dialog .button:hover {
+    -fx-background-color: -prismo-glass-edge, -prismo-glass-hover;
+}
+.glass.dialog-pane .button:default,
+.glass.library-dialog .accent-button {
+    -fx-background-color: -prismo-accent;
+    -fx-text-fill: -prismo-on-accent;
+}
+.glass.dialog-pane .list-view .list-cell {
+    -fx-background-color: transparent;
+}
+.glass.dialog-pane .list-view .list-cell:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+.glass.dialog-pane .list-view .list-cell:selected {
+    -fx-background-color: -prismo-accent-tint;
+}
+/* Typing: an accent edge over the glass (2026-11-10: an accent layer under see-through glass turned the whole box
+ * solid blue, as in the main search box). */
+.glass.dialog-pane .text-field:focused {
+    -fx-background-color: -prismo-glass-hover;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-border-color: -prismo-accent;
+    -fx-border-radius: 8;
+}
+/* The People / Categories window's list: a glass panel like the dialog's other parts; the scroll box's inner area
+ * was JavaFX's solid dark field (2026-11-10). */
+.glass.dialog-pane .tag-list {
+    -fx-background-color: -prismo-glass-edge, -prismo-glass-button;
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 8, 7;
+    -fx-padding: 2;
+}
+.glass.dialog-pane .tag-list > .viewport {
+    -fx-background-color: transparent;
+}
+
+/* Library folders: each folder's row is a glass card. */
+.glass.library-dialog .library-row {
+    -fx-background-color: -prismo-glass-edge, -prismo-glass-button;
+}
+.glass.library-dialog .scroll-pane {
+    -fx-background-color: transparent;
+}
+/* A question dialog's title strip ("Rename …"): glass too, with a faint line under it. */
+.glass.dialog-pane > .header-panel {
+    -fx-background-color: -prismo-glass;
+    -fx-border-color: transparent transparent -prismo-glass-edge transparent;
+}
+/* List drop-downs (Timeline / Folders / All files, All media, the sort list): their rows painted the solid list
+ * colour over the glass card (odd rows too), so the card looked solid. Rows are clear; hover and the chosen row
+ * keep their soft tint (repeated here so they win over the :odd rule). */
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:odd {
+    -fx-background-color: transparent;
+}
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:hover,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet > .list-cell:filled:selected {
+    -fx-background-color: -prismo-accent-tint;
+}
+.combo-box-popup > .list-view > .virtual-flow,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container,
+.combo-box-popup > .list-view > .virtual-flow > .clipped-container > .sheet {
+    -fx-background-color: transparent;
+}
+
+/* Go to date, compact (2026-11-10): no tile behind each day, only the hover tint; tighter padding. */
+/* The day squares keep the bars' glass-button tile (a menu's styles inherit from the button that opened it); Mihir
+   liked that, only smaller (2026-11-10). */
+.context-menu .date-jump {
+    -fx-padding: 4 6 4 6;
+    -fx-spacing: 4;
+}
+.context-menu .date-jump-cells {
+    -fx-hgap: 1;
+    -fx-vgap: 1;
+}
+
+/* The size slider and the Settings colour slider: the knob in the track's own neutral tone, not accent blue. */
+.glass .view-options-bar .slider > .thumb,
+.glass .settings-dialog .slider > .thumb {
+    -fx-background-color: -prismo-glass-thumb;
+}
+/* Go to date: only days, months and years with photos get the glass tile; the others are a faint number with no
+ * box, so the dates you can jump to stand out and the grid stays calm (Mihir: the all-tiles grid looked janky). */
+.context-menu .date-jump-cells .date-jump-cell:disabled {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-opacity: 0.32;
+}
+/* Go to date: a smaller tile inside each cell (2 px in on every side); the number keeps its size. */
+.context-menu .date-jump-cells .date-jump-cell {
+    -fx-background-insets: 2;
+    -fx-border-insets: 2;
+    -fx-background-radius: 5;
+    -fx-border-radius: 5;
+}
+/* Go to date: the whole calendar is one menu row, so when it got focus or the pointer it took the row highlight
+ * (the accent tint) and turned solid navy. Never tint it; only its day / month / year cells react. The row sits in a
+ * box (MenuBox) inside the card, so "context-menu > ..." never matched: found with the probe, 2026-11-10. */
+.context-menu .custom-menu-item.date-jump-item,
+.context-menu .custom-menu-item.date-jump-item:focused,
+.context-menu .custom-menu-item.date-jump-item:hover,
+.context-menu .custom-menu-item.date-jump-item:focused:hover {
+    -fx-background-color: transparent;
+}
+
+/* Keyboard focus on glass (2026-11-10): the glass buttons replaced the stock focus outline, so Tab moved focus
+ * without showing where it was. An accent outline now marks the control Tab reached; only for the keyboard
+ * (:focus-visible), never after a mouse click. JavaFX counts a pseudo-class for less than a style class, so each
+ * rule names the same place as the glass rule it must beat (three classes), and sits last so a tie goes to it. */
+.glass .top-bar .button:focus-visible,
+.glass .top-bar .toggle-button:focus-visible,
+.glass .top-bar .tabs .toggle-button:focus-visible,
+.glass .view-options-bar .button:focus-visible,
+.glass .view-options-bar .menu-button:focus-visible,
+.glass .view-options-bar .toggle-button:focus-visible,
+.glass .view-options-bar .combo-box-base:focus-visible,
+.glass .view-options-bar .choice-box:focus-visible,
+.glass .collections .side-toggle:focus-visible,
+.glass .collections .tree-toggle:focus-visible,
+.glass .settings-dialog .button:focus-visible,
+.glass.dialog-pane .button:focus-visible,
+.glass.library-dialog .button:focus-visible {
+    -fx-border-color: -prismo-accent;
+}
+.glass .view-options-bar .slider:focus-visible > .thumb,
+.glass .settings-dialog .slider:focus-visible > .thumb {
+    -fx-background-color: -prismo-accent, -prismo-glass-thumb;
+    -fx-background-insets: -3, 0;
+}
+
+/* The search box's clear button (2026-11-10): the bars' glass-button rule reached it too and made it an oval tile
+ * with a border. It is a round 24 px button: clear until the mouse is over it, then a soft glass circle. Four classes,
+ * so it beats ".glass .top-bar .button" (and its :hover / :focus-visible). */
+.glass .top-bar .search-box .search-clear {
+    -fx-min-width: 24;
+    -fx-pref-width: 24;
+    -fx-max-width: 24;
+    -fx-min-height: 24;
+    -fx-pref-height: 24;
+    -fx-max-height: 24;
+    -fx-padding: 0;
+    -fx-background-color: transparent;
+    -fx-background-radius: 12;
+    -fx-border-color: transparent;
+    -fx-border-radius: 12;
+}
+.glass .top-bar .search-box .search-clear:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+
+/* The search box while typing (2026-11-10): an accent edge over the glass. It was an accent layer under a
+ * see-through glass layer, so the whole box turned solid blue. */
+.glass .top-bar .search-field:focused {
+    -fx-background-color: -prismo-glass-hover;
+    -fx-background-insets: 0;
+    -fx-background-radius: 16;
+    -fx-border-color: -prismo-accent;
+    -fx-border-radius: 16;
+}
+
+/* The note after the moving colours were switched to static because they slowed Prismo down (2026-11-10):
+ * a near-solid glass card bottom right over the grid, with Undo and OK. */
+.slow-note {
+    -fx-background-color: -prismo-menu-glass;
+    -fx-background-radius: 12;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 12;
+    -fx-padding: 14 16 12 16;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.30), 18, 0.15, 0, 4);
+}
+.slow-note > .label {
+    -fx-text-fill: -prismo-text;
+}
+.glass .slow-note .button {
+    -fx-background-color: -prismo-glass-button;
+    -fx-background-insets: 0;
+    -fx-background-radius: 8;
+    -fx-border-color: -prismo-glass-line -prismo-glass-edge -prismo-glass-edge -prismo-glass-edge;
+    -fx-border-radius: 8;
+    -fx-padding: 5 14 5 14;
+}
+.glass .slow-note .button:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+.glass .slow-note .button:focus-visible {
+    -fx-border-color: -prismo-accent;
+}
+
+.glass .settings-dialog .combo-box-base:hover {
+    -fx-background-color: -prismo-glass-hover;
+}
+.glass .settings-dialog .combo-box-base:focus-visible {
+    -fx-border-color: -prismo-accent;
+}
+
+/* One button height in dialogs (2026-11-10): Library folders had Add folder 32 px, Close and Remove 27; the main
+ * window's are 30. The main action keeps its colour, not extra height. */
+.glass.library-dialog .button,
+.glass.dialog-pane .button,
+.glass .settings-dialog .button {
+    -fx-min-height: 30;
+}
+.glass.library-dialog .accent-button {
+    -fx-padding: 5 14 5 14;
 }

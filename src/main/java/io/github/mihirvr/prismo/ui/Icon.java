@@ -105,7 +105,12 @@ public enum Icon {
     ARROW_UP("M12 19V5M6 11L12 5L18 11"),
     /** 1.3.0: Categories (the Collections page, the menu entry): a label tag with its hole. */
     CATEGORY("M3.5 5.5A2 2 0 0 1 5.5 3.5H11.3L20.2 12.4A1.5 1.5 0 0 1 20.2 14.5L14.5 20.2A1.5 1.5 0 0 1 12.4 20.2"
-            + "L3.5 11.3ZM8 8H8.01");
+            + "L3.5 11.3ZM8 8H8.01"),
+    /** 2026-11-10: a window with a strip down its left side: show or hide the Collections page list. */
+    SIDEBAR("M5 4.5H19A1.5 1.5 0 0 1 20.5 6V18A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Z"
+            + "M9.5 4.5V19.5"),
+    /** 2026-11-10: a small tree of three boxes: show or hide the Collections folder tree. */
+    FOLDER_TREE("M4 4H9V8H4ZM12 10.5H20V14H12ZM12 17H20V20.5H12ZM6.5 8V18.75H12M6.5 12.25H12");
 
     /** The drawing grid's side: every path above is drawn inside 0..24. */
     public static final double GRID = 24;
@@ -148,8 +153,11 @@ public enum Icon {
         if (filled) {
             shape.getStyleClass().add("icon-filled");
         }
+        // The full grid, so every icon takes the same size x size box and lines up with the others. Transparent, not
+        // null: a shape with no fill and no outline counts as empty, so each icon was only as wide as its drawing
+        // (13 px for most, 15 for the crossed-out eye) and the text beside it moved (2026-11-10).
         Rectangle grid = new Rectangle(GRID, GRID);
-        grid.setFill(null);
+        grid.setFill(javafx.scene.paint.Color.TRANSPARENT);
         grid.setMouseTransparent(true);
         Group drawing = new Group(grid, shape);
         drawing.getTransforms().add(new Scale(size / GRID, size / GRID));

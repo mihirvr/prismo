@@ -37,15 +37,21 @@ public final class DateJump {
     private final ContextMenu menu = new ContextMenu();
     private final Label title = new Label();
     private final GridPane cells = new GridPane();
-    /** The month on show in the day view; its year in the month view. */
+    private final Set<Integer> years = new HashSet<>();
+    /** The month on show in the day view; its year in the month view; its twelve-year page in the year view. */
     private YearMonth shown;
-    private boolean monthView;
+    /** Days, then (title click) the year's months, then (title click) the years, twelve at a time. */
+    private enum View { DAYS, MONTHS, YEARS }
+
+    private View view = View.DAYS;
+    private static final int YEARS_PER_PAGE = 12;
 
     private DateJump(TimelineView grid) {
         this.grid = grid;
         this.days = grid.daysWithItems();
         for (LocalDate day : days) {
             months.add(YearMonth.from(day));
+            years.add(day.getYear());
         }
         LocalDate top = grid.dayAtTop();
         shown = YearMonth.from(top == null ? LocalDate.now() : top);
@@ -61,7 +67,11 @@ public final class DateJump {
         titleButton.setGraphic(title);
         titleButton.getStyleClass().add("date-jump-title");
         titleButton.setOnAction(_ -> {
-            monthView = !monthView;
+            view = switch (view) {
+                case DAYS -> View.MONTHS;
+                case MONTHS -> View.YEARS;
+                case YEARS -> View.DAYS;
+            };
             draw();
         });
         Region left = new Region();
@@ -93,16 +103,20 @@ public final class DateJump {
     }
 
     private void move(int step) {
-        shown = monthView ? shown.plusYears(step) : shown.plusMonths(step);
+        shown = switch (view) {
+            case DAYS -> shown.plusMonths(step);
+            case MONTHS -> shown.plusYears(step);
+            case YEARS -> shown.plusYears((long) step * YEARS_PER_PAGE);
+        };
         draw();
     }
 
     private void draw() {
         cells.getChildren().clear();
-        if (monthView) {
-            drawMonths();
-        } else {
-            drawDays();
+        switch (view) {
+            case DAYS -> drawDays();
+            case MONTHS -> drawMonths();
+            case YEARS -> drawYears();
         }
     }
 
@@ -139,6 +153,22 @@ public final class DateJump {
             });
             int at = month.ordinal();
             cells.add(cell, at % 4, at / 4);
+        }
+    }
+
+    // Twelve years in a 4 x 3 grid; a year with photos opens its months.
+    private void drawYears() {
+        int first = shown.getYear() - Math.floorMod(shown.getYear(), YEARS_PER_PAGE);
+        title.setText(first + " \u2013 " + (first + YEARS_PER_PAGE - 1));
+        for (int i = 0; i < YEARS_PER_PAGE; i++) {
+            int year = first + i;
+            Button cell = cellButton(Integer.toString(year), years.contains(year), "date-jump-month");
+            cell.setOnAction(_ -> {
+                shown = YearMonth.of(year, shown.getMonth());
+                view = View.MONTHS;
+                draw();
+            });
+            cells.add(cell, i % 4, i / 4);
         }
     }
 

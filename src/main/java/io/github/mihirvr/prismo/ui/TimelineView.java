@@ -211,6 +211,15 @@ public final class TimelineView extends StackPane {
         });
         addEventFilter(MouseEvent.MOUSE_PRESSED, _ -> requestFocus());
         addEventFilter(KeyEvent.KEY_PRESSED, this::onKey);
+        // The menu key and Shift+F10 (2026-11-10): the request comes to the grid (it has the keyboard), not to a
+        // tile, so the highlighted photo's menu opens just under its tile, as a right-click on it would.
+        // Known limit on Windows: after Shift+F10, Windows' own F10 menu mode keeps the next key (one Esc frees
+        // it); the menu key has no such problem. Using the key event up in JavaFX does not stop Windows.
+        setOnContextMenuRequested(event -> {
+            if (event.isKeyboardTrigger() && showMenuForFocused()) {
+                event.consume();
+            }
+        });
         // After a rebuild the new rows only have positions after the next layout pass, so the "keep the
         // focused photo in view" scroll runs from the scene's post-layout hook, not straight away.
         sceneProperty().addListener((_, old, scene) -> {
@@ -737,6 +746,22 @@ public final class TimelineView extends StackPane {
         } else if (at > 0) {
             moveFocus(items.get(at - 1).ref().id());
         }
+    }
+
+    /** The highlighted photo's menu, just under its tile (the menu key, Shift+F10); false if no tile shows it. */
+    private boolean showMenuForFocused() {
+        for (javafx.scene.Node node : new java.util.ArrayList<>(lookupAll(".thumb-tile"))) {
+            if (node instanceof ThumbnailTile tile && tile.isVisible() && tile.ref() != null
+                    && tile.ref().id() == focusedId) {
+                javafx.geometry.Bounds at = tile.localToScreen(tile.getBoundsInLocal());
+                if (at == null) {
+                    return false;
+                }
+                showMenu(tile, at.getMinX() + at.getWidth() / 2, at.getMinY() + at.getHeight() / 2);
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

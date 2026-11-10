@@ -82,6 +82,7 @@ public final class Appearance {
      * new one each time).
      */
     public static void matchOwner(Scene dialog, Window owner) {
+        EnterKey.install(dialog); // every dialog: Enter presses the focused button (2026-11-10)
         Scene ownerScene = owner == null ? null : owner.getScene();
         if (ownerScene == null) {
             return;
@@ -90,6 +91,14 @@ public final class Appearance {
         Runnable copy = () -> {
             dialog.getPreferences().setColorScheme(ownerScene.getPreferences().getColorScheme());
             dialog.getStylesheets().setAll(ownerScene.getStylesheets());
+            // Glass: the dialog's window shows a still copy of the owner's colour background, and its page is
+            // see-through (style class "glass", prismo.css). A dialog over a window without one keeps its look.
+            Backdrop.of(ownerScene).ifPresent(backdrop -> {
+                dialog.setFill(backdrop.stillFill());
+                if (!dialog.getRoot().getStyleClass().contains("glass")) {
+                    dialog.getRoot().getStyleClass().add("glass");
+                }
+            });
         };
         copy.run();
         InvalidationListener follow = _ -> copy.run();

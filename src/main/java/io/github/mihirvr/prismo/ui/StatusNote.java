@@ -1,6 +1,8 @@
 package io.github.mihirvr.prismo.ui;
 
 import javafx.animation.PauseTransition;
+import javafx.beans.property.ReadOnlyBooleanProperty;
+import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.geometry.Pos;
 import javafx.scene.control.Label;
 import javafx.util.Duration;
@@ -24,6 +26,7 @@ public final class StatusNote extends Label {
     private final State state = new State();
     private final PauseTransition showProgress = new PauseTransition(PROGRESS_DELAY);
     private final PauseTransition endMessage = new PauseTransition(MESSAGE_TIME);
+    private final ReadOnlyBooleanWrapper working = new ReadOnlyBooleanWrapper();
 
     public StatusNote() {
         getStyleClass().add("status-note");
@@ -42,8 +45,17 @@ public final class StatusNote extends Label {
         show();
     }
 
+    /**
+     * True while work runs (indexing, thumbnails), from its first report, before the note itself shows (2026-11-10:
+     * the colour background stays still meanwhile).
+     */
+    public ReadOnlyBooleanProperty workingProperty() {
+        return working.getReadOnlyProperty();
+    }
+
     /** Work running now, or null when it is done. */
     public void progress(String text) {
+        working.set(text != null);
         if (state.progress(text)) {
             showProgress.playFromStart();
         } else if (text == null) {

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.mihirvr"
-version = "1.3.1"
+version = "1.3.2"
 
 java {
     toolchain {
@@ -103,6 +103,9 @@ val isWindows = nativePlatform.startsWith("windows")
 val runtimeModules = listOf(
     "java.base", "java.desktop", "java.logging", "java.management", "java.naming", "java.sql", "java.xml",
     "jdk.unsupported", "javafx.controls",
+    // The whole computer's CPU use (com.sun.management.OperatingSystemMXBean), so the colour background moves
+    // only when the computer is not busy (2026-11-10). jdeps can't see it: it is read through a cast.
+    "jdk.management",
 )
 
 // JavaFX's jmods (jlink needs them; Maven Central has only jars), from Gluon, checked against the

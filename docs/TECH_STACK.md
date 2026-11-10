@@ -271,7 +271,42 @@ The fingerprint first planned here (SHA-256 of the first and last 64 KiB, stored
 - **App icon:** the logo in 9 sizes (16–256 px, `ui/icon/`) on every window (`Stage.getIcons()`); Windows picks the size it needs for the title bar and the taskbar. The installer's `.ico` is made from them at build time (#10).
 - **Window place** (`ui/WindowPlacement`): the normal (not maximised) position and size plus "maximised" are saved when Prismo closes and used at start. Before use the place is fitted to today's screens (the screen it overlaps most, shrunk and moved fully onto it); a place on no screen at all is dropped and the window opens centred. Minimum size 760 × 480.
 - **Dialogs fit the screen** (`ui/DialogPlacement`): at most the usable area of the owner's screen (without the taskbar) less a margin, centred on the owner, content in a `ScrollPane` when taller. Built after the Settings window once opened taller than the screen (its cards held wrapping text in toggle buttons, which measured one word per line).
-- **Settings** are rows in the `settings` table (key → text): `appearance.theme`, `hidden.mode`, `hidden.show_os_hidden` (saved when changed); `timeline.thumbnail_size`, `window.placement`, `video.volume`, `video.muted`, `video.speed` (saved when the app closes); `video.subtitle_background`, `video.audio_language`, `video.subtitle_language` (P8, saved when changed).
+- **The colour look (1.3.2):**
+  - `ui/Backdrop` is the main window's (and Settings') background. JavaFX has no pixel shaders, so the website's
+    gradient formula (`frontend/src/Gradient.jsx`: noise warping noise over the logo's colours) runs in Java on a
+    small picture (about 112 px wide) on a background thread, then the website's CSS filters by hand (zoom, a blur as
+    three box blurs, saturation, the light or dark veil); an `ImageView` scales it up smoothly. Moving = one picture
+    about every 100 ms from a plain `ScheduledExecutorService` + `Platform.runLater`, never a JavaFX animation (any
+    running animation wakes JavaFX 60 times a second for the whole window). Time only moves on while it moves, so a
+    pause never jumps. The still picture is the most colourful of 16 moments (hue slices covered, then saturation),
+    the same every time, so the main window and Settings match.
+  - `ui/MotionRules` (pure, unit-tested) decides moving or still, with the reason shown in Settings; `ui/BackdropMotion`
+    feeds it: the "Keep it static" switch, the status note's work signal (`StatusNote.workingProperty`), the viewer,
+    the window (minimised, any app window active), and every 2 s on a timer thread the whole computer's CPU use
+    (`com.sun.management.OperatingSystemMXBean.getCpuLoad`, in `jdk.management`, which is why that module is in the
+    jlink runtime) and the battery (`platform/PowerStatus`: Windows `GetSystemPowerStatus` through the FFM API, Linux
+    `/sys/class/power_supply`). Starting needs a quieter CPU than staying (50 % vs 85 %), so it doesn't flick on and
+    off. Each moving picture's drawing time and its wait for the JavaFX thread are measured (after 20 untimed warm-up
+    pictures); too slow or too laggy = "Keep it static" is ticked once a session and a note (Undo / OK) says so.
+  - Glass is CSS: see-through looked-up colours per look (`-prismo-glass`, `-prismo-glass-button`, `-prismo-menu-glass`
+    …). Popups (menus, lists, tooltips) got the page colour through `.root`, so `.root.popup` is transparent.
+    Dialogs get the background's current still picture as their scene fill (`Appearance.matchOwner`).
+  - **Frosted menus** (`ui/Frost`): a menu is its own small window and can't blur what is behind it, so when any menu or
+    drop-down list opens, the part of the window under it is snapshotted once (`Node.snapshot` with a viewport, a
+    margin for the blur), blurred once (`GaussianBlur`), and laid under the menu's card with a rounded clip; a layer of
+    the card's own tint evens out bright or dark photos behind it, and right-click menus get more of it. Nothing runs
+    while the menu stays open.
+  - CSS lessons: a pseudo-class counts for less than a style class in JavaFX, so `.glass .x:focus-visible` loses to
+    `.glass .bar .x` (each focus rule names the same place); a shape with no fill and no stroke has empty bounds (the
+    icons' 24 × 24 grid square is filled transparent, so every icon takes its full square); a radio's dot drawn as a
+    separate child box was snapped to pixels apart from its ring (it is now a third background layer of the ring).
+- **Keyboard (1.3.2):** `ui/EnterKey` makes Enter press the focused button or open the focused drop-down (JavaFX fires
+  buttons only on Space); installed on the main window and, through `Appearance.matchOwner`, on every dialog. Menu
+  rows with a tick box fire their row on Enter / Space, so the row's action flips the box. The grid opens the
+  highlighted item's menu on a keyboard context-menu request (Menu key, Shift+F10). On Windows, Shift+F10 also starts
+  Windows' own F10 menu mode, which keeps the next key (one Esc frees it); using the key up in JavaFX doesn't stop it.
+- **Settings** are rows in the `settings` table (key → text): `appearance.theme`, `appearance.colours`,
+  `appearance.colourStrength`, `appearance.moving`, `collections.pages_open`, `collections.tree_open`, `hidden.mode`, `hidden.show_os_hidden` (saved when changed); `timeline.thumbnail_size`, `window.placement`, `video.volume`, `video.muted`, `video.speed` (saved when the app closes); `video.subtitle_background`, `video.audio_language`, `video.subtitle_language` (P8, saved when changed).
 
 ## The Windows Hidden mark
 

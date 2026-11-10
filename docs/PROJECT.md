@@ -115,6 +115,10 @@ Trash
 
 (Media Types is not a separate Collections entry — merged into Filters, available everywhere.)
 
+**1.3.2:** the page list folds to a strip of icons (its button at the top left; a page can still be picked, the name
+shows under the mouse) and the folder tree folds away with its own button left of the folder's name. The two are
+independent and both are remembered after a restart.
+
 ---
 
 ## Folder Explorer
@@ -358,6 +362,15 @@ This is deliberately *not* separate Workspaces/library profiles — that's a big
 - **Performance**: background indexing speed, CPU limit, memory limit
 
 **Built so far (pre-packaging work):** a Settings window (top-bar button, Ctrl+,) with **Appearance**: Light, Dark, AMOLED black (pure black for OLED screens) and Follow system (light or dark as Windows / the desktop is set, changing live); it applies at once, and on Windows the title bars follow it. On Windows also **Hidden items**: the "Show files hidden in File Explorer" switch and the hide mode (see Hidden Content System). The window fits the screen (scrolls inside if it would be taller).
+
+**1.3.2, the colour look:** the website's colour background behind the app, under glass bars, panels and dialogs;
+menus and drop-down lists are frosted glass. Settings › Appearance › Colours: on by default (off = the plain look),
+"How much colour shows" (0 to 100 %, 40 by default), and "Keep it static" (off by default: the colours move slowly).
+Even when moving is allowed, the colours stay still while indexing or thumbnails run (and a few seconds after), while
+the viewer is open, when the window is minimised or another window is active, on battery or battery saver, when the
+computer is busy, and on a computer with few cores or too slow to draw them; Settings says why. If the moving colours
+slow Prismo down (pictures too slow to draw, or the window lags), "Keep it static" is ticked by itself, once a session,
+with a note and Undo. AMOLED black stays pure black. A new install: Follow system, Colours on, moving.
 
 **Decided: every setting is kept after a restart.** Saved in the settings table: the look, the hide mode, the hidden-files switch, the thumbnail size, the main window's size and place (and whether it was maximised; a place that is no longer on any screen falls back to centred), and the video volume, mute and speed. Per-view choices (Filters, Sort, the open tab, "Include subfolders", the search text) are not settings and start fresh.
 

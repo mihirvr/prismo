@@ -64,9 +64,21 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.3.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.1 are described below). Windows first; the Linux package is an early preview.
+**Version 1.3.2** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.2 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.3.2:** a new look. The website's colour background now sits behind the app too, under see-through
+("glass") bars, panels, dialogs and Settings; menus and drop-down lists are frosted glass. The colours move slowly
+when Prismo is idle and stay still while photos are being found and thumbnails made, while a photo or video is open,
+when the window is minimised or in the background, on battery, and when the computer is busy. Settings › Appearance:
+Colours on or off, how much colour shows, and "Keep it static" (still colours, less CPU and battery). If the moving
+colours ever slow Prismo down, it switches to static by itself and says so (Undo puts them back). AMOLED black stays
+pure black. Collections: the page list folds to a strip of icons and the folder tree folds away, each with its own
+button, and both are remembered. Keyboard: you can see where Tab is, Enter presses the button or opens the drop-down
+it is on, tick boxes in menus work with Enter and Space, and the Menu key (or Shift+F10) opens an item's menu. Also:
+a thin edge around each thumbnail so a photo the colour of the page still shows where it ends, a year view in Go to
+date, and tidier alignment (radio dots, icons, button heights).
 
 **1.3.1:** the Filters bar fits a smaller window: the People and Categories buttons show their icon with a short
 text (All, a number, None; the tooltip says it in full), and when room runs out the word "Sort" steps aside first, then
@@ -164,6 +176,7 @@ next subtitles and Z / X for the delay.)
 | Ctrl+F or / | Search box |
 | Ctrl+1 / Ctrl+2 | Grid / Collections tab |
 | Ctrl+, | Settings |
+| Tab / Shift+Tab, then Enter | Move between buttons and boxes; Enter presses the button or opens the drop-down |
 | Ctrl + mouse wheel | Bigger / smaller thumbnails (on a grid) |
 | Alt+Left / Alt+Right, or the mouse's back / forward side buttons | Back / forward: the tab, Collections page, folder, album or search you were on before (like a web browser) |
 
@@ -173,6 +186,7 @@ next subtitles and Z / X for the delay.)
 |---|---|
 | Arrow keys | Move between items |
 | Enter | Open in the viewer |
+| Menu key or Shift+F10 | The item's menu, as a right-click |
 | Ctrl+D / Ctrl+H / Delete | Favorite / hide / move to Trash (on Hidden: unhide; on Trash: delete permanently, after asking) |
 | Ctrl+C | Copy the file (paste it in File Explorer or another app) |
 | F2 | Rename |

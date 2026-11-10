@@ -31,8 +31,14 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
+import javafx.animation.Animation;
+import javafx.animation.Interpolator;
+import javafx.animation.KeyFrame;
+import javafx.animation.KeyValue;
+import javafx.animation.Timeline;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanProperty;
 import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.beans.property.ReadOnlyObjectProperty;
@@ -61,6 +67,8 @@ import javafx.scene.shape.LineTo;
 import javafx.scene.shape.MoveTo;
 import javafx.scene.shape.PathElement;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
+import javafx.util.Duration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -162,6 +170,26 @@ public final class CollectionsPage extends BorderPane {
     private final Map<TagKind, TagPage> tagPages = new EnumMap<>(TagKind.class);
     private final Label placeholder = new Label();
     private final SplitPane folderSplit = new SplitPane();
+
+    /*
+     * Folding side panels (2026-11-10). The page list folds to a strip of icons (its button stays on top, so it opens
+     * again, and a page can still be picked). The tree's own button, over the grid, folds the tree. The two are
+     * independent (Mihir's ask) and both are kept across restarts (PrismoApp).
+     */
+    private static final double SIDE_WIDTH = 170;
+    /** List padding 8 + cell padding 10 + the 18 px icon + 10 + 8: the icons sit centred, where they were. */
+    private static final double SIDE_FOLDED_WIDTH = 54;
+    private static final Duration SLIDE = Duration.millis(180);
+    private static final javafx.css.PseudoClass FOLDED = javafx.css.PseudoClass.getPseudoClass("folded");
+    private final VBox side = new VBox();
+    private final Button sideToggle = new Button();
+    private final Button treeToggle = new Button();
+    private final BooleanProperty pagesOpen = new SimpleBooleanProperty(true);
+    private final BooleanProperty treeOpen = new SimpleBooleanProperty(true);
+    /** The tree's share of the Folders page, kept while it is folded (the user may have dragged the divider). */
+    private double treeShare = 0.28;
+    private Animation sideSlide;
+    private Animation treeSlide;
     private final StackPane gridHolder = new StackPane();
     private final ReadOnlyBooleanWrapper sortLocked = new ReadOnlyBooleanWrapper();
 
@@ -250,7 +278,24 @@ public final class CollectionsPage extends BorderPane {
         pages.getItems().setAll(Page.values());
         pages.getStyleClass().add("collections-pages");
         pages.setCellFactory(_ -> new PageCell());
-        pages.setPrefWidth(170);
+        VBox.setVgrow(pages, Priority.ALWAYS);
+        sideToggle.getStyleClass().addAll("icon-button", "side-toggle");
+        sideToggle.setGraphic(Icon.SIDEBAR.node(PAGE_ICON_SIZE));
+        sideToggle.setOnAction(_ -> pagesOpen.set(!pagesOpen.get()));
+        HBox sideTop = new HBox(sideToggle);
+        sideTop.getStyleClass().add("collections-side-top");
+        side.getStyleClass().add("collections-side");
+        side.getChildren().setAll(sideTop, pages);
+        side.setMinWidth(Region.USE_PREF_SIZE);
+        side.setMaxWidth(Region.USE_PREF_SIZE);
+        side.setPrefWidth(SIDE_WIDTH);
+        treeToggle.getStyleClass().addAll("icon-button", "tree-toggle");
+        treeToggle.setGraphic(Icon.FOLDER_TREE.node(PAGE_ICON_SIZE));
+        treeToggle.setOnAction(_ -> treeOpen.set(!treeOpen.get()));
+        tree.setMinWidth(0);
+        pagesOpen.addListener((_, _, open) -> foldSide(open));
+        treeOpen.addListener((_, _, open) -> foldTree(open));
+        foldTips();
         pages.getSelectionModel().select(Page.FOLDERS);
         pages.getSelectionModel().selectedItemProperty().addListener((_, _, page) -> {
             if (page != null) {
@@ -286,7 +331,7 @@ public final class CollectionsPage extends BorderPane {
         hint.getStyleClass().add("collections-hint");
         hint.setMinWidth(0); // a long folder path shortens (from the left), the title and checkbox don't
         recursive.setMinWidth(USE_PREF_SIZE);
-        setLeft(pages);
+        setLeft(side);
         visibleProperty().addListener((_, _, shown) -> {
             if (shown && stale) {
                 refresh();
@@ -319,6 +364,112 @@ public final class CollectionsPage extends BorderPane {
      */
     public void setTags(TagsUi tags) {
         tagPages.get(tags.kind()).tags = tags;
+    }
+
+    /** The page list open (true) or folded to icons. Kept across restarts. */
+    public BooleanProperty pagesOpenProperty() {
+        return pagesOpen;
+    }
+
+    /** The Folders page's folder tree open (true) or folded away. Kept across restarts. */
+    public BooleanProperty treeOpenProperty() {
+        return treeOpen;
+    }
+
+    /** Slides the page list open or folded (no slide while the page isn't on screen, e.g. at start). */
+    private void foldSide(boolean open) {
+        if (sideSlide != null) {
+            sideSlide.stop();
+            sideSlide = null;
+        }
+        foldTips();
+        double target = open ? SIDE_WIDTH : SIDE_FOLDED_WIDTH;
+        side.pseudoClassStateChanged(FOLDED, !open);
+        if (!onScreen()) {
+            side.setPrefWidth(target);
+            pages.refresh();
+            return;
+        }
+        Timeline slide = new Timeline(new KeyFrame(SLIDE,
+                new KeyValue(side.prefWidthProperty(), target, Interpolator.EASE_BOTH)));
+        sideSlide = slide;
+        pages.refresh(); // icons only while it slides: no names squeezed into a narrow list
+        slide.setOnFinished(_ -> {
+            if (sideSlide == slide) {
+                sideSlide = null;
+                pages.refresh();
+            }
+        });
+        slide.play();
+    }
+
+    /** Slides the folder tree in or out of the Folders page (straight away when it isn't on screen). */
+    private void foldTree(boolean open) {
+        foldTips();
+        if (getCenter() != folderSplit || folderSplit.getItems().isEmpty()) {
+            return; // not on the Folders page: showLayout puts the tree in or leaves it out
+        }
+        boolean shown = folderSplit.getItems().contains(tree);
+        Node right = folderSplit.getItems().get(folderSplit.getItems().size() - 1);
+        if (!open && shown && treeSlide == null) {
+            treeShare = folderSplit.getDividerPositions()[0];
+        }
+        stopTreeSlide();
+        shown = folderSplit.getItems().contains(tree);
+        if (open) {
+            if (!shown) {
+                folderSplit.getItems().setAll(tree, right);
+            }
+            if (!onScreen()) {
+                folderSplit.setDividerPositions(treeShare);
+                return;
+            }
+            folderSplit.setDividerPositions(0);
+            treeSlide = slideDivider(treeShare, null);
+        } else if (shown) {
+            if (!onScreen()) {
+                folderSplit.getItems().setAll(right);
+                return;
+            }
+            treeSlide = slideDivider(0, () -> folderSplit.getItems().setAll(right));
+        }
+    }
+
+    private Animation slideDivider(double to, Runnable then) {
+        Timeline slide = new Timeline(new KeyFrame(SLIDE, new KeyValue(
+                folderSplit.getDividers().get(0).positionProperty(), to, Interpolator.EASE_BOTH)));
+        slide.setOnFinished(_ -> {
+            if (treeSlide == slide) {
+                treeSlide = null;
+                if (then != null) {
+                    then.run();
+                }
+            }
+        });
+        slide.play();
+        return slide;
+    }
+
+    /** Ends a tree slide where it was going (the layout is being rebuilt, or the other way was asked). */
+    private void stopTreeSlide() {
+        if (treeSlide != null) {
+            Animation slide = treeSlide;
+            treeSlide = null;
+            slide.stop();
+            if (!treeOpen.get()) {
+                folderSplit.getItems().remove(tree);
+            }
+        }
+    }
+
+    private boolean onScreen() {
+        return getScene() != null && getScene().getWindow() != null && getScene().getWindow().isShowing()
+                && isVisible();
+    }
+
+    private void foldTips() {
+        sideToggle.setTooltip(new Tooltip(pagesOpen.get() ? "Fold the page list" : "Open the page list"));
+        treeToggle.setTooltip(new Tooltip(treeOpen.get() ? "Hide the folder tree" : "Show the folder tree"));
     }
 
     /** Folders' "Include subfolders" box; kept across restarts (P7). */
@@ -583,35 +734,53 @@ public final class CollectionsPage extends BorderPane {
         hint.setText(""); // the Folders page shows the folder's place here (load)
         switch (page) {
             case FOLDERS -> {
-                header.getChildren().addAll(title, hint, spacer, recursive);
-                folderSplit.getItems().setAll(tree, gridHolder);
-                folderSplit.setDividerPositions(0.28);
-                setCenter(new BorderPane(folderSplit, header, null, null, null));
+                header.getChildren().addAll(treeToggle, title, hint, spacer, recursive);
+                // The tree is a full-height side panel; the folder's name, place and the switch sit over the grid.
+                stopTreeSlide();
+                BorderPane right = headed(gridHolder, header);
+                if (treeOpen.get()) {
+                    folderSplit.getItems().setAll(tree, right);
+                    folderSplit.setDividerPositions(treeShare);
+                } else {
+                    folderSplit.getItems().setAll(right);
+                }
+                setCenter(folderSplit);
             }
             case ALBUMS -> {
                 if (openAlbum == null) {
                     header.getChildren().add(title);
-                    setCenter(new BorderPane(albumGrid, header, null, null, null));
+                    setCenter(headed(albumGrid, header));
                 } else {
                     header.getChildren().addAll(backToAlbums, title);
-                    setCenter(new BorderPane(gridHolder, header, null, null, null));
+                    setCenter(headed(gridHolder, header));
                 }
             }
             case PEOPLE, CATEGORIES -> {
                 TagPage tagPage = tagPages.get(page.tagKind());
                 if (openAlbum == null) {
                     header.getChildren().addAll(title, spacer, tagPage.add);
-                    setCenter(new BorderPane(tagPage.cards, header, null, null, null));
+                    setCenter(headed(tagPage.cards, header));
                 } else {
                     header.getChildren().addAll(tagPage.back, title);
-                    setCenter(new BorderPane(gridHolder, header, null, null, null));
+                    setCenter(headed(gridHolder, header));
                 }
             }
             default -> {
                 header.getChildren().addAll(title, hint);
-                setCenter(new BorderPane(gridHolder, header, null, null, null));
+                setCenter(headed(gridHolder, header));
             }
         }
+    }
+
+    /**
+     * A page: the header over the content. The header goes in first, so Tab reaches its buttons (the tree button,
+     * Back, New, Include subfolders) before the grid, top to bottom (2026-11-10).
+     */
+    private static BorderPane headed(Node content, Node header) {
+        BorderPane page = new BorderPane();
+        page.setTop(header);
+        page.setCenter(content);
+        return page;
     }
 
     /** Rebuilds the tree from fresh counts, keeping what was expanded and the chosen folder. */
@@ -660,12 +829,18 @@ public final class CollectionsPage extends BorderPane {
     }
 
     /** A page in the list on the left: its icon and name. */
-    private static final class PageCell extends ListCell<Page> {
+    private final class PageCell extends ListCell<Page> {
+        private final Tooltip name = new Tooltip();
+
         @Override
         protected void updateItem(Page page, boolean empty) {
             super.updateItem(page, empty);
-            setText(empty || page == null ? null : page.toString());
+            // Folded (or sliding): only the icon, with the page's name under the mouse.
+            boolean iconOnly = !pagesOpen.get() || sideSlide != null;
+            setText(empty || page == null || iconOnly ? null : page.toString());
             setGraphic(empty || page == null ? null : page.icon().node(PAGE_ICON_SIZE));
+            name.setText(page == null ? "" : page.toString());
+            setTooltip(empty || page == null || !iconOnly ? null : name);
         }
     }
 

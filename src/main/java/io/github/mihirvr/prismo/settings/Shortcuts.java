@@ -35,7 +35,8 @@ public final class Shortcuts {
                     new Shortcut("Ctrl+H", "Hide, or unhide"),
                     new Shortcut("Delete", "Move to Trash (in Trash: delete permanently)"),
                     new Shortcut("Ctrl+C", "Copy the file"),
-                    new Shortcut("F2", "Rename"))),
+                    new Shortcut("F2", "Rename"),
+                    new Shortcut("Menu key / Shift+F10", "The photo's menu: Open, Copy, People and more"))),
             new Section("Selecting", List.of(
                     new Shortcut("Ctrl + click / Space", "Select or unselect one"),
                     new Shortcut("Shift + click", "Select everything up to here"),

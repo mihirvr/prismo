@@ -19,6 +19,8 @@
     -prismo-hover: #262a33;
     -prismo-pressed: #2f343f;
     -prismo-tile: #242831;
+    -prismo-thumb-edge-out: rgba(255, 255, 255, 0.20);
+    -prismo-thumb-edge-in: rgba(255, 255, 255, 0.07);
     -prismo-tile-failed: #3d2428;
     -prismo-favorite: #ff4f7b;
     -prismo-warning: #f0a35e;
@@ -34,6 +36,16 @@
     -prismo-tooltip-text: #f2f3f6;
     -prismo-card: #1c1f26;
     -prismo-viewer-bg: #000000; /* pitch black in every theme */
+    -prismo-glass: rgba(18, 20, 28, 0.42);
+    -prismo-glass-line: rgba(255, 255, 255, 0.07);
+    -prismo-glass-edge: rgba(255, 255, 255, 0.08);
+    -prismo-glass-button: rgba(255, 255, 255, 0.07);
+    -prismo-glass-hover: rgba(255, 255, 255, 0.14);
+    -prismo-glass-track: rgba(255, 255, 255, 0.38);
+    -prismo-glass-deep: rgba(8, 9, 14, 0.50);
+    -prismo-menu-glass: rgba(18, 20, 28, 0.62); /* over the frost (ui/Frost.java) */
+    -prismo-glass-thumb: #d6d9e2;
+    -prismo-viewer-panel: rgba(24, 26, 34, 0.82);
 
     /* Modena works out the colours of anything prismo.css doesn't style from this (dark, so its text is light). */
     -fx-base: #2a2e37;
@@ -42,4 +54,8 @@
 /* The logo with light lettering, made for dark backgrounds. */
 .empty-state-logo {
     -fx-image: url("logo/prismo-text-dark.png");
+}
+
+.app-wordmark {
+    -fx-image: url("logo/prismo-word-dark.png");
 }

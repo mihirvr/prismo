@@ -31,6 +31,7 @@ import io.github.mihirvr.prismo.thumbs.ThumbnailFolder;
 import io.github.mihirvr.prismo.thumbs.ThumbnailGenerator;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
 import io.github.mihirvr.prismo.ui.Appearance;
+import io.github.mihirvr.prismo.ui.Backdrop;
 import io.github.mihirvr.prismo.ui.DialogTexts;
 import io.github.mihirvr.prismo.ui.EmptyState;
 import io.github.mihirvr.prismo.ui.DateJump;
@@ -39,6 +40,10 @@ import io.github.mihirvr.prismo.ui.Grouping;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.OfflineFolders;
+import io.github.mihirvr.prismo.ui.BackdropMotion;
+import io.github.mihirvr.prismo.ui.EnterKey;
+import io.github.mihirvr.prismo.ui.Frost;
+import io.github.mihirvr.prismo.ui.MotionRules;
 import io.github.mihirvr.prismo.ui.StatusNote;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.TagKind;
@@ -134,12 +139,18 @@ import org.slf4j.LoggerFactory;
 public final class PrismoApp extends Application {
 
     private static final Logger log = LoggerFactory.getLogger(PrismoApp.class);
+    /** How long the "colours now stay still" note stays up by itself. */
+    private static final long SLOW_NOTE_SECONDS = 15;
 
     private static final double DEFAULT_WIDTH = 1200;
     private static final double DEFAULT_HEIGHT = 800;
     private static final int GRID_THUMBNAIL_SIZE = 320;
     private static final String THUMBNAIL_SIZE_SETTING = "timeline.thumbnail_size";
     private static final String THEME_SETTING = "appearance.theme";
+    private static final String COLOURS_SETTING = "appearance.colours";
+    private static final String COLOUR_STRENGTH_SETTING = "appearance.colourStrength";
+    /** Settings › Appearance: the colour background may move ("Keep it static" unticked, the default). */
+    private static final String MOVING_SETTING = "appearance.moving";
     private static final String WINDOW_SETTING = "window.placement";
     private static final String HIDDEN_MODE_SETTING = "hidden.mode";
     private static final String OS_HIDDEN_SHOWN_SETTING = "hidden.show_os_hidden";
@@ -163,6 +174,9 @@ public final class PrismoApp extends Application {
     private static final String GRID_VIEW_SETTING = "grid.view";
     private static final String ARRANGE_SETTING = "folders.arrange";
     private static final String INCLUDE_SUBFOLDERS_SETTING = "collections.include_subfolders";
+    /** Collections: the page list and the folder tree open or folded (2026-11-10). */
+    private static final String PAGES_OPEN_SETTING = "collections.pages_open";
+    private static final String TREE_OPEN_SETTING = "collections.tree_open";
     /** The app icon in these sizes; the system picks the one closest to what it needs (title bar, taskbar). */
     private static final int[] ICON_SIZES = {16, 20, 24, 32, 40, 48, 64, 128, 256};
     private static final double TOP_BAR_ICON_SIZE = 18;
@@ -213,10 +227,19 @@ public final class PrismoApp extends Application {
     /** The video time shows the time left (1.1.0). */
     private boolean savedTimeLeft;
     private boolean savedIncludeSubfolders = true;
+    private boolean savedPagesOpen = true;
+    private boolean savedTreeOpen = true;
     /** Settings › Hidden items. UI thread. */
     private final ObjectProperty<HiddenMode> hiddenMode = new SimpleObjectProperty<>(HiddenMode.DEFAULT);
     /** Settings › Hidden items › "Show files hidden in File Explorer" (off by default). UI thread. */
     private final BooleanProperty osHiddenShown = new SimpleBooleanProperty(false);
+    // The colour background (Settings › Appearance): on by default; how much colour shows, 0 to 100 %.
+    private final BooleanProperty colours = new SimpleBooleanProperty(true);
+    private final IntegerProperty colourStrength = new SimpleIntegerProperty(Backdrop.DEFAULT_STRENGTH);
+    // The colours may move (on by default; BackdropMotion still keeps them still while busy or when the PC can't take
+    // it), and why they are still now, for Settings.
+    private final BooleanProperty moving = new SimpleBooleanProperty(true);
+    private final ObjectProperty<MotionRules.Reason> motionReason = new SimpleObjectProperty<>(MotionRules.Reason.SETTLING);
     /** Settings › Library › Ignored folders. UI thread; the indexing thread reads {@link #ignoreRulesNow}. */
     private final ObjectProperty<IgnoreRules> ignoredFolders = new SimpleObjectProperty<>(IgnoreRules.NONE);
     private volatile IgnoreRules ignoreRulesNow = IgnoreRules.NONE;
@@ -325,10 +348,15 @@ public final class PrismoApp extends Application {
         savedPlacement = settings.get(WINDOW_SETTING).flatMap(WindowPlacement::parse);
         hiddenMode.set(HiddenMode.fromSetting(settings.get(HIDDEN_MODE_SETTING).orElse(null)));
         osHiddenShown.set(settings.get(OS_HIDDEN_SHOWN_SETTING).map(Boolean::parseBoolean).orElse(false));
+        colours.set(settings.get(COLOURS_SETTING).map(Boolean::parseBoolean).orElse(true));
+        colourStrength.set(settings.get(COLOUR_STRENGTH_SETTING).map(PrismoApp::percent).orElse(Backdrop.DEFAULT_STRENGTH));
+        moving.set(settings.get(MOVING_SETTING).map(Boolean::parseBoolean).orElse(true));
         viewOptions = ViewOptions.fromSetting(settings.get(VIEW_SETTING).orElse(null)).withOsHiddenShown(osHiddenShown.get());
         gridView = GridView.fromSetting(settings.get(GRID_VIEW_SETTING).orElse(null));
         folderArrange = FolderArrange.fromSetting(settings.get(ARRANGE_SETTING).orElse(null));
         savedIncludeSubfolders = settings.get(INCLUDE_SUBFOLDERS_SETTING).map(Boolean::parseBoolean).orElse(true);
+        savedPagesOpen = settings.get(PAGES_OPEN_SETTING).map(Boolean::parseBoolean).orElse(true);
+        savedTreeOpen = settings.get(TREE_OPEN_SETTING).map(Boolean::parseBoolean).orElse(true);
         savedVolume = number(VOLUME_SETTING, 0, 1, 1);
         savedSpeed = number(SPEED_SETTING, 0.5, 2, 1);
         savedTimeLeft = settings.get(TIME_LEFT_SETTING).map(Boolean::parseBoolean).orElse(false);
@@ -497,6 +525,12 @@ public final class PrismoApp extends Application {
         collections.includeSubfoldersProperty().set(savedIncludeSubfolders);
         collections.includeSubfoldersProperty().addListener((_, _, on) ->
                 settings.put(INCLUDE_SUBFOLDERS_SETTING, Boolean.toString(on)));
+        collections.pagesOpenProperty().set(savedPagesOpen);
+        collections.treeOpenProperty().set(savedTreeOpen);
+        collections.pagesOpenProperty().addListener((_, _, open) ->
+                settings.put(PAGES_OPEN_SETTING, Boolean.toString(open)));
+        collections.treeOpenProperty().addListener((_, _, open) ->
+                settings.put(TREE_OPEN_SETTING, Boolean.toString(open)));
         collections.setVisible(false);
 
         // Search results get their own grid, so the Timeline keeps its place while searching.
@@ -569,8 +603,17 @@ public final class PrismoApp extends Application {
         appIcon.setFitWidth(24);
         appIcon.setFitHeight(24);
         appIcon.setSmooth(true);
-        Label title = new Label("Prismo", appIcon);
-        title.setGraphicTextGap(8);
+        // The name in the logo's own lettering (as on the website and in the README); the picture comes from the
+        // stylesheet (-fx-image), so Light shows dark letters and the dark looks white ones.
+        ImageView wordmark = new ImageView();
+        wordmark.getStyleClass().add("app-wordmark");
+        wordmark.setFitHeight(19);
+        wordmark.setPreserveRatio(true);
+        wordmark.setSmooth(true);
+        HBox titleGraphic = new HBox(8, appIcon, wordmark);
+        titleGraphic.setAlignment(Pos.CENTER_LEFT);
+        Label title = new Label(null, titleGraphic);
+        title.setAccessibleText("Prismo");
         title.getStyleClass().add("app-title");
         title.setMinWidth(Region.USE_PREF_SIZE); // in a narrow window the search box gets smaller, not the name
         Region spacer = new Region();
@@ -672,7 +715,8 @@ public final class PrismoApp extends Application {
             thumbnails.setThreads(threads.intValue());
         });
         SettingsDialog.Options settingsOptions = new SettingsDialog.Options(hiddenMode, osHiddenShown, ignoredFolders,
-                grouping, subtitleBackground, thumbnailThreads, thumbnailDisk(), AppInfo.load(),
+                grouping, subtitleBackground, thumbnailThreads, colours, colourStrength, moving, motionReason,
+                thumbnailDisk(), AppInfo.load(),
                 address -> getHostServices().showDocument(address.toString()));
         Runnable openSettings = () -> new SettingsDialog(stage, appearance,
                 theme -> settings.put(THEME_SETTING, theme.settingValue()), settingsOptions).show();
@@ -710,13 +754,44 @@ public final class PrismoApp extends Application {
         StackPane.setAlignment(status, Pos.BOTTOM_LEFT);
         BorderPane main = new BorderPane(grids, new VBox(topBar, viewBar, offlineBanner), null, null, null);
         // The viewer is an overlay over the whole window, hidden until a photo is opened.
-        StackPane root = new StackPane(main, viewer);
+        // Under everything: the colour background the see-through ("glass") bars and the grid sit on.
+        Backdrop backdrop = new Backdrop(Backdrop.Mode.CALM_LIGHT);
+        StackPane root = new StackPane(backdrop, main, viewer);
+        root.getStyleClass().add("glass");
         // A first start (or a saved place that no longer fits any screen) opens at the default size, made smaller
         // on a screen too small for it; a saved place then sets the real size in placeWindow.
         Dimension2D firstSize = WindowPlacement.firstSize(DEFAULT_WIDTH, DEFAULT_HEIGHT,
                 Screen.getPrimary().getVisualBounds());
         Scene scene = new Scene(root, firstSize.getWidth(), firstSize.getHeight());
         appearance = new Appearance(scene, savedTheme);
+        EnterKey.install(scene); // Enter presses the focused button, opens the focused drop-down (2026-11-10)
+        Frost.install(); // menus and drop-down lists: frosted glass over what is behind them (2026-11-10)
+        // The background follows the look, the Colours switch and the strength; both settings are kept.
+        Runnable backdropMode = () -> backdrop.setMode(Backdrop.modeFor(appearance.shownProperty().get(), colours.get()));
+        appearance.shownProperty().subscribe(_ -> backdropMode.run());
+        colours.addListener((_, _, on) -> {
+            settings.put(COLOURS_SETTING, Boolean.toString(on));
+            backdropMode.run();
+        });
+        backdrop.setStrength(colourStrength.get());
+        colourStrength.addListener((_, _, value) -> {
+            settings.put(COLOUR_STRENGTH_SETTING, Integer.toString(value.intValue()));
+            backdrop.setStrength(value.intValue());
+        });
+        // Still first; moving only when idle and the computer can take it (step 3). "Keep it static" is kept.
+        BackdropMotion motion = new BackdropMotion(backdrop, stage);
+        motion.wantedProperty().bind(moving);
+        moving.addListener((_, _, on) -> settings.put(MOVING_SETTING, Boolean.toString(on)));
+        motion.followBusy(status.workingProperty());
+        motion.viewerOpenProperty().bind(viewer.visibleProperty());
+        appearance.shownProperty().subscribe(_ -> motion.update());
+        colours.addListener((_, _, _) -> motion.update());
+        motionReason.bind(motion.reasonProperty());
+        // If the moving colours slow Prismo down: "Keep it static" is ticked (kept), and a note says so (Mihir).
+        motion.setOnSlow(() -> {
+            moving.set(false);
+            showSlowNote(grids);
+        });
         stage.setTitle("Prismo");
         for (int iconSize : ICON_SIZES) {
             stage.getIcons().add(new Image(PrismoApp.class.getResource("/ui/icon/prismo-" + iconSize + ".png").toExternalForm()));
@@ -999,6 +1074,42 @@ public final class PrismoApp extends Application {
                         ? e.getCause() : e);
             }
         }, indexingThread);
+    }
+
+    /**
+     * The note after the moving colours slowed Prismo down and were switched to static (2026-11-10): bottom right
+     * over the grid, never blocking; Undo turns movement back on (and the app then leaves it on for the session),
+     * OK closes it; it goes by itself after {@link #SLOW_NOTE_SECONDS} seconds.
+     */
+    private void showSlowNote(StackPane over) {
+        Label text = new Label("The moving colours were slowing Prismo down on this computer, so they now stay "
+                + "still. You can turn movement back on in Settings \u203a Appearance.");
+        text.setWrapText(true);
+        text.setMaxWidth(340);
+        Button undo = new Button("Undo");
+        Button ok = new Button("OK");
+        HBox buttons = new HBox(8, undo, ok);
+        buttons.setAlignment(Pos.CENTER_RIGHT);
+        VBox note = new VBox(10, text, buttons);
+        note.getStyleClass().add("slow-note");
+        note.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        StackPane.setAlignment(note, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(note, new javafx.geometry.Insets(0, 18, 18, 0));
+        // A wall-clock timer, not a JavaFX animation: the note shows just after the window lagged, and an animation's
+        // clock then ran ahead (it closed after about 5 s instead of 15).
+        java.util.function.Consumer<String> close = why -> {
+            if (over.getChildren().remove(note)) {
+                log.info("Slow note closed: {}", why);
+            }
+        };
+        java.util.concurrent.CompletableFuture.delayedExecutor(SLOW_NOTE_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+                .execute(() -> Platform.runLater(() -> close.accept("by itself")));
+        undo.setOnAction(_ -> {
+            moving.set(true);
+            close.accept("Undo");
+        });
+        ok.setOnAction(_ -> close.accept("OK"));
+        over.getChildren().add(note);
     }
 
     private void startIndexing() {
@@ -1345,5 +1456,14 @@ public final class PrismoApp extends Application {
             database.close();
         }
         log.info("Prismo stopped");
+    }
+
+    /** A saved 0-100 percentage; anything unreadable gives the default. */
+    private static int percent(String saved) {
+        try {
+            return Math.clamp(Integer.parseInt(saved.trim()), 0, 100);
+        } catch (NumberFormatException e) {
+            return Backdrop.DEFAULT_STRENGTH;
+        }
     }
 }

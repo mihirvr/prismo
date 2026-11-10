@@ -13,10 +13,22 @@
     -prismo-hover: #15171c;
     -prismo-pressed: #1e2128;
     -prismo-tile: #15171b;
+    -prismo-thumb-edge-out: rgba(255, 255, 255, 0.18);
+    -prismo-thumb-edge-in: rgba(255, 255, 255, 0.06);
     -prismo-accent-tint: #172347;
     -prismo-tab-hover: rgba(255, 255, 255, 0.07);
     -prismo-tooltip-bg: #23262e;
     -prismo-viewer-bg: #000000;
+    -prismo-glass: rgba(10, 11, 14, 0.72);
+    -prismo-glass-line: rgba(255, 255, 255, 0.06);
+    -prismo-glass-edge: rgba(255, 255, 255, 0.10);
+    -prismo-glass-hover: rgba(255, 255, 255, 0.12);
+    -prismo-glass-button: rgba(255, 255, 255, 0.06);
+    -prismo-glass-track: rgba(255, 255, 255, 0.34);
+    -prismo-glass-deep: rgba(0, 0, 0, 0.60);
+    -prismo-menu-glass: rgba(6, 7, 10, 0.72); /* over the frost (ui/Frost.java) */
+    -prismo-glass-thumb: #c9ccd6;
+    -prismo-viewer-panel: rgba(10, 11, 14, 0.86);
 
     -fx-base: #1a1c21;
 }

@@ -59,6 +59,8 @@ final class ThumbnailTile extends StackPane {
     private final Node favorite = Icon.HEART_FILLED.node(FAVORITE_ICON_SIZE);
     /** Lightens the tile under the mouse (CSS: {@code .thumb-tile:hover .thumb-hover}). */
     private final Region hover = new Region();
+    /** A thin line just inside the rounded edge (2026-11-10), so a picture the page's colour still shows its edge. */
+    private final Region edge = new Region();
     /** A play mark and the length, bottom right of a video. */
     private final Label videoBadge = new Label();
     /** Watch progress: a thin bar along the bottom edge of a video (a dark track, the watched part in colour). */
@@ -111,6 +113,8 @@ final class ThumbnailTile extends StackPane {
         StackPane.setMargin(favorite, new Insets(0, 0, 6, 6));
         hover.getStyleClass().add("thumb-hover");
         hover.setMouseTransparent(true);
+        edge.getStyleClass().add("thumb-edge");
+        edge.setMouseTransparent(true);
         videoBadge.getStyleClass().add("thumb-video-badge");
         videoBadge.setGraphic(Icon.PLAY.node(BADGE_ICON_SIZE));
         videoBadge.setVisible(false);
@@ -154,7 +158,7 @@ final class ThumbnailTile extends StackPane {
         clip.setArcWidth(CORNER_RADIUS * 2);
         clip.setArcHeight(CORNER_RADIUS * 2);
         setClip(clip);
-        getChildren().addAll(view, placeholder, offlineShade, hover, selectedTint, favorite, videoBadge, progress,
+        getChildren().addAll(view, placeholder, offlineShade, hover, edge, selectedTint, favorite, videoBadge, progress,
                 osHiddenMark, offlineMark, focusRing, check);
     }
 

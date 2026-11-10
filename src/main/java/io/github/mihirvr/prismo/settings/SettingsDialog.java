@@ -5,10 +5,12 @@ import io.github.mihirvr.prismo.index.IgnoreRules;
 import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import io.github.mihirvr.prismo.thumbs.ThumbnailService;
 import io.github.mihirvr.prismo.ui.Appearance;
+import io.github.mihirvr.prismo.ui.Backdrop;
 import io.github.mihirvr.prismo.ui.DialogPlacement;
 import io.github.mihirvr.prismo.ui.Grouping;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.MediaDetails;
+import io.github.mihirvr.prismo.ui.MotionRules;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.Theme;
 import java.io.File;
@@ -23,6 +25,7 @@ import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.IntegerProperty;
+import javafx.beans.value.ObservableValue;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.css.PseudoClass;
@@ -36,6 +39,7 @@ import javafx.scene.control.ComboBox;
 import javafx.scene.control.ContentDisplay;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
+import javafx.scene.control.Slider;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.RadioButton;
 import javafx.scene.control.ScrollPane;
@@ -94,7 +98,9 @@ public final class SettingsDialog {
     public record Options(ObjectProperty<HiddenMode> hiddenMode, BooleanProperty osHiddenShown,
             ObjectProperty<IgnoreRules> ignoredFolders, ObjectProperty<Grouping> grouping,
             ObjectProperty<SubtitleBackground> subtitleBackground, IntegerProperty thumbnailThreads,
-            ThumbnailDisk thumbnailDisk, AppInfo about, Consumer<URI> openWebsite) {
+            BooleanProperty colours, IntegerProperty colourStrength, BooleanProperty moving,
+            ObservableValue<MotionRules.Reason> motionReason, ThumbnailDisk thumbnailDisk, AppInfo about,
+            Consumer<URI> openWebsite) {
     }
 
     /** The thumbnails on disk, worked out off the UI thread (the futures complete on any thread). */
@@ -219,12 +225,24 @@ public final class SettingsDialog {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         HBox buttons = new HBox(spacer, close);
-        BorderPane root = new BorderPane(scroll, null, null, buttons, nav);
-        BorderPane.setMargin(buttons, new Insets(20, 0, 0, 0));
-        BorderPane.setMargin(nav, new Insets(0, 24, 0, 0));
-        root.setPadding(new Insets(20));
+        // The page list is a full-height sidebar along the left edge; the page and Close sit to its right.
+        VBox content = new VBox(20, scroll, buttons);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
+        content.setPadding(new Insets(20, 20, 20, 24));
+        BorderPane root = new BorderPane(content, null, null, null, nav);
         root.getStyleClass().add("settings-dialog");
-        Scene scene = new Scene(root);
+        // A still copy of the main window's colour background, so the dialog's glass panels match; it follows the
+        // look, the Colours switch and the strength slider while the dialog is open.
+        Backdrop backdrop = new Backdrop(Backdrop.modeFor(appearance.shownProperty().get(), options.colours().get()));
+        backdrop.setStrength(options.colourStrength().get());
+        Runnable backdropMode = () -> backdrop.setMode(Backdrop.modeFor(appearance.shownProperty().get(), options.colours().get()));
+        appearance.shownProperty().addListener((_, _, _) -> backdropMode.run());
+        options.colours().addListener((_, _, _) -> backdropMode.run());
+        options.colourStrength().addListener((_, _, value) -> backdrop.setStrength(value.intValue()));
+        stage.setOnHidden(_ -> backdrop.dispose());
+        StackPane layers = new StackPane(backdrop, root);
+        layers.getStyleClass().add("glass");
+        Scene scene = new Scene(layers);
         Appearance.matchOwner(scene, owner);
         stage.setScene(scene);
         stage.getProperties().put(SettingsDialog.class, this); // lets tools find the dialog from its window
@@ -280,7 +298,67 @@ public final class SettingsDialog {
                 save.accept(theme);
             }
         });
-        return new VBox(12, heading("Appearance"), cards);
+        return new VBox(12, heading("Appearance"), cards, coloursCard(appearance));
+    }
+
+    /**
+     * The colour background: a switch (on by default) and how much colour shows, 0 to 100 %. AMOLED black always
+     * stays black, so there the two are greyed out with a note.
+     */
+    private VBox coloursCard(Appearance appearance) {
+        CheckBox on = new CheckBox("Colours");
+        on.getStyleClass().add("choice-name");
+        on.setSelected(options.colours().get());
+        on.selectedProperty().addListener((_, _, value) -> options.colours().set(value));
+        Label description = wrapping("choice-description", 58);
+        description.setText("The colour background, as on the website. Off: the plain look.");
+        VBox.setMargin(description, new Insets(0, 0, 0, 26));
+        Slider strength = new Slider(0, 100, options.colourStrength().get());
+        strength.setBlockIncrement(5);
+        strength.setPrefWidth(260);
+        Label value = new Label();
+        value.getStyleClass().add("choice-description");
+        value.textProperty().bind(strength.valueProperty().map(v -> Math.round(v.doubleValue()) + " %"));
+        strength.valueProperty().addListener((_, _, v) -> options.colourStrength().set((int) Math.round(v.doubleValue())));
+        Label strengthName = new Label("How much colour shows");
+        HBox strengthRow = new HBox(10, strengthName, strength, value);
+        strengthRow.setAlignment(Pos.CENTER_LEFT);
+        VBox.setMargin(strengthRow, new Insets(4, 0, 0, 26));
+        // Step 3 (2026-11-10): the colours move slowly unless "Keep it static" is ticked (off by default, Mihir); the
+        // app also keeps them still while it is busy, on battery, while another window is active, or when the
+        // computer can't take it, and says why under the box. The setting itself stays "moving" (appearance.moving).
+        CheckBox keepStatic = new CheckBox("Keep it static");
+        keepStatic.setSelected(!options.moving().get());
+        keepStatic.selectedProperty().addListener((_, _, still) -> options.moving().set(!still));
+        Label saves = wrapping("choice-description", 54);
+        saves.setText("Ticked: the colours stay still, which uses less CPU and battery.");
+        Label why = wrapping("choice-description", 54);
+        why.textProperty().bind(javafx.beans.binding.Bindings.createStringBinding(
+                () -> keepStatic.isSelected() ? "" : options.motionReason().getValue().text,
+                options.motionReason(), keepStatic.selectedProperty()));
+        why.managedProperty().bind(why.textProperty().isNotEmpty());
+        why.visibleProperty().bind(why.managedProperty());
+        VBox moveBox = new VBox(2, keepStatic, saves, why);
+        VBox.setMargin(moveBox, new Insets(6, 0, 0, 26));
+        VBox.setMargin(saves, new Insets(0, 0, 0, 26));
+        VBox.setMargin(why, new Insets(0, 0, 0, 26));
+        Label amoled = wrapping("choice-description", 58);
+        amoled.setText("AMOLED black always stays black.");
+        VBox.setMargin(amoled, new Insets(0, 0, 0, 26));
+        Runnable greyOut = () -> {
+            boolean black = appearance.shownProperty().get() == Theme.AMOLED;
+            on.setDisable(black);
+            strengthRow.setDisable(black || !on.isSelected());
+            moveBox.setDisable(black || !on.isSelected());
+            amoled.setVisible(black);
+            amoled.setManaged(black);
+        };
+        appearance.shownProperty().addListener((_, _, _) -> greyOut.run());
+        on.selectedProperty().addListener((_, _, _) -> greyOut.run());
+        greyOut.run();
+        VBox card = new VBox(3, on, description, strengthRow, moveBox, amoled);
+        card.getStyleClass().add("choice-card");
+        return card;
     }
 
     // --- Hidden items, Ignored folders ---
