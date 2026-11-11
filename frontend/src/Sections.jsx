@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.3.2/Prismo-1.3.2.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.3.2/prismo_1.3.2_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.3.3/Prismo-1.3.3.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.3.3/prismo_1.3.3_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -598,7 +598,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.png" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.3.2. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.3.3. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />
