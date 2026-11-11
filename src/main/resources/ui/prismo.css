@@ -1048,7 +1048,7 @@
 }
 
 .viewer .icon-button {
-    -fx-padding: 7;
+    -fx-padding: 4;
 }
 
 /* The slideshow button while the slideshow runs. */
@@ -1081,13 +1081,24 @@
 }
 
 .viewer-top-bar {
-    -fx-padding: 10 14 18 14;
-    -fx-background-color: linear-gradient(to bottom, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+    -fx-padding: 14 12 18 12;
+    -fx-background-color: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.25) 60%, transparent);
 }
 
 .viewer-video-controls {
-    -fx-padding: 18 14 10 14;
-    -fx-background-color: linear-gradient(to top, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0));
+    -fx-padding: 22 12 8 12;
+    -fx-background-color: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.3) 60%, transparent);
+}
+
+/* Full screen: the filmstrip band is the only fade behind the controls (two fades stacked made a faint step). */
+.viewer-video-controls.in-full-screen {
+    -fx-background-color: transparent;
+}
+
+/* The bars fade in from clear (no edge line); a soft shadow on the icons also keeps the bare icons readable over a bright picture. */
+.viewer-top-bar .icon-path,
+.viewer-video-controls .icon-path {
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.6), 4, 0.3, 0, 0);
 }
 
 .viewer-top-bar .label,
@@ -1103,18 +1114,18 @@
 }
 
 .viewer .button {
-    -fx-background-color: rgba(255, 255, 255, 0.12);
+    -fx-background-color: transparent;
     -fx-background-insets: 0;
     -fx-background-radius: 6;
     -fx-text-fill: #f0f1f4;
 }
 
 .viewer .button:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.24);
+    -fx-background-color: rgba(255, 255, 255, 0.16);
 }
 
 .viewer .button:pressed {
-    -fx-background-color: rgba(255, 255, 255, 0.32);
+    -fx-background-color: rgba(255, 255, 255, 0.24);
 }
 
 .viewer .slider > .track {
@@ -1129,7 +1140,7 @@
 .viewer .menu-button {
     -fx-background-color: transparent;
     -fx-background-radius: 7;
-    -fx-padding: 7;
+    -fx-padding: 4;
     -fx-text-fill: #f0f1f4;
 }
 
@@ -1153,7 +1164,7 @@
 /* "1.5×": the speed as text, a fixed width so the bar doesn't shift when it changes. Wide enough for the widest,
    "1.75×" in bold: a stylesheet's min width beats the code's, so at 50 a narrow bar cut "1.5×" to "…" (P7). */
 .viewer .viewer-speed {
-    -fx-padding: 7 9 7 9;
+    -fx-padding: 4 9 4 9;
     -fx-min-width: 62;
     -fx-pref-width: 62;
     -fx-font-weight: bold;
@@ -1163,11 +1174,11 @@
 .viewer .viewer-video-controls .toggle-button {
     -fx-background-color: transparent;
     -fx-background-radius: 7;
-    -fx-padding: 7;
+    -fx-padding: 4;
 }
 
 .viewer .viewer-video-controls .toggle-button:hover {
-    -fx-background-color: rgba(255, 255, 255, 0.18);
+    -fx-background-color: rgba(255, 255, 255, 0.16);
 }
 
 /* Loop on: lit like a switch. */
@@ -2024,25 +2035,8 @@
     -fx-background-color: -prismo-glass-hover;
 }
 
-/* The viewer (pitch black in every look): its top bar, the video controls and the filmstrip strip are dark glass
- * bands with a thin light top edge instead of plain shaded fades; buttons get the same edge; the Info panel is a
- * glass card. */
-.viewer-top-bar {
-    -fx-background-color: rgba(16, 18, 26, 0.52);
-    -fx-border-color: transparent transparent rgba(255, 255, 255, 0.08) transparent;
-}
-.viewer-video-controls {
-    -fx-background-color: rgba(16, 18, 26, 0.52);
-    -fx-border-color: rgba(255, 255, 255, 0.12) transparent transparent transparent;
-}
-.filmstrip-band {
-    -fx-background-color: rgba(16, 18, 26, 0.46);
-    -fx-border-color: rgba(255, 255, 255, 0.10) transparent transparent transparent;
-}
-.viewer .button {
-    -fx-border-color: rgba(255, 255, 255, 0.20) rgba(255, 255, 255, 0.08) rgba(255, 255, 255, 0.08) rgba(255, 255, 255, 0.08);
-    -fx-border-radius: 6;
-}
+/* The viewer (pitch black in every look): its bars have no panel, tint or edge line behind them; the buttons are
+ * bare icons with a small shape only on hover; the Info panel is a glass card. */
 .viewer .info-panel {
     /* follows the look (its text is dark in Light); nearly solid, because over the viewer's pure black a
        see-through light card turns grey and its faint text gets hard to read */
@@ -2281,4 +2275,13 @@
 }
 .glass.library-dialog .accent-button {
     -fx-padding: 5 14 5 14;
+}
+
+/* The full-screen hint (a moment after entering full screen): small, see-through, rounded, at the top centre. */
+.viewer .viewer-fullscreen-hint {
+    -fx-background-color: rgba(20, 21, 26, 0.55);
+    -fx-background-radius: 14;
+    -fx-padding: 5 14 5 14;
+    -fx-text-fill: #f0f1f4;
+    -fx-font-size: 12px;
 }

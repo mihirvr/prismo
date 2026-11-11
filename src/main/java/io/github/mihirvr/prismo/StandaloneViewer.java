@@ -58,6 +58,7 @@ public final class StandaloneViewer extends Application {
         viewer = new MediaViewer(loader, PlaybackMemory.NONE, fileItems);
         viewer.setItemActionsShown(false); // Favorite, Hide and Trash belong to the library
         viewer.setOnClose(_ -> stage.close());
+        viewer.setEscapeCloses(false); // Esc leaves full screen only; the back arrow closes
 
         Rectangle2D screen = Screen.getPrimary().getVisualBounds();
         Scene scene = new Scene(new StackPane(viewer), Math.min(1280, screen.getWidth() * 0.8),

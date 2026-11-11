@@ -170,7 +170,7 @@ public final class MediaViewer extends StackPane {
      */
     private final Region stripBand = new Region();
     /** How far the band fades out above the strip. */
-    private static final double BAND_FADE = 64;
+    private static final double BAND_FADE = 16;
     /** The filmstrip hides after {@link #IDLE_TIME} without a mouse move, in a window and in full screen alike. */
     private final PauseTransition stripIdle = new PauseTransition(IDLE_TIME);
     private boolean stripHidden;
@@ -182,6 +182,9 @@ public final class MediaViewer extends StackPane {
     private List<TimelineItem> items = List.of();
     private int index = -1;
     private Consumer<TimelineItem> onClose = _ -> { };
+    private boolean escapeCloses = true;
+    private final Label fullScreenHint = new Label("Esc to exit full screen");
+    private final PauseTransition hintPause = new PauseTransition(Duration.seconds(2.5));
     /** Told the list and the item shown just before the viewer closes (the app's Back / Forward history). */
     private BiConsumer<List<TimelineItem>, Integer> onLeave = (_, _) -> { };
     private ItemAction.Handler onAction = (_, _) -> false;
@@ -245,6 +248,25 @@ public final class MediaViewer extends StackPane {
                 stepButton(previous, Icon.CHEVRON_LEFT, -1, Pos.CENTER_LEFT),
                 stepButton(next, Icon.CHEVRON_RIGHT, +1, Pos.CENTER_RIGHT), topBar);
         stageArea.setMinSize(0, 0);
+        fullScreenHint.getStyleClass().add("viewer-fullscreen-hint");
+        fullScreenHint.setMouseTransparent(true);
+        fullScreenHint.setVisible(false);
+        fullScreenHint.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+        StackPane.setAlignment(fullScreenHint, Pos.TOP_CENTER);
+        StackPane.setMargin(fullScreenHint, new Insets(14, 0, 0, 0));
+        hintPause.setOnFinished(_ -> {
+            FadeTransition out = new FadeTransition(Duration.millis(400), fullScreenHint);
+            out.setToValue(0);
+            out.setOnFinished(_ -> fullScreenHint.setVisible(false));
+            out.play();
+        });
+        stageArea.getChildren().add(fullScreenHint);
+        // The system's own "press Esc" box is replaced by this small, see-through hint.
+        sceneProperty().flatMap(Scene::windowProperty).subscribe(w -> {
+            if (w instanceof Stage stage) {
+                stage.setFullScreenExitHint("");
+            }
+        });
         // The filmstrip has its own row under the photo, so the photo never moves when the strip fades in or out;
         // in full screen it floats over the bottom of the photo instead (placeFilmstrip).
         filmstrip = new Filmstrip(thumbnails);
@@ -279,6 +301,11 @@ public final class MediaViewer extends StackPane {
             event.consume();
         });
         setUpAutoHide();
+    }
+
+    /** False for the standalone viewer: Esc only leaves full screen / the Info panel; it never closes the window. */
+    public void setEscapeCloses(boolean escapeCloses) {
+        this.escapeCloses = escapeCloses;
     }
 
     /** Called with the item that was showing when the viewer closes, so the Timeline can scroll to it. */
@@ -784,7 +811,7 @@ public final class MediaViewer extends StackPane {
             closeInfo();
         } else if (stage() instanceof Stage stage && stage.isFullScreen()) {
             stage.setFullScreen(false);
-        } else {
+        } else if (escapeCloses) {
             close();
         }
     }
@@ -1333,6 +1360,7 @@ public final class MediaViewer extends StackPane {
                 .flatMap(w -> w instanceof Stage s ? s.fullScreenProperty() : null).orElse(false)
                 .subscribe(full -> {
                     placeFilmstrip(full);
+                    showFullScreenHint(full);
                     if (slideshow.isRunning()) {
                         return;
                     }
@@ -1344,6 +1372,18 @@ public final class MediaViewer extends StackPane {
                         showStrip(); // in a window the strip is always there
                     }
                 });
+    }
+
+    /** A small hint at the top centre for a moment after entering full screen; gone at once when leaving. */
+    private void showFullScreenHint(boolean full) {
+        hintPause.stop();
+        if (!full) {
+            fullScreenHint.setVisible(false);
+            return;
+        }
+        fullScreenHint.setOpacity(1);
+        fullScreenHint.setVisible(true);
+        hintPause.playFromStart();
     }
 
     private void interruptSlideshow(javafx.event.Event event) {
@@ -1368,6 +1408,12 @@ public final class MediaViewer extends StackPane {
     /** In a window: the strip in its own row under the photo. In full screen: floating over the photo's bottom. */
     private void placeFilmstrip(boolean full) {
         stageArea.getChildren().removeAll(filmstrip, stripBand);
+        video.getChildren().remove(stripBand);
+        // One fade only in full screen: the band behind the strip and the bar; the bar's own fade is for the window.
+        video.controls().getStyleClass().remove("in-full-screen");
+        if (full) {
+            video.controls().getStyleClass().add("in-full-screen");
+        }
         stripRow.getChildren().remove(filmstrip);
         filmstrip.getStyleClass().remove("floating");
         stripRow.setVisible(!full);
@@ -1387,6 +1433,15 @@ public final class MediaViewer extends StackPane {
     /** In full screen, a video's strip floats just above its control bar; a photo's at the bottom edge. */
     private void floatFilmstripAbove(boolean videoControls) {
         if (filmstrip.getParent() == stageArea) {
+            // The dark band goes BEHIND the control bar (inside the video pane, just over the picture), so it never
+            // dims the buttons; for a photo it sits just under the strip.
+            stageArea.getChildren().remove(stripBand);
+            video.getChildren().remove(stripBand);
+            if (videoControls) {
+                video.getChildren().add(1, stripBand);
+            } else {
+                stageArea.getChildren().add(stageArea.getChildren().indexOf(filmstrip), stripBand);
+            }
             double bottom = videoControls ? video.controls().getHeight() + 4 : 0;
             StackPane.setMargin(filmstrip, new Insets(0, 0, bottom, 0));
             stripBand.setPrefHeight(bottom + Filmstrip.HEIGHT + BAND_FADE);

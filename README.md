@@ -64,9 +64,16 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.3.2** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.2 are described below). Windows first; the Linux package is an early preview.
+**Version 1.3.3** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.3 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.3.3:** the photo and video viewer is calmer. The top bar and the video controls have no panel or edge lines
+behind them: the buttons are bare icons (a small shape shows only when the pointer is over one), tighter, with a soft
+fade behind the bars so they stay readable over a bright picture. In full screen there is one smooth fade behind the
+filmstrip and the controls, and it no longer dims the buttons. When Prismo opens a file from File Explorer, Esc only
+leaves full screen and never closes the window (the back arrow closes it). The system's big "press Esc" box in full
+screen is replaced by a small see-through hint at the top centre.
 
 **1.3.2:** a new look. The website's colour background now sits behind the app too, under see-through
 ("glass") bars, panels, dialogs and Settings; menus and drop-down lists are frosted glass. The colours move slowly
