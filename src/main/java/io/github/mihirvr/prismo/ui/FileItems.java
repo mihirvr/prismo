@@ -216,6 +216,11 @@ public final class FileItems {
         });
     }
 
+    /** 1.4.0: opens a web link in the default browser ("Open in map"); only ever on the user's click. */
+    public void openLink(String url) {
+        openExternally.accept(url);
+    }
+
     public void openWithDefaultApp(TimelineItem item) {
         log.info("Opening {} in the default app", item.ref().path());
         openExternally.accept(item.ref().path().toUri().toString());

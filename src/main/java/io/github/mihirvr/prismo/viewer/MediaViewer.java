@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.viewer;
 
+import io.github.mihirvr.prismo.platform.AppPaths;
 import io.github.mihirvr.prismo.platform.OsHiddenMark;
 import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.ui.FileItems;
@@ -13,6 +14,8 @@ import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.TagKind;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
 import io.github.mihirvr.prismo.ui.TimelineItem;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
@@ -22,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
@@ -31,6 +35,7 @@ import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.beans.property.BooleanProperty;
+import javafx.beans.property.SimpleBooleanProperty;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.value.ObservableValue;
@@ -174,6 +179,20 @@ public final class MediaViewer extends StackPane {
     /** The filmstrip hides after {@link #IDLE_TIME} without a mouse move, in a window and in full screen alike. */
     private final PauseTransition stripIdle = new PauseTransition(IDLE_TIME);
     private boolean stripHidden;
+    /**
+     * False when the filmstrip is switched off (1.4.0: the top-bar button, S, the right-click menu), so a small window
+     * gives its height to the photo; in full screen it then never fades in. Saved by the app.
+     */
+    private final BooleanProperty stripShown = new SimpleBooleanProperty(true);
+    private final Button stripButton = new Button();
+    /** 1.4.0: shown only on a motion photo (a JPEG with a clip inside): plays the clip over the photo. */
+    private final Button motionButton = new Button();
+    /** Where the shown photo's clip starts, once known; -1 = none (or not checked yet). */
+    private long motionStart = -1;
+    /** True while a motion photo's clip plays over it. */
+    private boolean motionPlaying;
+    /** Prismo's own folder for the clips (cache, folder motion); the photos themselves are only read. */
+    private static final Path MOTION_FOLDER = AppPaths.forCurrentOs().cacheDir().resolve("motion");
     /** True while a slideshow that started in a window runs in full screen (1.3.0): it goes back when it stops. */
     private boolean slideshowMadeFullScreen;
     /** False in the standalone viewer: no Favorite / Hide / Trash, as there is no library. */
@@ -213,6 +232,7 @@ public final class MediaViewer extends StackPane {
         this.fileItems = fileItems;
         video = new VideoPane(memory);
         video.setOnDoubleClick(this::toggleFullScreen);
+        video.setOnEnded(this::stopMotion);
         video.setMediaSteps(() -> step(-1), () -> step(+1));
         info = new InfoPanel(fileItems, this::closeInfo);
         info.setVisible(false);
@@ -274,6 +294,7 @@ public final class MediaViewer extends StackPane {
             show(at);
             slideshow.restart();
         });
+        stripShown.addListener((_, _, on) -> applyStripShown(on));
         stripRow.getStyleClass().add("filmstrip-row");
         stripRow.setMinHeight(Filmstrip.HEIGHT);
         stripRow.getChildren().add(filmstrip);
@@ -526,6 +547,12 @@ public final class MediaViewer extends StackPane {
 
     /** Empties the stage: no image, no video, no message. Rotation and zoom are reset by the next show(). */
     private void clearStage() {
+        motionPlaying = false; // 1.4.0: a motion clip goes with its photo
+        motionStart = -1;
+        showMotionButton(false);
+        if (motionButton.getTooltip() != null) {
+            motionButton.getTooltip().setText("Play the motion photo");
+        }
         if (thumbnailLoad != null) {
             thumbnailLoad.cancel();
             thumbnailLoad = null;
@@ -569,6 +596,82 @@ public final class MediaViewer extends StackPane {
         }
         useRealSize(loaded.fullWidth(), loaded.fullHeight());
         showImage(loaded.image(), true);
+        findMotion(ref);
+    }
+
+    // --- Motion photos (1.4.0) ---
+
+    private void showMotionButton(boolean on) {
+        motionButton.setVisible(on);
+        motionButton.setManaged(on);
+    }
+
+    /** Looks for a clip inside the shown JPEG, off the UI thread; shows the button if there is one. */
+    private void findMotion(MediaRef ref) {
+        if (!MotionPhoto.mayHaveOne(ref.extension())) {
+            return;
+        }
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return MotionPhoto.videoStart(ref.path());
+            } catch (IOException | RuntimeException e) {
+                log.debug("No motion clip read from {}: {}", ref.path(), e.toString());
+                return -1L;
+            }
+        }).thenAccept(start -> Platform.runLater(() -> {
+            if (isCurrent(ref) && start >= 0) {
+                motionStart = start;
+                showMotionButton(true);
+            }
+        }));
+    }
+
+    /** The motion button: plays the clip over the photo, or stops it. */
+    private void toggleMotion() {
+        TimelineItem item = current();
+        if (item == null || motionStart < 0) {
+            return;
+        }
+        if (motionPlaying) {
+            stopMotion();
+            return;
+        }
+        MediaRef ref = item.ref();
+        long start = motionStart;
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return MotionPhoto.extract(ref.path(), start, MOTION_FOLDER);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }).whenComplete((clip, error) -> Platform.runLater(() -> {
+            if (!isCurrent(ref)) {
+                return;
+            }
+            if (error != null) {
+                log.info("Can't play the motion clip of {}: {}", ref.path(), error.toString());
+                return;
+            }
+            motionPlaying = true;
+            motionButton.getTooltip().setText("Back to the photo");
+            video.setVisible(true);
+            video.play(FolderListing.itemOf(clip), reason -> {
+                if (isCurrent(ref)) {
+                    stopMotion();
+                }
+            }, () -> { });
+        }));
+    }
+
+    /** Back to the photo: the clip stops (its end, the button, another item). */
+    private void stopMotion() {
+        if (!motionPlaying) {
+            return;
+        }
+        motionPlaying = false;
+        motionButton.getTooltip().setText("Play the motion photo");
+        video.stop();
+        video.setVisible(false);
     }
 
     private void loadAnimated(MediaRef ref) {
@@ -998,6 +1101,13 @@ public final class MediaViewer extends StackPane {
                 }
             }
             case R -> rotate();
+            case S -> {
+                if (plain) {
+                    toggleFilmstrip();
+                } else {
+                    handled = false;
+                }
+            }
             case SPACE -> {
                 // By type, not by what's on screen: a video that failed to play must not start the slideshow.
                 if (isVideo()) {
@@ -1147,8 +1257,20 @@ public final class MediaViewer extends StackPane {
         more.getStyleClass().add("icon-button");
         more.setMinWidth(USE_PREF_SIZE);
         configure(more, "More", this::showMoreMenu);
-        HBox bar = new HBox(8, back, fileName, counter, spacer, zoom, actionButtons, divider(), rotate,
-                slideshowButton, fullScreen, infoButton, more);
+        stripButton.setGraphic(Icon.FILMSTRIP.node(ICON_SIZE));
+        stripButton.getStyleClass().add("icon-button");
+        stripButton.setMinWidth(USE_PREF_SIZE);
+        configure(stripButton, "", this::toggleFilmstrip);
+        stripButton.getTooltip().textProperty().bind(stripShown
+                .map(on -> on ? "Hide the filmstrip (S)" : "Show the filmstrip (S)"));
+        motionButton.setGraphic(Icon.MOTION.node(ICON_SIZE));
+        motionButton.getStyleClass().add("icon-button");
+        motionButton.setMinWidth(USE_PREF_SIZE);
+        configure(motionButton, "", this::toggleMotion);
+        motionButton.getTooltip().setText("Play the motion photo");
+        showMotionButton(false);
+        HBox bar = new HBox(8, back, fileName, counter, spacer, zoom, actionButtons, divider(), motionButton, rotate,
+                slideshowButton, stripButton, fullScreen, infoButton, more);
         bar.getStyleClass().add("viewer-top-bar");
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setMaxHeight(USE_PREF_SIZE);
@@ -1229,6 +1351,8 @@ public final class MediaViewer extends StackPane {
         view.add(Menus.item(full ? "Leave full screen" : "Full screen",
                 full ? Icon.EXIT_FULL_SCREEN : Icon.FULL_SCREEN, new KeyCodeCombination(KeyCode.F),
                 this::toggleFullScreen));
+        view.add(Menus.item(stripShown.get() ? "Hide the filmstrip" : "Show the filmstrip", Icon.FILMSTRIP,
+                new KeyCodeCombination(KeyCode.S), this::toggleFilmstrip));
         if (mode.inSlideshow() && imageView.getImage() != null) {
             view.add(Menus.item(slideshow.isRunning() ? "Stop the slideshow" : "Slideshow", Icon.SLIDESHOW,
                     new KeyCodeCombination(KeyCode.SPACE), this::toggleSlideshow));
@@ -1416,8 +1540,8 @@ public final class MediaViewer extends StackPane {
         }
         stripRow.getChildren().remove(filmstrip);
         filmstrip.getStyleClass().remove("floating");
-        stripRow.setVisible(!full);
-        stripRow.setManaged(!full);
+        stripRow.setVisible(!full && stripShown.get());
+        stripRow.setManaged(!full && stripShown.get());
         if (full) {
             filmstrip.getStyleClass().add("floating");
             StackPane.setAlignment(filmstrip, Pos.BOTTOM_CENTER);
@@ -1448,8 +1572,31 @@ public final class MediaViewer extends StackPane {
         }
     }
 
+    /** S, the top-bar button and the menu: the filmstrip off or on (1.4.0). */
+    private void toggleFilmstrip() {
+        stripShown.set(!stripShown.get());
+    }
+
+    /** Applies {@link #stripShown}: in a window the row goes (the photo grows); in full screen the strip fades. */
+    private void applyStripShown(boolean on) {
+        boolean full = isFullScreen();
+        stripRow.setVisible(!full && on);
+        stripRow.setManaged(!full && on);
+        if (!on) {
+            hideStripNow();
+        } else {
+            showStrip();
+            stripIdle.playFromStart();
+        }
+    }
+
+    /** Whether the filmstrip is on (the top-bar button, S); the app saves it. */
+    public BooleanProperty filmstripShownProperty() {
+        return stripShown;
+    }
+
     private void showStrip() {
-        if (!stripHidden) {
+        if (!stripHidden || !stripShown.get()) {
             return;
         }
         stripHidden = false;

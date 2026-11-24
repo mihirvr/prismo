@@ -37,7 +37,8 @@ final class Migrations {
             "V6__video_choices.sql",
             "V7__people.sql",
             "V8__reread_matroska.sql",
-            "V9__categories.sql");
+            "V9__categories.sql",
+            "V10__duplicates.sql");
 
     private final List<String> scripts;
 

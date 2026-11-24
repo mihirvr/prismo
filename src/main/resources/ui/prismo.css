@@ -1159,14 +1159,15 @@
 
 .viewer .menu-button > .label {
     -fx-text-fill: #f0f1f4;
+    -fx-padding: 0; /* 1.4.0: the built-in label padding made the icon drop-downs 47 px wide next to 28 px buttons */
 }
 
 /* "1.5×": the speed as text, a fixed width so the bar doesn't shift when it changes. Wide enough for the widest,
-   "1.75×" in bold: a stylesheet's min width beats the code's, so at 50 a narrow bar cut "1.5×" to "…" (P7). */
+   "1.75×" in bold: a stylesheet's min width beats the code's, so at 50 a narrow bar cut "1.5×" to "…" (P7).
+   1.4.0: no fixed width any more, it left a gap after a short "1×"; the button fits its text and the
+   seek bar takes up the few pixels when the speed changes. */
 .viewer .viewer-speed {
-    -fx-padding: 4 9 4 9;
-    -fx-min-width: 62;
-    -fx-pref-width: 62;
+    -fx-padding: 4 6 4 6;
     -fx-font-weight: bold;
     -fx-font-size: 12px;
 }
@@ -1683,6 +1684,18 @@
 
 .viewer .info-path {
     -fx-font-size: 12px;
+}
+
+/* 1.4.0: "Open in map" under the Location lines: accent text, no box, underlined on hover. */
+.viewer .info-link {
+    -fx-padding: 0;
+    -fx-border-width: 0;
+    -fx-text-fill: -prismo-accent;
+    -fx-underline: false;
+}
+
+.viewer .info-link:hover {
+    -fx-underline: true;
 }
 
 /* The pictures always show their own look, whatever look is on now. */

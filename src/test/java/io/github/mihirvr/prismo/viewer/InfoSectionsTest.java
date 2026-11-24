@@ -8,6 +8,7 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifDirectoryBase;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.exif.GpsDirectory;
+import com.drew.metadata.iptc.IptcDirectory;
 import io.github.mihirvr.prismo.platform.FileReads;
 import io.github.mihirvr.prismo.testing.TestMedia;
 import io.github.mihirvr.prismo.ui.MediaDetails;
@@ -17,6 +18,7 @@ import io.github.mihirvr.prismo.video.VideoPlayer;
 import java.nio.file.Path;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -93,11 +95,12 @@ class InfoSectionsTest {
         VideoPlayer.Info info = new VideoPlayer.Info(83_000_000, 1920, 1080, 90, true, true, 29.97,
                 List.of(new Track(1, "eng", "", true, false), new Track(2, "hin", "Commentary", false, false)),
                 List.of(new Track(3, "eng", "", false, true), new Track(4, "fre", "", false, false)), 1, "h264",
-                "aac");
+                "aac", "", "Google Pixel 8");
 
         List<InfoSections.Section> sections = InfoSections.build(video(1920, 1080, 83), ZoneOffset.UTC, null, info);
 
-        assertEquals(List.of("Details", "Video", "Path"), titles(sections));
+        assertEquals(List.of("Details", "Camera", "Video", "Path"), titles(sections));
+        assertEquals(List.of(new Line("Camera", "Google Pixel 8")), sections.get(1).lines(), "1.4.0: the phone");
         assertTrue(sections.getFirst().lines().stream().noneMatch(l -> l.label().equals("Dimensions")),
                 "a video's size is its Resolution, in the Video section only");
         assertEquals(List.of(
@@ -108,7 +111,7 @@ class InfoSectionsTest {
                 new Line("Sound format", "AAC"),
                 new Line("Sound tracks", "English\nCommentary · Hindi"),
                 new Line("Subtitle tracks", "English\nFrench (picture subtitles: can't be shown)")),
-                sections.get(1).lines(), "a phone's sideways video is shown upright: 1080 wide");
+                sections.get(2).lines(), "a phone's sideways video is shown upright: 1080 wide");
     }
 
     @Test
@@ -118,7 +121,7 @@ class InfoSectionsTest {
         assertEquals(List.of(), InfoSections.videoLines(video(0, 0, 0), null), "nothing known: nothing shown");
 
         VideoPlayer.Info silent = new VideoPlayer.Info(5_000_000, 320, 240, 0, true, false, 25, List.of(), List.of(),
-                -1, "mpeg4", "");
+                -1, "mpeg4", "", "", "");
         assertEquals(List.of(new Line("Length", "0:05"), new Line("Resolution", "320 × 240 pixels"),
                 new Line("Frame rate", "25 fps"), new Line("Video format", "MPEG-4 Part 2")),
                 InfoSections.videoLines(video(0, 0, 0), silent), "no sound: no sound lines");
@@ -153,5 +156,42 @@ class InfoSectionsTest {
         assertEquals(0, InfoSections.positive(new Rational(0, 1)));
         assertEquals(0, InfoSections.positive(new Rational(0, 0)), "0/0 means not recorded");
         assertEquals(0, InfoSections.positive(null));
+    }
+
+    @Test
+    void aVideosLocationShowsWithThePlaceName() {
+        VideoPlayer.Info info = new VideoPlayer.Info(5_000_000, 320, 240, 0, true, false, 25, List.of(), List.of(),
+                -1, "h264", "", "+18.5204+073.8567+560.000/", "");
+
+        List<InfoSections.Section> sections = InfoSections.build(video(320, 240, 5), ZoneOffset.UTC, null, info,
+                at -> Optional.of("Pune, Maharashtra, India"));
+
+        assertEquals(List.of("Details", "Location", "Video", "Path"), titles(sections));
+        assertEquals(List.of(new Line("Place", "Pune, Maharashtra, India"), new Line("GPS", "18.520400, 73.856700")),
+                sections.get(1).lines());
+    }
+
+    @Test
+    void thePlaceWrittenInTheFileWinsAndNeedsNoGps() {
+        Metadata metadata = new Metadata();
+        IptcDirectory iptc = new IptcDirectory();
+        iptc.setString(IptcDirectory.TAG_CITY, "Delhi");
+        iptc.setString(IptcDirectory.TAG_PROVINCE_OR_STATE, "delhi");
+        iptc.setString(IptcDirectory.TAG_COUNTRY_OR_PRIMARY_LOCATION_NAME, "India");
+        metadata.addDirectory(iptc);
+
+        assertEquals("Delhi, India", InfoSections.writtenPlace(metadata), "repeats dropped, any case");
+        List<InfoSections.Section> sections = InfoSections.build(photo(Path.of("D:", "a.jpg"), null, null),
+                ZoneOffset.UTC, metadata, null, at -> Optional.of("not asked: no GPS"));
+        InfoSections.Section location = sections.stream().filter(x -> x.title().equals("Location")).findFirst()
+                .orElseThrow();
+        assertEquals(List.of(new Line("Place", "Delhi, India")), location.lines());
+    }
+
+    @Test
+    void noPlaceAndNoGpsMeansNoLocationSection() {
+        assertEquals("", InfoSections.writtenPlace(new Metadata()));
+        assertTrue(InfoSections.build(video(0, 0, 0), ZoneOffset.UTC, null, null, at -> Optional.of("x")).stream()
+                .noneMatch(x -> x.title().equals("Location")));
     }
 }

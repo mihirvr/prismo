@@ -164,6 +164,8 @@ public final class PrismoApp extends Application {
     private static final String MUTED_SETTING = "video.muted";
     private static final String SPEED_SETTING = "video.speed";
     private static final String TIME_LEFT_SETTING = "video.time_left";
+    /** 1.4.0: the viewer's filmstrip on or off (the top-bar button, S). */
+    private static final String FILMSTRIP_SETTING = "viewer.filmstrip";
     /** Settings › Video: the box behind subtitles (P8). */
     private static final String SUBTITLE_BACKGROUND_SETTING = "video.subtitle_background";
     /** The sound and subtitle languages picked last ("English"; subtitles also "off"), for videos with no pick (P8). */
@@ -226,6 +228,7 @@ public final class PrismoApp extends Application {
     private double savedSpeed = 1;
     /** The video time shows the time left (1.1.0). */
     private boolean savedTimeLeft;
+    private boolean savedFilmstrip;
     private boolean savedIncludeSubfolders = true;
     private boolean savedPagesOpen = true;
     private boolean savedTreeOpen = true;
@@ -360,6 +363,7 @@ public final class PrismoApp extends Application {
         savedVolume = number(VOLUME_SETTING, 0, 1, 1);
         savedSpeed = number(SPEED_SETTING, 0.5, 2, 1);
         savedTimeLeft = settings.get(TIME_LEFT_SETTING).map(Boolean::parseBoolean).orElse(false);
+        savedFilmstrip = settings.get(FILMSTRIP_SETTING).map(Boolean::parseBoolean).orElse(true);
         savedMuted = settings.get(MUTED_SETTING).map(Boolean::parseBoolean).orElse(false);
         ignoredFolders.set(IgnoreRules.fromSetting(settings.get(IGNORED_SETTING).orElse(null)));
         ignoreRulesNow = ignoredFolders.get();
@@ -513,6 +517,9 @@ public final class PrismoApp extends Application {
         viewer.videoRemainingShownProperty().set(savedTimeLeft);
         viewer.videoRemainingShownProperty().addListener((_, _, on) ->
                 settings.put(TIME_LEFT_SETTING, Boolean.toString(on)));
+        viewer.filmstripShownProperty().set(savedFilmstrip);
+        viewer.filmstripShownProperty().addListener((_, _, on) ->
+                settings.put(FILMSTRIP_SETTING, Boolean.toString(on)));
         viewer.setTrackMemory(trackMemory());
         viewer.subtitleBackgroundProperty().bindBidirectional(subtitleBackground);
         subtitleBackground.addListener((_, _, chosen) ->
@@ -682,6 +689,7 @@ public final class PrismoApp extends Application {
             loadTimeline();
         });
         collections.sortLockedProperty().addListener((_, _, _) -> updateSortLock());
+        collections.pageProperty().addListener((_, _, _) -> updateSortLock()); // Recently Added -> Duplicates: both locked
         Slider size = new Slider(TimelineView.MIN_THUMBNAIL_SIZE, TimelineView.MAX_THUMBNAIL_SIZE,
                 timeline.thumbnailSizeProperty().get());
         size.valueProperty().bindBidirectional(timeline.thumbnailSizeProperty());
@@ -956,10 +964,15 @@ public final class PrismoApp extends Application {
         collections.setLayout(view, arrange);
     }
 
-    /** Recently Added has a fixed order: the Sort controls show it, locked, while that page is on screen. */
+    /**
+     * Recently Added (newest added first) and, 1.4.0, Duplicates (largest first) have a fixed order: the Sort
+     * controls show it, locked, while that page is on screen.
+     */
     private void updateSortLock() {
         boolean locked = collections.isVisible() && collections.sortLockedProperty().get();
-        viewBar.setSortLocked(locked ? MediaScope.RECENTLY_ADDED.applyTo(viewOptions) : null);
+        MediaScope scope = collections.page() == CollectionsPage.Page.DUPLICATES ? MediaScope.DUPLICATES
+                : MediaScope.RECENTLY_ADDED;
+        viewBar.setSortLocked(locked ? scope.applyTo(viewOptions) : null);
     }
 
     /**

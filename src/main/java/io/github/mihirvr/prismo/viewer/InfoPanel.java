@@ -1,5 +1,7 @@
 package io.github.mihirvr.prismo.viewer;
 
+import io.github.mihirvr.prismo.places.GeoPoint;
+import io.github.mihirvr.prismo.places.Places;
 import com.drew.imaging.ImageProcessingException;
 import com.drew.metadata.Metadata;
 import io.github.mihirvr.prismo.platform.FileReads;
@@ -12,6 +14,11 @@ import java.io.IOException;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
+import javafx.scene.control.Hyperlink;
+import java.util.Set;
+import java.util.Map;
+import java.util.HashSet;
+import java.util.HashMap;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -63,6 +70,9 @@ final class InfoPanel extends VBox {
     private VideoPlayer.Info video;
     /** Bumped for every item shown: reads for an older one are dropped. */
     private long generation;
+    /** 1.4.0: place names already looked up (the table loads on first use, off the UI thread). */
+    private final Map<GeoPoint, Optional<String>> placeNames = new HashMap<>();
+    private final Set<GeoPoint> placeLookups = new HashSet<>();
 
     /** @param onClose the close button (the viewer closes the panel) */
     InfoPanel(FileItems fileItems, Runnable onClose) {
@@ -186,12 +196,53 @@ final class InfoPanel extends VBox {
 
     private void render() {
         sections.getChildren().clear();
-        for (InfoSections.Section section : InfoSections.build(details, ZoneId.systemDefault(), metadata, video)) {
+        for (InfoSections.Section section : InfoSections.build(details, ZoneId.systemDefault(), metadata, video,
+                this::placeName)) {
             Label heading = new Label(section.title().toUpperCase(Locale.ROOT));
             heading.getStyleClass().add("info-heading");
             VBox box = new VBox(8, heading, section.title().equals("Path") ? pathLine(section) : grid(section.lines()));
+            GeoPoint at = section.title().equals("Location") ? InfoSections.point(metadata, video) : null;
+            if (at != null) {
+                box.getChildren().add(mapLink(at));
+            }
             sections.getChildren().add(box);
         }
+    }
+
+    /**
+     * 1.4.0: "Open in map": the spot on OpenStreetMap in the browser. Prismo itself never goes online; this opens
+     * the browser only when clicked.
+     */
+    private Hyperlink mapLink(GeoPoint at) {
+        Hyperlink link = new Hyperlink("Open in map");
+        link.getStyleClass().add("info-link");
+        link.setTooltip(new Tooltip("Opens this spot on OpenStreetMap in your browser"));
+        link.setFocusTraversable(false);
+        link.setOnAction(_ -> fileItems.openLink(at.mapLink()));
+        return link;
+    }
+
+    /** The nearest place's name, if looked up already; else starts the lookup and shows it when done. */
+    private Optional<String> placeName(GeoPoint at) {
+        Optional<String> known = placeNames.get(at);
+        if (known != null) {
+            return known;
+        }
+        if (placeLookups.add(at)) {
+            long mine = generation;
+            CompletableFuture.supplyAsync(() -> Places.shared().describe(at), BACKGROUND).whenComplete((words, error) ->
+                    Platform.runLater(() -> {
+                        if (error != null) {
+                            log.warn("Could not look up the place of {}", at, error);
+                        }
+                        placeNames.put(at, error == null ? words : Optional.empty());
+                        placeLookups.remove(at);
+                        if (mine == generation && details != null) {
+                            render();
+                        }
+                    }));
+        }
+        return Optional.empty();
     }
 
     /** Label on the left, value on the right; long values wrap. */

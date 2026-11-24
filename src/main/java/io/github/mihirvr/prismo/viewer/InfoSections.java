@@ -6,6 +6,9 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifDirectoryBase;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
 import com.drew.metadata.exif.GpsDirectory;
+import com.drew.metadata.iptc.IptcDirectory;
+import com.drew.metadata.xmp.XmpDirectory;
+import io.github.mihirvr.prismo.places.GeoPoint;
 import io.github.mihirvr.prismo.index.MetadataReader;
 import io.github.mihirvr.prismo.ui.MediaDetails;
 import io.github.mihirvr.prismo.ui.MediaDetails.Line;
@@ -16,10 +19,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * What the Info panel shows, as titled sections of "label: value" lines: Details (from the index), Camera and
- * Location (a photo's EXIF, read from the file), Video (what the player read from the file) and the full Path.
+ * Location (a photo's EXIF GPS or, 1.4.0, a video's location; with the nearest place's name), Video (what the player read from the file) and the full Path.
  * Anything unknown is left out, and a section with no lines is left out too. Pure, so the wording is unit-tested.
  */
 final class InfoSections {
@@ -50,6 +55,15 @@ final class InfoSections {
      * @param video    what the player found in the video, or null (a photo, or the video isn't open yet / can't be)
      */
     static List<Section> build(MediaDetails details, ZoneId zone, Metadata metadata, VideoPlayer.Info video) {
+        return build(details, zone, metadata, video, _ -> Optional.empty());
+    }
+
+    /**
+     * As above, with {@code place}: the words for a spot ("Pune, Maharashtra, India", from {@code Places}), or empty
+     * when there are none (yet).
+     */
+    static List<Section> build(MediaDetails details, ZoneId zone, Metadata metadata, VideoPlayer.Info video,
+            Function<GeoPoint, Optional<String>> place) {
         List<Section> sections = new ArrayList<>();
         add(sections, "Details", details.lines(zone));
         if (!details.people().isEmpty()) { // 1.2.0: the people tagged in it
@@ -61,14 +75,27 @@ final class InfoSections {
         List<Line> camera = new ArrayList<>();
         if (!details.camera().isEmpty()) {
             camera.add(new Line("Camera", details.camera()));
+        } else if (video != null && !video.device().isEmpty()) {
+            camera.add(new Line("Camera", video.device())); // 1.4.0: the phone that made the video
         }
         if (metadata != null) {
             camera.addAll(photoLines(metadata));
         }
         add(sections, "Camera", camera);
-        if (metadata != null) {
-            add(sections, "Location", location(metadata));
+        // 1.4.0: the place name the file itself carries (a camera's or an editor's), else the nearest place to its
+        // GPS; then the GPS. Videos too.
+        GeoPoint at = point(metadata, video);
+        String written = metadata == null ? "" : writtenPlace(metadata);
+        List<Line> location = new ArrayList<>();
+        if (!written.isEmpty()) {
+            location.add(new Line("Place", written));
+        } else if (at != null) {
+            place.apply(at).ifPresent(words -> location.add(new Line("Place", words)));
         }
+        if (at != null) {
+            location.add(new Line("GPS", at.text()));
+        }
+        add(sections, "Location", location);
         if (details.isVideo()) {
             add(sections, "Video", videoLines(details, video));
         }
@@ -121,14 +148,64 @@ final class InfoSections {
         return lines;
     }
 
+    /** XMP names of the same place fields, for files that carry XMP and no IPTC (Lightroom, many editors). */
+    private static final String[] XMP_PLACE = {"Iptc4xmpCore:Location", "photoshop:City", "photoshop:State",
+        "photoshop:Country"};
+
+    /**
+     * The place written in the file as text (1.4.0): IPTC sub-location, city, state and country, else the same from
+     * XMP; "" if none. Repeats are dropped ("Delhi, Delhi, India" shows as "Delhi, India").
+     */
+    static String writtenPlace(Metadata metadata) {
+        List<String> parts = new ArrayList<>();
+        IptcDirectory iptc = metadata.getFirstDirectoryOfType(IptcDirectory.class);
+        if (iptc != null) {
+            for (int tag : new int[] {IptcDirectory.TAG_SUB_LOCATION, IptcDirectory.TAG_CITY,
+                    IptcDirectory.TAG_PROVINCE_OR_STATE, IptcDirectory.TAG_COUNTRY_OR_PRIMARY_LOCATION_NAME}) {
+                addPart(parts, iptc.getString(tag));
+            }
+        }
+        if (parts.isEmpty()) {
+            XmpDirectory xmp = metadata.getFirstDirectoryOfType(XmpDirectory.class);
+            if (xmp != null) {
+                Map<String, String> properties = xmp.getXmpProperties();
+                for (String key : XMP_PLACE) {
+                    addPart(parts, properties.get(key));
+                }
+            }
+        }
+        return String.join(", ", parts);
+    }
+
+    private static void addPart(List<String> parts, String part) {
+        if (part == null || part.isBlank()) {
+            return;
+        }
+        String trimmed = part.strip();
+        if (parts.stream().noneMatch(trimmed::equalsIgnoreCase)) {
+            parts.add(trimmed);
+        }
+    }
+
     /** "GPS: 18.520430, 73.856743" (latitude, longitude; south and west negative), or nothing. */
     static List<Line> location(Metadata metadata) {
-        GpsDirectory gps = metadata.getFirstDirectoryOfType(GpsDirectory.class);
-        GeoLocation at = gps == null ? null : gps.getGeoLocation();
-        if (at == null || at.isZero()) {
-            return List.of();
+        GeoPoint at = point(metadata, null);
+        return at == null ? List.of() : List.of(new Line("GPS", at.text()));
+    }
+
+    /**
+     * Where it was taken: a photo's EXIF GPS, or (1.4.0) the location a phone wrote into a video; null if neither
+     * (0, 0 is a phone that had no fix, not a place).
+     */
+    static GeoPoint point(Metadata metadata, VideoPlayer.Info video) {
+        if (metadata != null) {
+            GpsDirectory gps = metadata.getFirstDirectoryOfType(GpsDirectory.class);
+            GeoLocation at = gps == null ? null : gps.getGeoLocation();
+            if (at != null && !at.isZero() && Math.abs(at.getLatitude()) <= 90 && Math.abs(at.getLongitude()) <= 180) {
+                return new GeoPoint(at.getLatitude(), at.getLongitude());
+            }
         }
-        return List.of(new Line("GPS", String.format(Locale.ROOT, "%.6f, %.6f", at.getLatitude(), at.getLongitude())));
+        return video == null ? null : GeoPoint.parseIso6709(video.location()).orElse(null);
     }
 
     /**

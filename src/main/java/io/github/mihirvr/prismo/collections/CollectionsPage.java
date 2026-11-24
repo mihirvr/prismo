@@ -99,7 +99,8 @@ public final class CollectionsPage extends BorderPane {
     public enum Page {
         FOLDERS("Folders", Icon.FOLDER), ALBUMS("Albums", Icon.ALBUMS), PEOPLE("People", Icon.PEOPLE),
         CATEGORIES("Categories", Icon.CATEGORY), FAVORITES("Favorites", Icon.HEART),
-        RECENTLY_ADDED("Recently Added", Icon.CLOCK), HIDDEN("Hidden", Icon.EYE_OFF), TRASH("Trash", Icon.TRASH);
+        RECENTLY_ADDED("Recently Added", Icon.CLOCK), DUPLICATES("Duplicates", Icon.COPY), HIDDEN("Hidden", Icon.EYE_OFF),
+        TRASH("Trash", Icon.TRASH);
 
         private final String label;
         private final Icon icon;
@@ -212,6 +213,13 @@ public final class CollectionsPage extends BorderPane {
     /** What the grid shows now (scope + options), to tell a reload (stay put) from a new view (to the top). */
     private Object shownKey;
     private boolean stale = true;
+    /** 1.4.0: reads files that share a size for Duplicates; runs when that page is opened. */
+    private final DuplicateFinder duplicates;
+    /** Files still to read for Duplicates, or -1 when no check is running (UI thread). */
+    private int duplicatesLeft = -1;
+    /** What the Duplicates page says under its title when no check runs. */
+    private static final String DUPLICATES_HINT =
+            "Files with exactly the same content, largest first. Prismo never removes a copy: pick one and use Trash.";
     /** The width of the tree's expand arrows (measured from a row that has one), for the guide lines. */
     private double arrowWidth = 20;
     /** The layout on screen (page, album open or not), so it is only rebuilt when that changes. */
@@ -221,6 +229,7 @@ public final class CollectionsPage extends BorderPane {
      * @param loads the thread loads run on, one at a time, in order (shared with the Timeline)
      */
     public CollectionsPage(Database database, ThumbnailLoader loader, Executor loads) {
+        this.duplicates = new DuplicateFinder(database);
         this.database = database;
         this.loads = loads;
         getStyleClass().add("collections");
@@ -302,6 +311,9 @@ public final class CollectionsPage extends BorderPane {
                 openAlbum = null;
                 refresh();
                 navigated();
+                if (page == Page.DUPLICATES) {
+                    checkDuplicates();
+                }
             }
         });
 
@@ -532,10 +544,41 @@ public final class CollectionsPage extends BorderPane {
         refresh();
     }
 
+    /**
+     * 1.4.0: reads the files that share a size with another (only those can have a copy) in the background, saying
+     * how many are left under the title, then shows the page again. Files read before are not read again.
+     */
+    private void checkDuplicates() {
+        if (duplicatesLeft >= 0) {
+            return; // already running
+        }
+        duplicatesLeft = 0;
+        hint.setText("Looking for copies…");
+        Thread.ofVirtual().name("prismo-duplicates").start(() -> {
+            try {
+                duplicates.refresh(left -> Platform.runLater(() -> {
+                    if (page() == Page.DUPLICATES && left > 0) {
+                        hint.setText("Comparing files that have the same size: " + left + " to go…");
+                    }
+                }), () -> page() != Page.DUPLICATES);
+            } catch (SQLException | RuntimeException e) {
+                log.warn("Could not look for duplicates", e);
+            } finally {
+                Platform.runLater(() -> {
+                    duplicatesLeft = -1;
+                    if (page() == Page.DUPLICATES) {
+                        hint.setText(DUPLICATES_HINT);
+                        refresh();
+                    }
+                });
+            }
+        });
+    }
+
     /** Something in the library changed (index run, file changes, an item action): reload what's shown. */
     public void refresh() {
         Page page = page();
-        sortLocked.set(page == Page.RECENTLY_ADDED);
+        sortLocked.set(page == Page.RECENTLY_ADDED || page == Page.DUPLICATES);
         showLayout(page);
         if (!isVisible()) {
             stale = true; // done when the tab is shown
@@ -604,7 +647,7 @@ public final class CollectionsPage extends BorderPane {
                 MediaScope scope = MediaScope.tag(kind, request.album().tagId());
                 yield new Loaded(null, null, null, scope, options, TimelineQuery.load(c, scope, options, zone));
             }
-            case FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH -> {
+            case FAVORITES, RECENTLY_ADDED, DUPLICATES, HIDDEN, TRASH -> {
                 MediaScope scope = scopeOf(request.page());
                 ViewOptions options = scope.applyTo(request.options());
                 yield new Loaded(null, null, null, scope, options, TimelineQuery.load(c, scope, options, zone));
@@ -618,6 +661,7 @@ public final class CollectionsPage extends BorderPane {
             case RECENTLY_ADDED -> MediaScope.RECENTLY_ADDED;
             case HIDDEN -> MediaScope.HIDDEN;
             case TRASH -> MediaScope.TRASH;
+            case DUPLICATES -> MediaScope.DUPLICATES;
             case FOLDERS, ALBUMS, PEOPLE, CATEGORIES -> MediaScope.LIBRARY;
         };
     }
@@ -709,6 +753,7 @@ public final class CollectionsPage extends BorderPane {
             case CATEGORIES -> "Nothing in " + request.album().name() + filtered;
             case FAVORITES -> "No favorites" + filtered;
             case RECENTLY_ADDED -> "Nothing added yet" + filtered;
+            case DUPLICATES -> duplicatesLeft >= 0 ? "Looking for copies…" : "No duplicates found" + filtered;
             case HIDDEN -> "Nothing hidden" + filtered;
             case TRASH -> "Trash is empty" + filtered;
         };
@@ -768,6 +813,9 @@ public final class CollectionsPage extends BorderPane {
             default -> {
                 header.getChildren().addAll(title, hint);
                 setCenter(headed(gridHolder, header));
+                if (page == Page.DUPLICATES && duplicatesLeft < 0) {
+                    hint.setText(DUPLICATES_HINT);
+                }
             }
         }
     }

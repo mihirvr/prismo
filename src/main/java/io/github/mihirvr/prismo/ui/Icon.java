@@ -110,7 +110,12 @@ public enum Icon {
     SIDEBAR("M5 4.5H19A1.5 1.5 0 0 1 20.5 6V18A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Z"
             + "M9.5 4.5V19.5"),
     /** 2026-11-10: a small tree of three boxes: show or hide the Collections folder tree. */
-    FOLDER_TREE("M4 4H9V8H4ZM12 10.5H20V14H12ZM12 17H20V20.5H12ZM6.5 8V18.75H12M6.5 12.25H12");
+    FOLDER_TREE("M4 4H9V8H4ZM12 10.5H20V14H12ZM12 17H20V20.5H12ZM6.5 8V18.75H12M6.5 12.25H12"),
+    /** 1.4.0: a window with a row of small frames along its bottom: show or hide the viewer's filmstrip. */
+    FILMSTRIP("M5 4.5H19A1.5 1.5 0 0 1 20.5 6V18A1.5 1.5 0 0 1 19 19.5H5A1.5 1.5 0 0 1 3.5 18V6A1.5 1.5 0 0 1 5 4.5Z"
+            + "M3.5 14.5H20.5M9.2 14.5V19.5M14.8 14.5V19.5"),
+    /** 1.4.0: a play mark in a ring: play a motion photo's clip. */
+    MOTION("M12 3.5A8.5 8.5 0 1 1 12 20.5A8.5 8.5 0 1 1 12 3.5ZM10.2 8.8L15.2 12L10.2 15.2Z");
 
     /** The drawing grid's side: every path above is drawn inside 0..24. */
     public static final double GRID = 24;

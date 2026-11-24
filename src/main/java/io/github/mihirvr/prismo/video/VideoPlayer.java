@@ -49,7 +49,9 @@ import org.slf4j.LoggerFactory;
  *
  * <p><b>Sync.</b> Both follow one {@link PlaybackClock}, driven by the sound card (samples played) when there
  * is sound. The picture thread decodes the next picture, then sleeps until the clock reaches its time and
- * hands it over; one that's already late is handed over at once (the UI keeps only the newest).
+ * hands it over; one that's already late is handed over at once (the UI keeps only the newest). When pictures
+ * come more than {@link #DROP_LATE_MICROS} late (decoding can't keep up), the next ones are decoded only, not shown,
+ * until the picture has caught up with the sound (1.4.0).
  *
  * <p><b>Handing pictures to the UI.</b> Three pixel arrays go round: one being filled, one waiting in
  * {@link #takePicture}, one being drawn. The UI gives each back with {@link #recycle}. So memory is fixed at
@@ -72,6 +74,14 @@ public final class VideoPlayer implements AutoCloseable {
     private static final int SOUND_BUFFER_MILLIS = 200;
     private static final int BYTES_PER_SAMPLE_FRAME = 4; // 16-bit stereo
     private static final int PICTURE_BUFFERS = 3;
+    /**
+     * 1.4.0: a picture this late means decoding can't keep up (a heavy file, a high speed, a busy computer): the next
+     * ones are decoded but not converted or shown until the picture has caught up with the sound. Before, it fell
+     * further and further behind and never caught up (measured: 4K 60 fps at 1.8×, 43 ms to 637 ms in 15 s).
+     */
+    static final long DROP_LATE_MICROS = 40_000;
+    /** While catching up, still show one picture in this many, so the video never looks frozen. */
+    static final int MAX_DROPS_IN_ROW = 8;
     private static final long POLL_MILLIS = 4;
     /** The picture side waits this long for the sound device before starting without it. */
     private static final long SOUND_OPEN_WAIT_MILLIS = 3_000;
@@ -94,7 +104,49 @@ public final class VideoPlayer implements AutoCloseable {
      */
     public record Info(long durationMicros, int width, int height, int rotation, boolean hasPicture,
             boolean hasSound, double frameRate, List<Track> audioTracks, List<Track> subtitleTracks,
-            int audioStream, String videoCodec, String audioCodec) {
+            int audioStream, String videoCodec, String audioCodec, String location, String device) {
+    }
+
+    /**
+     * 1.4.0: the phone or camera that made the video ("Google Pixel 8", "Apple iPhone 15 Pro"), from the file's own
+     * metadata, or "". Android writes com.android.manufacturer / model; iPhones com.apple.quicktime.make / model;
+     * some cameras plain make / model.
+     */
+    private static String device(AVFormatContext context) {
+        String[][] pairs = {{"com.android.manufacturer", "com.android.model"},
+            {"com.apple.quicktime.make", "com.apple.quicktime.model"}, {"make", "model"}};
+        for (String[] pair : pairs) {
+            String make = tagValue(context, pair[0]);
+            String model = tagValue(context, pair[1]);
+            if (!make.isEmpty() || !model.isEmpty()) {
+                // "Apple" + "iPhone 15 Pro"; a model that already starts with the make isn't doubled
+                return make.isEmpty() || model.toLowerCase(Locale.ROOT).startsWith(make.toLowerCase(Locale.ROOT))
+                        ? (model.isEmpty() ? make : model) : (make + " " + model).strip();
+            }
+        }
+        return "";
+    }
+
+    private static String tagValue(AVFormatContext context, String key) {
+        AVDictionaryEntry entry = avutil.av_dict_get(context.metadata(), key, null, 0);
+        return entry == null || entry.value() == null ? "" : entry.value().getString(StandardCharsets.UTF_8).strip();
+    }
+
+    /**
+     * 1.4.0: where a phone says the video was taken: the file's ISO 6709 text ({@code +18.5204+073.8567/}), or "".
+     * Android writes "location"; iPhones write the QuickTime key (FFmpeg reads both into the file's metadata).
+     */
+    private static String location(AVFormatContext context) {
+        for (String key : new String[] {"location", "com.apple.quicktime.location.ISO6709", "location-eng"}) {
+            AVDictionaryEntry entry = avutil.av_dict_get(context.metadata(), key, null, 0);
+            if (entry != null && entry.value() != null) {
+                String value = entry.value().getString(StandardCharsets.UTF_8);
+                if (!value.isBlank()) {
+                    return value;
+                }
+            }
+        }
+        return "";
     }
 
     /** One decoded picture: {@code width} × {@code height} ARGB ints, opaque, row after row. */
@@ -427,7 +479,8 @@ public final class VideoPlayer implements AutoCloseable {
         int chosen = audio.stream().anyMatch(track -> track.stream() == wanted) ? wanted : fileDefault;
         return new Info(Math.max(0, grabber.getLengthInTime()), grabber.getImageWidth(), grabber.getImageHeight(),
                 rotation, picture, grabber.hasAudio(), grabber.getFrameRate(), List.copyOf(audio),
-                List.copyOf(subtitles), chosen, picture ? videoCodec : "", codecs.getOrDefault(chosen, ""));
+                List.copyOf(subtitles), chosen, picture ? videoCodec : "", codecs.getOrDefault(chosen, ""),
+                location(context), device(context));
     }
 
     /** FFmpeg's short name of a format ("h264", "aac", "subrip"), or "" if it has none. */
@@ -446,6 +499,8 @@ public final class VideoPlayer implements AutoCloseable {
         long handled = 0;
         boolean showNext = true; // the first picture, and the first after a seek, show at once (even paused)
         boolean atEnd = false;
+        long lateMicros = 0; // how late the last picture was when it was due (DROP_LATE_MICROS)
+        int droppedInRow = 0;
         while (!closed) {
             PlaybackClock.Seek seek = clock.lastSeek();
             if (seek.number() != handled) {
@@ -457,18 +512,29 @@ public final class VideoPlayer implements AutoCloseable {
                 }
                 showNext = true;
                 atEnd = false;
+                lateMicros = 0;
+                droppedInRow = 0;
             }
             if (atEnd) {
                 sleep(POLL_MILLIS);
                 continue;
             }
+            boolean dropping = !showNext && lateMicros > DROP_LATE_MICROS && droppedInRow < MAX_DROPS_IN_ROW
+                    && clock.isRunning();
             Frame frame;
             try {
-                frame = grabber.grabImage();
+                // Catching up: decode only (no scaling to BGRA, no copy), which is most of the cost of a picture.
+                frame = dropping ? grabber.grabFrame(false, true, false, false) : grabber.grabImage();
             } catch (FrameGrabber.Exception e) {
                 log.debug("Picture decoding stopped in {}: {}", file, e.toString());
                 frame = null;
             }
+            if (dropping && frame != null) {
+                lateMicros = clock.now() - (frame.timestamp - start);
+                droppedInRow++;
+                continue;
+            }
+            droppedInRow = 0;
             if (frame == null || frame.image == null) {
                 atEnd = true;
                 finished(true, handled);
@@ -485,6 +551,7 @@ public final class VideoPlayer implements AutoCloseable {
                 continue;
             }
             showNext = false;
+            lateMicros = clock.now() - picture.micros;
             Picture replaced = latest.getAndSet(picture);
             if (replaced != null) {
                 free.offer(replaced); // the UI didn't take it in time: dropped

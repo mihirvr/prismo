@@ -59,6 +59,7 @@ public final class Shortcuts {
                     new Shortcut("+ / -", "Zoom in / out"),
                     new Shortcut("0", "Fit to the window"),
                     new Shortcut("Double-click", "Zoom to 100 %, or back to fit"),
+                    new Shortcut("S", "Hide / show the filmstrip"),
                     new Shortcut("R", "Rotate"))),
             new Section("Videos", List.of(
                     new Shortcut("Space / K", "Play or pause"),
@@ -70,6 +71,7 @@ public final class Shortcuts {
                     new Shortcut("Home / End", "The start / the end"),
                     new Shortcut(", / .", "One picture back / forward (paused)"),
                     new Shortcut("Up / Down", "Volume up / down"),
+                    new Shortcut("Mouse wheel on the volume", "Volume up / down, in small steps"),
                     new Shortcut("M", "Mute"),
                     new Shortcut("< / >", "Slower / faster"),
                     new Shortcut("[ / ]", "A little slower / faster"),

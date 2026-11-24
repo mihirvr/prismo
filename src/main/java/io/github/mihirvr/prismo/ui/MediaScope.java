@@ -21,7 +21,7 @@ import java.util.List;
  */
 public record MediaScope(Kind kind, String folder, boolean recursive, long tag) {
 
-    public enum Kind { LIBRARY, FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH, FOLDER, PERSON, CATEGORY }
+    public enum Kind { LIBRARY, FAVORITES, RECENTLY_ADDED, HIDDEN, TRASH, FOLDER, PERSON, CATEGORY, DUPLICATES }
 
     /** Not in Trash, not hidden by Prismo: what every normal view shows (when File Explorer's Hidden mark is shown). */
     static final String VISIBLE = "trashed_at IS NULL AND hidden = 0";
@@ -33,6 +33,16 @@ public record MediaScope(Kind kind, String folder, boolean recursive, long tag) 
     public static final MediaScope RECENTLY_ADDED = new MediaScope(Kind.RECENTLY_ADDED, null, false);
     public static final MediaScope HIDDEN = new MediaScope(Kind.HIDDEN, null, false);
     public static final MediaScope TRASH = new MediaScope(Kind.TRASH, null, false);
+    /**
+     * 1.4.0: files with the same content as another file not in Trash (same SHA-256 in {@code media_hash}, filled by
+     * DuplicateFinder). Shown largest first, so copies sit side by side and the biggest waste comes first.
+     */
+    public static final MediaScope DUPLICATES = new MediaScope(Kind.DUPLICATES, null, false);
+
+    /** The rows that have a copy: their hash is shared by two or more rows not in Trash. */
+    static final String HAS_COPY = "id IN (SELECT h.media_id FROM media_hash h WHERE h.sha256 IN ("
+            + "SELECT h2.sha256 FROM media_hash h2 JOIN media m2 ON m2.id = h2.media_id WHERE m2.trashed_at IS NULL"
+            + " GROUP BY h2.sha256 HAVING COUNT(*) > 1))";
 
     public MediaScope {
         if ((kind == Kind.FOLDER) != (folder != null)) {
@@ -93,6 +103,7 @@ public record MediaScope(Kind kind, String folder, boolean recursive, long tag) 
                     + (recursive ? " AND (+folder = ? OR (+folder >= ? AND +folder < ?))" : " AND folder = ?");
             case PERSON -> visible + " AND id IN (SELECT media_id FROM media_person WHERE person_id = ?)";
             case CATEGORY -> visible + " AND id IN (SELECT media_id FROM media_category WHERE category_id = ?)";
+            case DUPLICATES -> visible + " AND " + HAS_COPY;
         };
     }
 
@@ -116,8 +127,12 @@ public record MediaScope(Kind kind, String folder, boolean recursive, long tag) 
         return folder.endsWith(String.valueOf(separator)) ? folder : folder + separator;
     }
 
-    /** Recently Added always shows the newest added first, whatever the Sort says (PROJECT.md). */
+    /** Recently Added always shows the newest added first, Duplicates the largest first, whatever the Sort says. */
     public ViewOptions applyTo(ViewOptions options) {
-        return kind == Kind.RECENTLY_ADDED ? options.withSort(MediaSort.DATE_ADDED).withDescending(true) : options;
+        return switch (kind) {
+            case RECENTLY_ADDED -> options.withSort(MediaSort.DATE_ADDED).withDescending(true);
+            case DUPLICATES -> options.withSort(MediaSort.SIZE).withDescending(true); // copies side by side
+            default -> options;
+        };
     }
 }

@@ -57,6 +57,7 @@ import javafx.scene.input.KeyCodeCombination;
 import javafx.scene.input.KeyCombination;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
+import javafx.scene.input.ScrollEvent;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
@@ -107,6 +108,8 @@ final class VideoPane extends StackPane {
     /** Ctrl+Left / Ctrl+Right jump this far (1.1.0, as in VLC). */
     static final long MINUTE_SKIP_MICROS = 60_000_000;
     private static final double VOLUME_STEP = 0.1;
+    /** One mouse-wheel click on the volume bar or the mute button (1.4.0): fine steps; the keys stay 10 %. */
+    static final double WHEEL_VOLUME_STEP = 0.02;
     private static final long SAVE_EVERY_MICROS = 5_000_000;
     private static final Duration NOTE_TIME = Duration.seconds(1.6);
     /** The seek bar never gets shorter than this; narrower than that, other controls make room. */
@@ -186,6 +189,17 @@ final class VideoPane extends StackPane {
     private final ToggleButton loopButton = new ToggleButton();
     private final Button mute = new Button();
     private final Slider volume = new Slider(0, 1, 1);
+    /** 1.4.0: told when a video plays to its end with Loop off (MediaViewer: a motion clip returns to its photo). */
+    private Runnable onEnded = () -> { };
+
+    void setOnEnded(Runnable onEnded) {
+        this.onEnded = onEnded;
+    }
+
+    /** The mouse wheel over the volume bar or the mute button, in whole clicks (1.4.0). */
+    private final WheelSteps volumeWheel = new WheelSteps();
+    /** The running total of quick skips shown in the note (1.4.0). */
+    private final SkipTotal skipTotal = new SkipTotal();
     private final BooleanProperty muted = new SimpleBooleanProperty(false);
     private final DoubleProperty speed = new SimpleDoubleProperty(1);
     private final HBox controls;
@@ -331,7 +345,7 @@ final class VideoPane extends StackPane {
             }
         });
         volume.setPrefWidth(90);
-        volume.setTooltip(new Tooltip("Volume (Up / Down)"));
+        volume.setTooltip(new Tooltip("Volume (Up / Down, or the mouse wheel)"));
         volume.valueProperty().addListener((_, _, value) -> {
             if (player != null) {
                 player.setVolume(value.doubleValue());
@@ -342,6 +356,8 @@ final class VideoPane extends StackPane {
         muteTip.textProperty().bind(muted.map(m -> m ? "Unmute (M)" : "Mute (M)"));
         mute.setTooltip(muteTip);
         mute.setOnAction(_ -> toggleMute());
+        volume.setOnScroll(this::scrollVolume);
+        mute.setOnScroll(this::scrollVolume);
         muted.addListener((_, _, on) -> {
             if (player != null) {
                 player.setMuted(on);
@@ -388,7 +404,7 @@ final class VideoPane extends StackPane {
         }
         updateMenus();
 
-        controls = new HBox(6, previousMedia, playPause, nextMedia, back, forward, seek, time, subtitlesButton, soundButton, speedButton,
+        controls = new HBox(4, previousMedia, playPause, nextMedia, back, forward, seek, time, subtitlesButton, soundButton, speedButton,
                 loopButton, mute, volume);
         controls.getStyleClass().add("viewer-video-controls");
         controls.setAlignment(Pos.CENTER_LEFT);
@@ -397,7 +413,7 @@ final class VideoPane extends StackPane {
         // A narrow video area (a small window, or the Info panel open): the time and speed keep their whole text,
         // and the least-needed controls make room instead (they stay on their keys and in the right-click menu).
         time.setMinWidth(USE_PREF_SIZE);
-        speedButton.setMinWidth(USE_PREF_SIZE); // the stylesheet's fixed width wins over this (.viewer-speed)
+        speedButton.setMinWidth(USE_PREF_SIZE); // as wide as its text, never cut to "…"
         seek.setMinWidth(MIN_SEEK_WIDTH);
         widthProperty().addListener((_, _, width) -> fitControls(width.doubleValue()));
 
@@ -568,6 +584,8 @@ final class VideoPane extends StackPane {
                         if (loopButton.isSelected()) {
                             player.seek(0);
                             player.play();
+                        } else {
+                            onEnded.run(); // 1.4.0: a motion photo's clip goes back to the photo
                         }
                     }
                 });
@@ -809,11 +827,14 @@ final class VideoPane extends StackPane {
         }
     }
 
-    /** J / L and the ±10 s buttons; Left / Right ±5 s. */
+    /**
+     * J / L and the ±10 s buttons; Left / Right ±5 s; Ctrl+Left / Right ±1 min. The note shows the running total of
+     * quick skips the same way (1.4.0): +5 s, +10 s, +15 s.
+     */
     void skip(long micros) {
         if (player != null) {
             player.seek(player.position() + micros);
-            showNote((micros < 0 ? "Back " : "Forward ") + Math.abs(micros) / 1_000_000 + " s");
+            showNote(SkipTotal.text(skipTotal.add(micros, System.nanoTime())));
         }
     }
 
@@ -855,7 +876,8 @@ final class VideoPane extends StackPane {
     }
 
     private void changeVolume(double delta) {
-        volume.setValue(Math.clamp(volume.getValue() + delta, 0, 1));
+        // Whole percents, so 2 % steps don't drift (0.9199999…) in the bar or the saved setting.
+        volume.setValue(Math.clamp(Math.round((volume.getValue() + delta) * 100) / 100.0, 0, 1));
         if (delta > 0) {
             muted.set(false);
         }
@@ -868,6 +890,15 @@ final class VideoPane extends StackPane {
 
     void volumeDown() {
         changeVolume(-VOLUME_STEP);
+    }
+
+    /** The mouse wheel over the volume bar or the mute button: 2 % a click (1.4.0); up = louder. */
+    private void scrollVolume(ScrollEvent event) {
+        int steps = volumeWheel.add(event.getDeltaY());
+        if (steps != 0) {
+            changeVolume(steps * WHEEL_VOLUME_STEP);
+        }
+        event.consume(); // not also a zoom or a scroll of something behind
     }
 
     void toggleMute() {
@@ -1391,6 +1422,7 @@ final class VideoPane extends StackPane {
     /** Saves the watch progress, then stops and closes the player (frees its decoders and the sound device). */
     void stop() {
         saveProgress();
+        skipTotal.reset();
         generation++;
         pulse.stop();
         previews.cancel();

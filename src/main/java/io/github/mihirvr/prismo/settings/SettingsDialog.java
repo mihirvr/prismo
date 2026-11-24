@@ -600,7 +600,10 @@ public final class SettingsDialog {
             soon.getStyleClass().add("settings-link-disabled");
             website = soon;
         }
-        VBox page = new VBox(10, logo, version, line, website);
+        // 1.4.0: the place names in Info come from GeoNames' data (CC BY 4.0), which asks for this credit.
+        Label places = wrapping("settings-note", 0);
+        places.setText("Place names: GeoNames (geonames.org), licensed under CC BY 4.0.");
+        VBox page = new VBox(10, logo, version, line, website, places);
         page.setAlignment(Pos.TOP_LEFT);
         return page;
     }

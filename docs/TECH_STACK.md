@@ -306,7 +306,7 @@ The fingerprint first planned here (SHA-256 of the first and last 64 KiB, stored
   highlighted item's menu on a keyboard context-menu request (Menu key, Shift+F10). On Windows, Shift+F10 also starts
   Windows' own F10 menu mode, which keeps the next key (one Esc frees it); using the key up in JavaFX doesn't stop it.
 - **Settings** are rows in the `settings` table (key → text): `appearance.theme`, `appearance.colours`,
-  `appearance.colourStrength`, `appearance.moving`, `collections.pages_open`, `collections.tree_open`, `hidden.mode`, `hidden.show_os_hidden` (saved when changed); `timeline.thumbnail_size`, `window.placement`, `video.volume`, `video.muted`, `video.speed` (saved when the app closes); `video.subtitle_background`, `video.audio_language`, `video.subtitle_language` (P8, saved when changed).
+  `appearance.colourStrength`, `appearance.moving`, `collections.pages_open`, `collections.tree_open`, `viewer.filmstrip` (1.4.0), `hidden.mode`, `hidden.show_os_hidden` (saved when changed); `timeline.thumbnail_size`, `window.placement`, `video.volume`, `video.muted`, `video.speed` (saved when the app closes); `video.subtitle_background`, `video.audio_language`, `video.subtitle_language` (P8, saved when changed).
 
 ## The Windows Hidden mark
 
@@ -338,6 +338,10 @@ macOS isn't a target. If it ever becomes one, it would use `~/Library/Applicatio
 ---
 
 ## Third-party licenses to ship
+
+- **GeoNames** (1.4.0): `src/main/resources/places/places.tsv.gz`, made from GeoNames' `cities1000`, `admin1CodesASCII`
+  and `countryInfo` (places with 1,000+ people, their region and country), CC BY 4.0: credited in Settings › About and
+  the README. Read once on first use (`places/Places`), nearest place by a flat scan; no network.
 
 Bundled native code brings license duties: FFmpeg (**LGPL v3 or later**, the default `org.bytedeco:ffmpeg` build, checked 2026-10-20 from its own `ffmpeg -L` and the preset's build script), nothing extra for HEIC (it uses the same FFmpeg), and `libraw` (LGPL/CDDL) if added later. LGPL means: ship its license text and notices, link it as separate shared libraries the user could swap (the FFmpeg DLLs are separate files), and don't change it. The installer must include a `THIRD_PARTY_NOTICES` file. Java libraries: TwelveMonkeys (BSD), metadata-extractor (Apache 2.0), sqlite-jdbc (Apache 2.0), SLF4J (MIT), Logback (EPL/LGPL), JavaCV and JavaCPP (Apache 2.0, or GPLv2 with Classpath exception; we use them under Apache 2.0). **(re-check each license when the dependency is added)**
 

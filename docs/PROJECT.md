@@ -109,6 +109,7 @@ Folders
 Albums
 Favorites
 Recently Added
+Duplicates   (1.4.0)
 Hidden
 Trash
 ```
@@ -196,7 +197,14 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 - **Drag out** (1.3.0): drag a photo that isn't zoomed in, a video, or a filmstrip tile into another app or a folder, as from the grid (a copy only). Zoomed in, dragging pans as before.
 - **Sound device** (1.3.0): when there is more than one, the video's sound menu and right-click › Audio › Play sound on choose where the sound plays. The choice lasts until Prismo closes; each start uses the system default device again.
 - **Background:** pitch black around photos and videos in every look (1.2.1).
-- **Info panel** (the metadata panel above, built): the Info button in the viewer's top bar, the I key, or "Info" in the right-click menus (on a grid, I or Alt+Enter opens the viewer with the panel). Closed with the button, I or Esc. Shows name, folder, type, size, dimensions (photos), dates, camera, full path; for photos also exposure, ISO, aperture, focal length, lens, flash and GPS ("lat, long") from EXIF; for videos length, formats (codecs), resolution, frame rate, sound tracks and subtitle tracks; a RAW file also says its picture is the preview stored inside it (the raw data is not developed). Values the file doesn't have are left out. It replaces a separate Properties window built earlier in this round.
+- **1.4.0 in the viewer:** the mouse wheel over the volume bar or the mute button changes the volume by 2 %; quick skips
+  show their running total (+5 s, +10 s, +15 s; a pause of 1 s or the other direction starts again); the filmstrip can
+  be switched off (S, a top-bar button, the right-click View menu; remembered) so a small window gives its room to the
+  picture; a motion photo (a Pixel or Samsung JPEG with a clip inside) gets a play button in the top bar that plays the
+  clip over the photo (copied into Prismo's cache, the photo is only read) and returns to the photo at the end. Video
+  playback skips showing late pictures (decodes them only) when decoding can't keep up, so the picture stays with the
+  sound.
+- **Info panel** (the metadata panel above, built): the Info button in the viewer's top bar, the I key, or "Info" in the right-click menus (on a grid, I or Alt+Enter opens the viewer with the panel). Closed with the button, I or Esc. Shows name, folder, type, size, dimensions (photos), dates, camera, full path; for photos also exposure, ISO, aperture, focal length, lens, flash and GPS ("lat, long") from EXIF; since 1.4.0 a Location section: the place written in the file (IPTC / XMP city, state, country), else the nearest town to the GPS from a bundled GeoNames list (offline), the GPS, and "Open in map" (OpenStreetMap in the browser, only on a click), for videos too (their ISO 6709 location), and videos show the phone that made them as Camera; for videos length, formats (codecs), resolution, frame rate, sound tracks and subtitle tracks; a RAW file also says its picture is the preview stored inside it (the raw data is not developed). Values the file doesn't have are left out. It replaces a separate Properties window built earlier in this round.
 - **Right-click menus** (grids and viewer) show each item's shortcut: Open, favorite / hide / Hide in File Explorer / Trash, Show in folder, Open with default app, Copy, Info. On an open video also Play / Pause, skips, previous / next, Subtitles, Sound track, Speed, Loop, Mute, Full screen; on a photo Slideshow, Rotate, zoom, previous / next, Full screen. The viewer's "More" button has the file items.
 - **Video controls:** Space or a click = play / pause; J / L ±10 s; Left / Right ±5 s; Home = from the start; Up / Down volume; M mute; loop; `,` / `.` one picture back / on while paused.
 - **Speed:** 0.5× to 2× in steps (`[` / `]` and a menu); the sound keeps its pitch.
@@ -272,6 +280,12 @@ Reconnect later and the index resumes without a full rescan. (This is how Lightr
 ## Duplicate Indexing (not duplicate *finding*)
 
 Copies like `photo.jpg` and `photo (1).jpg` are indexed as separate, independent entries in v1 — no merge/skip logic. A dedicated duplicate finder (exact + visually similar) that *suggests* removal is a post-MVP feature layered on top of this, not a v1 requirement.
+
+**1.4.0: Collections › Duplicates (exact copies, found and shown only).** Files with exactly the same content (same
+SHA-256), not in Trash, largest first so copies sit side by side; the Sort is fixed to Size there. Only files that share
+their exact size with another file are read, once (`media_hash`, V10, with the size and modified time it was read at;
+a changed file is read again). The check runs when the page is opened and says how many files are left. Prismo never
+removes a copy: the user picks one and uses Trash. Visually similar pictures (a resized or edited copy) are not found.
 
 ---
 

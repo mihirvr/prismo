@@ -25,6 +25,9 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 - **Albums** — auto-generated from media-containing folders
 - **Instant search** — filename, folder, extension, camera, date, resolution (SQLite FTS5)
 - **Favorites, hidden content, soft-delete trash** — gallery essentials, built in
+- **Duplicates** — exact copies found and shown side by side; Prismo never removes one itself
+- **Where it was taken** — the place in Info (from the file, or the nearest town to its GPS, offline), with Open in map
+- **Motion photos** — the clip inside a Pixel or Samsung photo plays over it
 - **Filters** — Photos · Videos · GIFs · RAW · by format · by orientation
 - **Background indexing** — non-blocking, incremental, cache-first thumbnails
 - **Multiple locations** — unified library across drives, USB, NAS
@@ -52,6 +55,7 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 | Build | Gradle (Kotlin DSL) |
 | Database | SQLite + FTS5 (xerial sqlite-jdbc) |
 | Metadata | metadata-extractor (EXIF, HEIF, MP4/QuickTime) |
+| Place names | GeoNames' list of places with 1,000+ people (CC BY 4.0), shipped with the app and looked up offline |
 | Image decoding | ImageIO (JPEG/PNG/BMP/GIF), TwelveMonkeys (WEBP), the bundled FFmpeg (HEIC), embedded previews (RAW) |
 | Video | FFmpeg (LGPL build) through JavaCV: playback and thumbnails |
 | File monitoring | java.nio.file.WatchService (behind a pluggable abstraction) |
@@ -64,9 +68,20 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.3.3** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.3.3 are described below). Windows first; the Linux package is an early preview.
+**Version 1.4.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.4.0 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.4.0:** where a photo or video was taken, duplicates, motion photos, and smoother video. Info has a Location
+section: the place written in the file (city, state, country), or else the nearest town to its GPS, looked up offline
+from a place list that comes with Prismo, with the GPS and an "Open in map" link (it opens the browser only when
+clicked). Videos show their location and the phone that made them too. Collections has a Duplicates page: files with
+exactly the same content, largest first, so copies sit side by side; Prismo only finds them, and never removes one
+itself. A Pixel or Samsung motion photo gets a play button in the viewer that plays its clip over the photo. In videos:
+the mouse wheel over the volume changes it in small steps, quick skips show their total (+5 s, +10 s, +15 s), the
+filmstrip can be hidden (S, or the button in the top bar) to give a small window more room, the control bar is tighter
+so the seek bar is longer, and when a computer can't decode a heavy video fast enough the picture now skips ahead to
+stay with the sound instead of falling further and further behind.
 
 **1.3.3:** the photo and video viewer is calmer. The top bar and the video controls have no panel or edge lines
 behind them: the buttons are bare icons (a small shape shows only when the pointer is over one), tighter, with a soft
@@ -223,6 +238,7 @@ next subtitles and Z / X for the delay.)
 | Ctrl+D / Ctrl+H / Delete, Ctrl+C, F2 | As on the grid |
 | Space | Slideshow (photos) |
 | R | Rotate (view only, the file isn't changed; videos too since 1.3.0) |
+| S | Hide / show the filmstrip (1.4.0) |
 | + / - / 0 | Zoom in / out / fit to window |
 | Double-click a photo | Zoom to 100 %, or back to fit |
 
@@ -237,6 +253,7 @@ next subtitles and Z / X for the delay.)
 | 0 to 9 | Jump to 0 % to 90 % of the video |
 | Home / End | The start / the end |
 | Up / Down | Volume |
+| Mouse wheel on the volume | Volume in small steps (1.4.0) |
 | M | Mute |
 | < / > (Shift+, / Shift+.) | Slower / faster (0.5× to 2×) |
 | [ / ] | A little slower / faster |
@@ -355,3 +372,5 @@ In the meantime, feel free to open an issue to discuss ideas, suggest features, 
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+Place names in the Info panel come from [GeoNames](https://www.geonames.org/) (`src/main/resources/places/places.tsv.gz`, made from `cities1000`, `admin1CodesASCII` and `countryInfo`), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
