@@ -8,8 +8,12 @@ React + Vite. Separate from the app: it has its own `package.json` and is not pa
 cd frontend
 npm install
 npm run dev       # local preview, usually http://localhost:5173
-npm run build     # makes dist/
+npm run build     # makes dist/ (then prerenders it, see below)
 ```
+
+`npm run build` does three things: the normal Vite build, a second build of the page for Node (`src/entry-server.jsx`, into `dist-ssr/`, deleted after), and `scripts/prerender.mjs`, which writes the finished page HTML into `dist/index.html`, adds the app details for search engines (schema.org `SoftwareApplication`, with the version and download links taken from `DOWNLOADS`) and writes `dist/sitemap.xml`. So search engines and link previews that don't run JavaScript still see the whole page; in the browser the live page is drawn over it (`src/main.jsx`). Code that runs while the page is drawn must work without `window` / `document` (see `canAnimate`, `useTheme`, `AppWindow`).
+
+Search and sharing files in `public/`: `robots.txt`, `site.webmanifest`, `og.jpg` (the 1200 × 630 link-preview picture; its source is `scripts/og-card.html`), `icon-32/192/512.png`, `apple-touch-icon.png`, `404.html`. The title, description, canonical link and preview tags are in `index.html`.
 
 Hosting on Vercel: the project's Root Directory is `frontend`. Vercel finds Vite by itself (build `npm run build`, output `dist`). Each push to `main` deploys again.
 
@@ -18,7 +22,7 @@ Hosting on Vercel: the project's Root Directory is `frontend`. Vercel finds Vite
 - Fonts (Google Fonts): Bricolage Grotesque for headings, Instrument Sans for paragraphs, Geist inside the app mock-ups.
 - Icons: a few hand-written SVGs in `src/icons.jsx`, plus `lucide-react` (ISC licence) for the click hint on the demo window.
 - The demo window uses public-domain / CC0 sample photos in `public/photos/` (credits below). Camera names, dates and sizes in the demo are made up.
-- Downloads: the hero button says "Download for PC" and jumps to the Download section, which has a Windows and a Linux button (with a Windows mark and Tux; Tux is from Simple Icons 16.34.0, CC0; the Windows mark is drawn in `src/icons.jsx`). Their links are in `DOWNLOADS` at the top of `src/Sections.jsx` (now the v1.0.0 files on the Releases page); a `null` link shows the button greyed ("soon"). For a new release, change both links to that release's file names.
+- Downloads: the hero button says "Download for PC" and jumps to the Download section, which has a Windows and a Linux button (with a Windows mark and Tux; Tux is from Simple Icons 16.34.0, CC0; the Windows mark is drawn in `src/icons.jsx`). Their links are in `DOWNLOADS` at the top of `src/Sections.jsx` (the latest release's files; the app details for search engines take the version from them); a `null` link shows the button greyed ("soon"). For a new release, change both links to that release's file names.
 
 ## Sample photo credits
 

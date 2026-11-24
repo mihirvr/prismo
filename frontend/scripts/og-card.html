@@ -1,0 +1,39 @@
+<!doctype html>
+<!-- The link-preview picture (public/og.jpg): open with the built site served on localhost:4173 (npm run build, npx vite preview, copy src/fallback.svg to dist/og-bg.svg), screenshot at 1200 x 630 (headless Chrome --window-size=1200,630), save as JPEG. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600&family=Instrument+Sans:wght@500&family=Geist:wght@600&display=block" rel="stylesheet">
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body { position: relative; background: #090a14 url(http://localhost:4173/og-bg.svg) center / cover no-repeat; color: #fff; }
+  .veil { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(9,10,20,0.62), rgba(9,10,20,0.28) 60%, rgba(9,10,20,0.12)); }
+  .copy { position: absolute; left: 72px; top: 78px; width: 640px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand img.mark { width: 58px; height: 58px; }
+  .brand img.word { height: 40px; }
+  h1 { margin-top: 44px; font-family: 'Bricolage Grotesque'; font-weight: 600; font-size: 74px; line-height: 0.98; letter-spacing: -0.03em; font-variation-settings: 'opsz' 96; }
+  p { margin-top: 26px; font-family: 'Instrument Sans'; font-weight: 500; font-size: 25px; line-height: 1.35; color: rgba(255,255,255,0.86); }
+  .tags { margin-top: 30px; display: flex; gap: 10px; }
+  .tags span { font: 600 18px 'Geist'; padding: 8px 16px; border-radius: 999px; background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.22); }
+  .ph { position: absolute; padding: 6px; border-radius: 16px; background: rgba(255,255,255,0.16); border: 1px solid rgba(255,255,255,0.28); box-shadow: 0 30px 60px rgba(10,12,40,0.38); }
+  .ph img { display: block; width: 300px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 11px; }
+  .a { left: 742px; top: 70px; transform: rotate(-7deg); }
+  .b { left: 822px; top: 232px; transform: rotate(5deg); }
+  .c { left: 700px; top: 360px; transform: rotate(-2deg); }
+</style>
+</head>
+<body>
+<div class="veil"></div>
+<div class="copy">
+  <div class="brand"><img class="mark" src="http://localhost:4173/brand/prismo-mark.webp" alt=""><img class="word" src="http://localhost:4173/brand/prismo-word-dark.png" alt=""></div>
+  <h1>Your whole PC, like a phone gallery.</h1>
+  <p>Every photo and video on your drives in one timeline.</p>
+  <div class="tags"><span>Free &amp; open source</span><span>Offline</span><span>Windows &amp; Linux</span></div>
+</div>
+<figure class="ph a"><img src="http://localhost:4173/photos/rockaway-beach-sunset.jpg" alt=""></figure>
+<figure class="ph b"><img src="http://localhost:4173/photos/red-fox-wild-animal-background.webp" alt=""></figure>
+<figure class="ph c"><img src="http://localhost:4173/photos/flower-garden-kromeriz.jpg" alt=""></figure>
+</body>
+</html>

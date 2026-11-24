@@ -16,7 +16,7 @@ export default function AppWindow({ stageLabel = 'Prismo' }) {
   const [nasOff, setNasOff] = useState(false)
   const [open, setOpen] = useState(null)
   const [info, setInfo] = useState(false)
-  const [narrow] = useState(() => matchMedia("(max-width: 860px)").matches) // phones get a shorter search hint
+  const [narrow] = useState(() => typeof window !== 'undefined' && matchMedia("(max-width: 860px)").matches) // phones get a shorter search hint
   const [touched, setTouched] = useState(false) // the pulsing hint goes away after the first click
   const root = useRef(null)
 
@@ -71,7 +71,7 @@ export default function AppWindow({ stageLabel = 'Prismo' }) {
   return (
     <div className="window" data-ui ref={root} onPointerDown={() => setTouched(true)} onKeyDown={() => setTouched(true)} style={{ position: 'relative' }} role="group" aria-label="Prismo, working demo with sample pictures">
       <div className="titlebar">
-        <img src="/brand/prismo-mark.png" alt="" />
+        <img src="/brand/prismo-mark.webp" alt="" />
         <b>{stageLabel}</b>
         <span className="spacer" />
         <label className="search">

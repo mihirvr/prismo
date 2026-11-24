@@ -46,7 +46,7 @@ export default function PhotoFan() {
             className={`ph${c.logo ? ' logo-card' : ''}`}
             style={{ left: `${c.x}%`, top: `${c.y}%`, width: `${c.w}%`, '--r': `${c.r}deg`, '--d': c.d, '--k': k }}
           >
-            <img src={c.logo ? '/brand/prismo-mark.png' : ITEMS[c.i].src} alt="" />
+            <img src={c.logo ? '/brand/prismo-mark.webp' : ITEMS[c.i].src} alt="" />
             {c.video && <span className="vb">▶ {c.video}</span>}
             {c.badge && <span className="day">{c.badge}</span>}
             {c.logo && <figcaption><img className="word word-light" src="/brand/prismo-word-light.png" alt="" /><img className="word word-dark" src="/brand/prismo-word-dark.png" alt="" /></figcaption>}

@@ -17,7 +17,8 @@ function saved() {
 
 // Follows the system until the visitor presses the toggle; after that their choice is kept.
 export function useTheme() {
-  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || systemTheme())
+  const [theme, setTheme] = useState(() => typeof document === 'undefined' ? 'dark' // the build-time page
+    : document.documentElement.dataset.theme || systemTheme())
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme

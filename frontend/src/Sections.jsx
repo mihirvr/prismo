@@ -6,9 +6,9 @@ const REPO = 'https://github.com/mihirvr/prismo'
 
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
-const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.3.3/Prismo-1.3.3.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.3.3/prismo_1.3.3_amd64.deb',
+export const DOWNLOADS = {
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.4.0/Prismo-1.4.0.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.4.0/prismo_1.4.0_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -364,7 +364,7 @@ const STEPS = [
 function PinWindow({ on }) {
   return (
     <div className="window" data-ui>
-      <div className="titlebar"><img src="/brand/prismo-mark.png" alt="" /><b>{['Library folders', 'Indexing', 'Grid', 'Grid'][on]}</b></div>
+      <div className="titlebar"><img src="/brand/prismo-mark.webp" alt="" /><b>{['Library folders', 'Indexing', 'Grid', 'Grid'][on]}</b></div>
       <div className="fill" key={on}>
         {on === 0 && (
           <div className="prog">
@@ -496,6 +496,26 @@ function Built() {
 // Each answer is a list of short parts: a plain sentence, or [label, sentence], or { cmd } for a command line.
 const LINUX_FILE = DOWNLOADS.linux.split('/').pop()
 const FAQ = [
+  ['Can it delete or change my photos?', [
+    'Not on its own. Prismo only reads your files to show them.',
+    ['You decide:', 'Rename, Move to folder and Delete are there, but only run when you choose them.'],
+    ['Delete is two steps:', 'Delete puts a file in Prismo’s Trash, where it is still on disk. Only “Delete permanently” removes it, after asking, and on Windows it goes to the Recycle Bin.'],
+  ]],
+  ['Does it need an account, a server or the internet?', [
+    'No. It’s a normal desktop app: install it and open it.',
+    ['No account, no server:', 'nothing to sign up for, and no Docker or web server to set up.'],
+    ['Offline:', 'it works without internet and sends nothing anywhere.'],
+  ]],
+  ['Does it work with a USB drive, an external disk or a NAS?', [
+    'Yes. Add the folder like any other.',
+    ['When it’s unplugged:', 'its photos stay in the timeline, greyed out, with a note that the drive is offline. Nothing is lost, and they come back when you plug it in.'],
+    ['Network folders:', 'they work the same way. The first scan of a big network library takes longer than a local disk.'],
+  ]],
+  ['Is it a Picasa replacement?', [
+    'For browsing, yes.',
+    ['Like Picasa:', 'every photo on your PC in one place, by date, fast, on your own computer, with favorites, albums and tags you add yourself.'],
+    ['Unlike Picasa:', 'it doesn’t edit photos and has no web albums. It is free, open source and still maintained.'],
+  ]],
   ['Does it recognise faces?', [
     'No, on purpose.',
     ['You tag people yourself:', 'right-click a photo, a selection or a folder, choose People…, and tick who is in them.'],
@@ -596,9 +616,9 @@ function Download() {
   return (
     <section className="section container" id="download" aria-labelledby="dl-h">
       <div className="glass cta">
-        <img className="mark rise" src="/brand/prismo-mark.png" alt="The Prismo logo" width="128" height="128" />
+        <img className="mark rise" src="/brand/prismo-mark.webp" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.3.3. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.4.0. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />

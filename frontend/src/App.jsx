@@ -16,6 +16,7 @@ export const REPO = 'https://github.com/mihirvr/prismo'
 // picture of it. Phones run it too (since the 1.2.0 site: our own small shader, not a 1 MB 3D library; it draws at
 // 30 frames a second there, see Gradient.jsx).
 function canAnimate() {
+  if (typeof window === 'undefined') return false // the build-time page: the still picture
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) return false
   if (navigator.connection?.saveData) return false
   try {
@@ -129,7 +130,7 @@ export default function App() {
       </div>
 
       <a className={`logo${barHidden ? ' folded' : ''}`} href="#top" onClick={toTop} aria-label="Prismo, back to the top">
-        <img src="/brand/prismo-mark.png" alt="" width="34" height="34" />
+        <img src="/brand/prismo-mark.webp" alt="" width="34" height="34" />
       </a>
 
       <header className={`nav${barHidden ? ' up' : ''}`}>
@@ -154,7 +155,7 @@ export default function App() {
           <div className="hero-copy">
             <h1 id="h1" className="rise">Your whole PC, like a phone gallery.</h1>
             <p className="sub rise" style={{ '--i': 1 }}>
-              Prismo puts every photo and video on your drives into one timeline, sorted by date, the way your phone does. No more opening folder after folder. It works offline and never copies, moves or uploads a file.
+              Prismo puts every photo and video on your drives into one timeline, sorted by date, the way your phone does. No more opening folder after folder. It works offline, uploads nothing, and never moves or changes a file on its own.
             </p>
             <div className="actions rise" style={{ '--i': 2 }}>
               <a className="btn" href="#download">Download for PC</a>
@@ -185,7 +186,7 @@ export default function App() {
       <footer className="foot">
         <div className="container">
           <div className="who">
-            <img src="/brand/prismo-mark.png" alt="" width="26" height="26" />
+            <img src="/brand/prismo-mark.webp" alt="" width="26" height="26" />
             <b>Prismo</b>
             <span>A free photo library for Windows and Linux</span>
           </div>
