@@ -6,6 +6,7 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
@@ -15,6 +16,9 @@ import java.util.function.BiConsumer;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import javafx.animation.AnimationTimer;
+import javafx.geometry.Point2D;
+import javafx.scene.control.ScrollBar;
 import javafx.beans.property.DoubleProperty;
 import javafx.beans.property.SimpleDoubleProperty;
 import javafx.css.PseudoClass;
@@ -101,6 +105,19 @@ public final class TimelineView extends StackPane {
     private static final PseudoClass SELECTING = PseudoClass.getPseudoClass("selecting");
     private static final KeyCombination SELECT_ALL = new KeyCodeCombination(KeyCode.A, KeyCombination.SHORTCUT_DOWN);
     private static final double BAR_ICON_SIZE = 18;
+    /** A date (or folder) header whose items are all selected: its check circle is filled (1.4.1). */
+    private static final PseudoClass CHECKED = PseudoClass.getPseudoClass("checked");
+    /** Duplicates: every copy of the section is selected, the kept ones too (the circle's third look). */
+    private static final PseudoClass ALL = PseudoClass.getPseudoClass("all");
+    private static final double HEADER_CHECK_ICON_SIZE = 14;
+
+    /**
+     * Asked before a selection bar action runs (1.4.1, the Duplicates page: "no copy left" warning). Returns the items
+     * to act on (the same, or fewer), or null to do nothing.
+     */
+    public interface SelectionGuard {
+        List<TimelineItem> check(ItemAction action, List<TimelineItem> chosen);
+    }
 
     private final ListView<TimelineRow> list = new ListView<>();
     /** Middle-click auto-scroll (1.0.1). */
@@ -134,6 +151,16 @@ public final class TimelineView extends StackPane {
     private BooleanSupplier osHiddenShown = () -> false;
     private ContextMenu menu;
     private final Selection selection = new Selection();
+    /**
+     * What a header's check circle selects of its section (1.4.1): all of it (null), or (Duplicates) only the extra
+     * copies.
+     */
+    private Function<List<TimelineItem>, List<TimelineItem>> sectionPicker;
+    /** More right-click entries for one item, at the end (1.4.1, Duplicates: "Keep this copy"). */
+    private Function<TimelineItem, List<MenuItem>> extraMenu = _ -> List.of();
+    private SelectionGuard guard = (_, chosen) -> chosen;
+    /** Drag-select from empty space (1.4.1). */
+    private final DragSelect dragSelect;
     /** Library folders that can't be reached right now: their tiles are greyed (P7). */
     private OfflineFolders offline = OfflineFolders.NONE;
     /** Floats over the bottom of the grid while something is selected: the count and the actions. */
@@ -193,6 +220,7 @@ public final class TimelineView extends StackPane {
                     Grouping.MONTH);
         });
         autoScroll = new AutoScroll(list, this::flow);
+        dragSelect = new DragSelect();
         visibleProperty().addListener((_, _, shown) -> {
             if (!shown) {
                 autoScroll.stop();
@@ -471,6 +499,143 @@ public final class TimelineView extends StackPane {
         return selectionBar;
     }
 
+    /** The items on screen, in the order shown (Folders view: section by section). */
+    public List<TimelineItem> shownItems() {
+        return items;
+    }
+
+    /** The selected media ids. */
+    public Set<Long> selectedIds() {
+        return selection.ids();
+    }
+
+    /** Selects exactly {@code ids} (those shown), as if picked by hand: the selection bar shows (1.4.1). */
+    public void select(Collection<Long> ids) {
+        selection.setAll(shownOnly(ids));
+        updateSelection();
+    }
+
+    /** Adds {@code add} to the selection and takes {@code remove} out of it (1.4.1, "Keep this copy"). */
+    public void changeSelection(Collection<Long> add, Collection<Long> remove) {
+        selection.addAll(shownOnly(add));
+        selection.removeAll(remove);
+        updateSelection();
+    }
+
+    private List<Long> shownOnly(Collection<Long> ids) {
+        Set<Long> wanted = new HashSet<>(ids);
+        List<Long> shown = new ArrayList<>();
+        for (TimelineItem item : items) {
+            if (wanted.contains(item.ref().id())) {
+                shown.add(item.ref().id());
+            }
+        }
+        return shown;
+    }
+
+    /**
+     * What a header's check circle selects of its section (1.4.1): {@code picker} gets the section's items and gives
+     * those to select; null = all of them (the default).
+     */
+    public void setSectionPicker(Function<List<TimelineItem>, List<TimelineItem>> picker) {
+        sectionPicker = picker;
+        for (RowCell cell : cells) {
+            cell.updateMarks();
+        }
+    }
+
+    /** More right-click entries for an item (1.4.1); null = none. */
+    public void setExtraMenu(Function<TimelineItem, List<MenuItem>> extra) {
+        extraMenu = extra == null ? _ -> List.of() : extra;
+    }
+
+    /** Asked before a selection bar action runs (1.4.1); null = never stops one. */
+    public void setSelectionGuard(SelectionGuard newGuard) {
+        guard = newGuard == null ? (_, chosen) -> chosen : newGuard;
+    }
+
+    /** The items of the section whose header is row {@code headerRow}: the thumbnail rows after it, to the next header. */
+    private List<TimelineItem> sectionItems(int headerRow) {
+        List<TimelineRow> rows = list.getItems();
+        List<TimelineItem> section = new ArrayList<>();
+        for (int r = headerRow + 1; r < rows.size() && rows.get(r) instanceof TimelineRow.Thumbs(var rowItems); r++) {
+            section.addAll(rowItems);
+        }
+        return section;
+    }
+
+    /** What the check circle of the header in row {@code headerRow} selects. */
+    private List<Long> sectionPick(int headerRow) {
+        List<TimelineItem> section = sectionItems(headerRow);
+        return idsOf(sectionPicker == null ? section : sectionPicker.apply(section));
+    }
+
+    private static List<Long> idsOf(List<TimelineItem> some) {
+        List<Long> ids = new ArrayList<>(some.size());
+        for (TimelineItem item : some) {
+            ids.add(item.ref().id());
+        }
+        return ids;
+    }
+
+    /** What a header's check circle does next (see {@link #toggleSection}). */
+    enum SectionStep {
+        /** Select what the picker gives (the extra copies on Duplicates; everything elsewhere). */
+        PICKED,
+        /** Duplicates' second click: every item of the section, the kept copies too. */
+        ALL,
+        /** Take the whole section out of the selection. */
+        NONE
+    }
+
+    /**
+     * What the next click on a header's circle does, from what is selected now. Without a picker (every page but
+     * Duplicates): select all, then unselect. With one (Duplicates, 1.4.1): the extra copies, then everything, then
+     * nothing. A section with no extra copies, or only extra copies, has only the two steps.
+     */
+    static SectionStep nextStep(Set<Long> selected, List<Long> section, List<Long> picked, boolean hasPicker) {
+        if (!section.isEmpty() && selected.containsAll(section)) {
+            return SectionStep.NONE;
+        }
+        boolean pickedIn = !picked.isEmpty() && selected.containsAll(picked);
+        return hasPicker && (pickedIn || picked.isEmpty()) ? SectionStep.ALL : SectionStep.PICKED;
+    }
+
+    /** A header's check circle: the next step of {@link #nextStep}. */
+    private void toggleSection(int headerRow) {
+        List<Long> section = idsOf(sectionItems(headerRow));
+        if (section.isEmpty()) {
+            return;
+        }
+        List<Long> picked = sectionPick(headerRow);
+        switch (nextStep(selection.ids(), section, picked, sectionPicker != null)) {
+            case NONE -> selection.removeAll(section);
+            case ALL -> selection.addAll(section);
+            case PICKED -> {
+                selection.removeAll(section); // exactly the extra copies: a kept copy picked by hand goes out
+                selection.addAll(picked);
+            }
+        }
+        requestFocus();
+        updateSelection();
+    }
+
+    /** On Duplicates (1.4.1), what a drag box selects of the tiles it touches: the extra copies, unless Shift is held. */
+    private List<Long> dragPick(List<Long> touched, boolean everything) {
+        if (sectionPicker == null || everything || touched.isEmpty()) {
+            return touched;
+        }
+        Set<Long> wanted = new HashSet<>(touched);
+        List<TimelineItem> hit = new ArrayList<>();
+        for (TimelineItem item : items) {
+            if (wanted.contains(item.ref().id())) {
+                hit.add(item);
+            }
+        }
+        List<Long> picked = idsOf(sectionPicker.apply(hit));
+        return picked.isEmpty() ? touched : picked; // only kept copies under the box: select those
+    }
+
     // --- Keyboard focus ---
 
     private void onKey(KeyEvent event) {
@@ -572,6 +737,15 @@ public final class TimelineView extends StackPane {
         List<TimelineItem> chosen = selectedItems();
         if (chosen.isEmpty()) {
             return;
+        }
+        List<TimelineItem> checked = guard.check(action, chosen);
+        if (checked == null || checked.isEmpty()) {
+            return;
+        }
+        if (checked.size() != chosen.size()) {
+            selection.setAll(idsOf(checked)); // the guard kept some back (one copy of each file): show what goes
+            updateSelection();
+            chosen = checked;
         }
         if (onAction.performAll(action, chosen)
                 && !action.keepsItemInView(chosen.getFirst(), osHiddenShown.getAsBoolean())) {
@@ -782,7 +956,7 @@ public final class TimelineView extends StackPane {
             menu.hide();
         }
         if (selection.size() > 1 && selection.contains(item.ref().id())) {
-            menu = selectionMenu();
+            menu = selectionMenu(item);
             menu.show(tile, screenX, screenY);
             return;
         }
@@ -812,7 +986,7 @@ public final class TimelineView extends StackPane {
                         new KeyCodeCombination(KeyCode.SPACE), () -> toggleSelected(item.ref().id())));
         menu = new ContextMenu();
         menu.getItems().setAll(Menus.grouped(opening, List.of(fileItems.copyItem(item)), settings, changes,
-                removing, info, select));
+                removing, info, select, extraMenu.apply(item)));
         menu.show(tile, screenX, screenY);
     }
 
@@ -870,7 +1044,7 @@ public final class TimelineView extends StackPane {
      * the same order as one tile's menu (1.2.0): "N selected" | Copy | Favorite, People, Hide | Move to folder, Move
      * to Trash | Select all, Clear selection. In Trash: Restore | Delete permanently.
      */
-    private ContextMenu selectionMenu() {
+    private ContextMenu selectionMenu(TimelineItem clicked) {
         List<TimelineItem> chosen = selectedItems();
         MenuItem count = new MenuItem("%,d selected".formatted(chosen.size()));
         count.setDisable(true);
@@ -897,7 +1071,7 @@ public final class TimelineView extends StackPane {
                 Menus.item("Clear selection", Icon.CLOSE, new KeyCodeCombination(KeyCode.ESCAPE), this::clearSelection));
         ContextMenu selected = new ContextMenu();
         selected.getItems().setAll(Menus.grouped(List.of(count), List.of(fileItems.copyItem(chosen)), settings,
-                changes, removing, selecting));
+                changes, removing, selecting, extraMenu.apply(clicked)));
         return selected;
     }
 
@@ -916,6 +1090,238 @@ public final class TimelineView extends StackPane {
 
     private VirtualFlow<?> flow() {
         return list.lookup(".virtual-flow") instanceof VirtualFlow<?> flow ? flow : null;
+    }
+
+    // --- Drag-select (1.4.1) ---
+
+    /**
+     * Drag-select from empty space, as in File Explorer: press the mouse on empty space (between or after tiles, on a
+     * header, under the last row) and drag; a see-through box selects every tile it touches, live. Ctrl+drag adds to
+     * what was selected. On Duplicates it takes only the extra copies under it (Shift: every tile; only kept copies
+     * under it: those). Near the top or bottom edge the grid scrolls on its own, faster the closer the pointer is to
+     * the edge (or past it). Pressing on a tile still opens or drags the file out, as before; a plain click on empty
+     * space changes nothing.
+     */
+    private final class DragSelect {
+
+        /** How far the mouse must move before a press becomes a box (a shaky click is not a drag). */
+        private static final double START_DISTANCE = 5;
+        /** The band at the top and bottom of the grid where dragging scrolls. */
+        private static final double EDGE = 36;
+        /** The fastest it scrolls, in pixels per frame. */
+        private static final double MAX_SPEED = 30;
+
+        private final Region band = new Region();
+        private boolean armed;
+        private boolean active;
+        private double pressX;
+        private double pressY;
+        private double pointerX;
+        private double pointerY;
+        private DragBox.Corner start;
+        private double startX;
+        private Set<Long> before = Set.of();
+        private List<Long> lastHits = List.of();
+        /** Shift held: on Duplicates the box takes every tile it touches, not only the extra copies. */
+        private boolean everything;
+        private final AnimationTimer edgeScroll = new AnimationTimer() {
+            @Override
+            public void handle(long now) {
+                scrollAtEdge();
+            }
+        };
+
+        DragSelect() {
+            band.getStyleClass().add("drag-band");
+            band.setManaged(false);
+            band.setMouseTransparent(true);
+            band.setVisible(false);
+            getChildren().add(band);
+            list.addEventFilter(MouseEvent.MOUSE_PRESSED, this::pressed);
+            list.addEventFilter(MouseEvent.MOUSE_DRAGGED, this::dragged);
+            list.addEventFilter(MouseEvent.MOUSE_RELEASED, this::released);
+            visibleProperty().addListener((_, _, shown) -> {
+                if (!shown) {
+                    finish();
+                }
+            });
+        }
+
+        /** True when the press is on empty space: not on a tile, a check circle or the scroll bar. */
+        private boolean onEmptySpace(Node node) {
+            for (Node n = node; n != null; n = n.getParent()) {
+                if (n instanceof ThumbnailTile || n instanceof ScrollBar || n.getStyleClass().contains("header-check")) {
+                    return false;
+                }
+                if (n == list) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void pressed(MouseEvent event) {
+            finish();
+            if (event.getButton() != MouseButton.PRIMARY || items.isEmpty()
+                    || !onEmptySpace(event.getPickResult().getIntersectedNode())) {
+                return;
+            }
+            Point2D at = sceneToLocal(event.getSceneX(), event.getSceneY());
+            start = cornerAt(at.getY());
+            if (start == null) {
+                return;
+            }
+            armed = true;
+            pressX = at.getX();
+            pressY = at.getY();
+            pointerX = pressX;
+            pointerY = pressY;
+            startX = rowX(pressX);
+            before = event.isShortcutDown() ? selection.ids() : Set.of();
+            everything = event.isShiftDown();
+            lastHits = null;
+        }
+
+        private void dragged(MouseEvent event) {
+            if (!armed) {
+                return;
+            }
+            Point2D at = sceneToLocal(event.getSceneX(), event.getSceneY());
+            pointerX = at.getX();
+            pointerY = at.getY();
+            if (event.isShiftDown() != everything) {
+                everything = event.isShiftDown();
+                lastHits = null; // Shift pressed or let go during the drag: work the box out again
+            }
+            if (!active && Math.hypot(pointerX - pressX, pointerY - pressY) < START_DISTANCE) {
+                return;
+            }
+            if (!active) {
+                active = true;
+                autoScroll.stop();
+                band.setVisible(true);
+                edgeScroll.start();
+                requestFocus();
+            }
+            update();
+            event.consume();
+        }
+
+        private void released(MouseEvent event) {
+            if (active) {
+                event.consume();
+            }
+            finish();
+        }
+
+        private void finish() {
+            armed = false;
+            active = false;
+            edgeScroll.stop();
+            band.setVisible(false);
+        }
+
+        /** Works out the tiles under the box (selecting them) and redraws it. */
+        private void update() {
+            DragBox.Corner end = cornerAt(pointerY);
+            if (end == null || start == null) {
+                return;
+            }
+            List<Long> hits = dragPick(DragBox.hits(list.getItems(), start, end, startX, rowX(pointerX),
+                    layout.cellSize(), GAP), everything);
+            if (!hits.equals(lastHits)) {
+                lastHits = hits;
+                Set<Long> chosen = new java.util.LinkedHashSet<>(before);
+                chosen.addAll(hits);
+                selection.setAll(chosen);
+                updateSelection();
+            }
+            drawBand();
+        }
+
+        /** Scrolls while the pointer is near (or past) the top or bottom edge, then updates the box. */
+        private void scrollAtEdge() {
+            VirtualFlow<?> flow = flow();
+            if (!active || flow == null) {
+                return;
+            }
+            Bounds shown = listBounds();
+            double speed = 0;
+            if (pointerY < shown.getMinY() + EDGE) {
+                speed = -Math.min(MAX_SPEED, (shown.getMinY() + EDGE - pointerY) * 0.4);
+            } else if (pointerY > shown.getMaxY() - EDGE) {
+                speed = Math.min(MAX_SPEED, (pointerY - shown.getMaxY() + EDGE) * 0.4);
+            }
+            if (speed != 0) {
+                flow.scrollPixels(speed);
+                update();
+            }
+        }
+
+        private Bounds listBounds() {
+            return sceneToLocal(list.localToScene(list.getLayoutBounds()));
+        }
+
+        /** {@code cell}'s place in this pane. */
+        private Bounds boundsOf(IndexedCell<?> cell) {
+            return sceneToLocal(cell.localToScene(cell.getLayoutBounds()));
+        }
+
+        /**
+         * The row under {@code y} (this pane's) and how far down inside it; above the first row on screen it is that
+         * row with a negative height, below the last that row with a height past its bottom. Null before any layout.
+         */
+        private DragBox.Corner cornerAt(double y) {
+            VirtualFlow<?> flow = flow();
+            if (flow == null || flow.getFirstVisibleCell() == null || flow.getLastVisibleCell() == null) {
+                return null;
+            }
+            int first = flow.getFirstVisibleCell().getIndex();
+            int last = flow.getLastVisibleCell().getIndex();
+            DragBox.Corner below = null;
+            for (int i = first; i <= last; i++) {
+                IndexedCell<?> cell = flow.getVisibleCell(i);
+                if (cell == null) {
+                    continue;
+                }
+                Bounds at = boundsOf(cell);
+                if (y < at.getMinY() && i == first || y < at.getMaxY()) {
+                    return new DragBox.Corner(i, y - at.getMinY());
+                }
+                below = new DragBox.Corner(i, y - at.getMinY());
+            }
+            return below;
+        }
+
+        /** {@code x} (this pane's) in the rows' own x: 0 = the left edge of the first tile. */
+        private double rowX(double x) {
+            VirtualFlow<?> flow = flow();
+            IndexedCell<?> cell = flow == null ? null : flow.getFirstVisibleCell();
+            return cell == null ? x : x - boundsOf(cell).getMinX() - cell.snappedLeftInset();
+        }
+
+        /** The box from where the drag started to the pointer, kept inside the grid. */
+        private void drawBand() {
+            Bounds shown = listBounds();
+            double startY = startY(shown);
+            double x0 = startX + (pressX - rowX(pressX)); // the start's x as this pane's x now
+            double left = Math.max(shown.getMinX(), Math.min(x0, pointerX));
+            double right = Math.min(shown.getMaxX(), Math.max(x0, pointerX));
+            double top = Math.max(shown.getMinY(), Math.min(startY, pointerY));
+            double bottom = Math.min(shown.getMaxY(), Math.max(startY, pointerY));
+            band.resizeRelocate(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+        }
+
+        /** Where the start corner is on screen now (it moves when the grid scrolls); off screen: past the edge. */
+        private double startY(Bounds shown) {
+            VirtualFlow<?> flow = flow();
+            IndexedCell<?> cell = flow == null ? null : flow.getVisibleCell(start.row());
+            if (cell != null) {
+                return boundsOf(cell).getMinY() + start.y();
+            }
+            int first = flow == null || flow.getFirstVisibleCell() == null ? 0 : flow.getFirstVisibleCell().getIndex();
+            return start.row() < first ? shown.getMinY() - 1 : shown.getMaxY() + 1;
+        }
     }
 
     // --- Layout ---
@@ -996,11 +1402,26 @@ public final class TimelineView extends StackPane {
         private final List<ThumbnailTile> tiles = new ArrayList<>();
         private final Label headerLabel = new Label();
         private final Label headerCount = new Label();
-        private final HBox header = new HBox(8, headerLabel, headerCount);
+        /** 1.4.1: selects the whole section (see {@link #toggleSection}); shown under the mouse and while selecting. */
+        private final StackPane headerCheck = new StackPane(Icon.CHECK.node(HEADER_CHECK_ICON_SIZE));
+        private final Tooltip headerTip = new Tooltip();
+        /** The label and count stay on one text line (baseline); the circle is centred on them. */
+        private final HBox headerTitle = new HBox(8, headerLabel, headerCount);
+        private final HBox header = new HBox(8, headerCheck, headerTitle);
 
         RowCell() {
             getStyleClass().add("timeline-cell");
             header.getStyleClass().add("timeline-header");
+            headerTitle.getStyleClass().add("timeline-header-title");
+            headerCheck.getStyleClass().add("header-check");
+            headerCheck.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
+            Tooltip.install(headerCheck, headerTip);
+            headerCheck.setOnMouseClicked(event -> {
+                if (event.getButton() == MouseButton.PRIMARY && getItem() instanceof TimelineRow.Header) {
+                    toggleSection(getIndex());
+                }
+                event.consume();
+            });
             headerLabel.getStyleClass().add("timeline-header-label");
             headerCount.getStyleClass().add("timeline-header-count");
             setText(null);
@@ -1044,8 +1465,27 @@ public final class TimelineView extends StackPane {
             updateMarks();
         }
 
-        /** The focus ring, the selected look and the offline mark of each tile. */
+        /** The focus ring, the selected look and the offline mark of each tile; a header's check circle. */
         void updateMarks() {
+            if (!isEmpty() && getItem() instanceof TimelineRow.Header && getIndex() >= 0
+                    && getIndex() < list.getItems().size()) {
+                List<Long> section = idsOf(sectionItems(getIndex()));
+                List<Long> picked = sectionPick(getIndex());
+                Set<Long> selected = selection.ids();
+                SectionStep next = nextStep(selected, section, picked, sectionPicker != null);
+                boolean everything = next == SectionStep.NONE;
+                headerCheck.setVisible(!section.isEmpty());
+                headerCheck.pseudoClassStateChanged(CHECKED, everything
+                        || next == SectionStep.ALL && !picked.isEmpty() && selected.containsAll(picked));
+                headerCheck.pseudoClassStateChanged(ALL, everything && sectionPicker != null
+                        && picked.size() < section.size()); // the ring says "the kept copies too"
+                headerTip.setText(switch (next) {
+                    case NONE -> "Unselect this section";
+                    case ALL -> sectionPicker == null ? "Select this section" : "Select every copy in this section";
+                    case PICKED -> sectionPicker == null ? "Select this section"
+                            : "Select the extra copies in this section (click again for every copy)";
+                });
+            }
             for (ThumbnailTile tile : tiles) {
                 tile.setFocusRing(tile.ref() != null && tile.ref().id() == focusedId);
                 tile.setSelected(tile.ref() != null && selection.contains(tile.ref().id()));

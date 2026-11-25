@@ -35,7 +35,8 @@ public record MediaScope(Kind kind, String folder, boolean recursive, long tag) 
     public static final MediaScope TRASH = new MediaScope(Kind.TRASH, null, false);
     /**
      * 1.4.0: files with the same content as another file not in Trash (same SHA-256 in {@code media_hash}, filled by
-     * DuplicateFinder). Shown largest first, so copies sit side by side and the biggest waste comes first.
+     * DuplicateFinder). 1.4.1: in any Sort and View, like the Grid; copies of a file sit side by side wherever the
+     * Sort leaves them level (see {@link #sqlOrderBy}).
      */
     public static final MediaScope DUPLICATES = new MediaScope(Kind.DUPLICATES, null, false);
 
@@ -127,12 +128,21 @@ public record MediaScope(Kind kind, String folder, boolean recursive, long tag) 
         return folder.endsWith(String.valueOf(separator)) ? folder : folder + separator;
     }
 
-    /** Recently Added always shows the newest added first, Duplicates the largest first, whatever the Sort says. */
+    /** Recently Added always shows the newest added first, whatever the Sort says. */
     public ViewOptions applyTo(ViewOptions options) {
         return switch (kind) {
             case RECENTLY_ADDED -> options.withSort(MediaSort.DATE_ADDED).withDescending(true);
-            case DUPLICATES -> options.withSort(MediaSort.SIZE).withDescending(true); // copies side by side
             default -> options;
         };
+    }
+
+    /**
+     * The ORDER BY for this scope: the Sort's. On Duplicates (1.4.1), items the Sort leaves level (same date, same
+     * size) are ordered by their content, so the copies of a file sit side by side.
+     */
+    public String sqlOrderBy(ViewOptions options) {
+        return kind == Kind.DUPLICATES
+                ? options.sqlOrderBy("(SELECT h.sha256 FROM media_hash h WHERE h.media_id = media.id)")
+                : options.sqlOrderBy();
     }
 }

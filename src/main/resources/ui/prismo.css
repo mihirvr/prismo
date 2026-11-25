@@ -547,6 +547,10 @@
 
 .timeline-header {
     -fx-padding: 18 2 8 2;
+    -fx-alignment: center-left; /* 1.4.1: the check circle centred on the title */
+}
+
+.timeline-header-title {
     -fx-alignment: baseline-left;
 }
 
@@ -830,6 +834,61 @@
 
 .thumb-tile:selected .thumb-check .icon-path {
     -fx-stroke: -prismo-on-accent;
+}
+
+/*
+ * 1.4.1: the check circle on every header (dates, folders, letters, Duplicates' files): selects the whole section.
+ * Like a tile's, but on the page colour: an outline only, shown under the mouse and while selecting; filled once
+ * everything it selects is selected.
+ */
+.header-check {
+    -fx-pref-width: 20;
+    -fx-pref-height: 20;
+    -fx-background-color: transparent;
+    -fx-background-radius: 10;
+    -fx-border-color: -prismo-text-faint;
+    -fx-border-width: 2;
+    -fx-border-radius: 10;
+    -fx-opacity: 0;
+    -fx-cursor: hand;
+}
+
+.header-check .icon-path {
+    -fx-stroke: transparent;
+    -fx-stroke-width: 2.4;
+}
+
+.timeline-header:hover .header-check,
+.timeline:selecting .header-check {
+    -fx-opacity: 1;
+}
+
+.header-check:hover .icon-path {
+    -fx-stroke: -prismo-text-faint;
+}
+
+.header-check:checked {
+    -fx-opacity: 1;
+    -fx-background-color: -prismo-accent;
+    -fx-border-color: -prismo-accent;
+}
+
+.header-check:checked .icon-path {
+    -fx-stroke: -prismo-on-accent;
+}
+
+/* Duplicates: every copy of the section selected, the kept ones too: a white ring inside the fill. */
+.header-check:all {
+    -fx-background-color: -prismo-accent, -prismo-on-accent, -prismo-accent;
+    -fx-background-insets: 0, 2, 3.5;
+    -fx-background-radius: 10, 8, 6.5;
+}
+
+/* 1.4.1: the drag-select box (drag from empty space). */
+.drag-band {
+    -fx-background-color: rgba(51, 102, 255, 0.16); /* -prismo-accent, see through */
+    -fx-border-color: -prismo-accent;
+    -fx-border-width: 1;
 }
 
 /* A selected tile: an accent ring inside the edge and a light tint, so it reads on any photo. */

@@ -1,6 +1,7 @@
 package io.github.mihirvr.prismo.ui;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -79,6 +80,38 @@ final class Selection {
     void clear() {
         ids.clear();
         anchor = NONE;
+    }
+
+    /** Adds every one of {@code add} (a date section's check circle, a drag box, Select extra copies). */
+    void addAll(Collection<Long> add) {
+        ids.addAll(add);
+    }
+
+    /** Removes every one of {@code remove}; the anchor goes if it was one of them. */
+    void removeAll(Collection<Long> remove) {
+        ids.removeAll(remove);
+        if (!ids.contains(anchor)) {
+            anchor = NONE;
+        }
+    }
+
+    /** Exactly {@code chosen}, nothing else (a drag box without Ctrl). */
+    void setAll(Collection<Long> chosen) {
+        ids.clear();
+        ids.addAll(chosen);
+        if (!ids.contains(anchor)) {
+            anchor = NONE;
+        }
+    }
+
+    /** True if every one of {@code some} is selected, and there is at least one. */
+    boolean containsAll(Collection<Long> some) {
+        return !some.isEmpty() && ids.containsAll(some);
+    }
+
+    /** The selected ids (a copy). */
+    Set<Long> ids() {
+        return new LinkedHashSet<>(ids);
     }
 
     /**

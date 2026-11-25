@@ -2,6 +2,7 @@ package io.github.mihirvr.prismo.collections;
 
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.ui.Album;
+import io.github.mihirvr.prismo.ui.Appearance;
 import io.github.mihirvr.prismo.ui.AlbumGrid;
 import io.github.mihirvr.prismo.ui.FolderArrange;
 import io.github.mihirvr.prismo.ui.FolderSections;
@@ -14,6 +15,7 @@ import io.github.mihirvr.prismo.ui.MediaScope;
 import io.github.mihirvr.prismo.ui.TagFilter;
 import io.github.mihirvr.prismo.ui.TagKind;
 import io.github.mihirvr.prismo.ui.ThumbnailLoader;
+import io.github.mihirvr.prismo.ui.StatusNote;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import io.github.mihirvr.prismo.ui.TimelineQuery;
 import io.github.mihirvr.prismo.ui.TimelineView;
@@ -24,13 +26,17 @@ import java.sql.SQLException;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import javafx.animation.Animation;
 import javafx.animation.Interpolator;
 import javafx.animation.KeyFrame;
@@ -44,12 +50,16 @@ import javafx.beans.property.ReadOnlyBooleanWrapper;
 import javafx.beans.property.ReadOnlyObjectProperty;
 import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonBar;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.OverrunStyle;
 import javafx.scene.control.SplitPane;
 import javafx.scene.control.Tooltip;
@@ -215,11 +225,22 @@ public final class CollectionsPage extends BorderPane {
     private boolean stale = true;
     /** 1.4.0: reads files that share a size for Duplicates; runs when that page is opened. */
     private final DuplicateFinder duplicates;
-    /** Files still to read for Duplicates, or -1 when no check is running (UI thread). */
+    /** 0 while a Duplicates check runs, -1 when none does (UI thread). */
     private int duplicatesLeft = -1;
-    /** What the Duplicates page says under its title when no check runs. */
-    private static final String DUPLICATES_HINT =
-            "Files with exactly the same content, largest first. Prismo never removes a copy: pick one and use Trash.";
+    /** The check's thread, so closing Prismo can stop it and wait (1.4.1: it keeps running off the page). */
+    private Thread duplicatesThread;
+    private volatile boolean closing;
+    /** Where the check says how far it is (the note at the bottom of the window); null = done. */
+    private Consumer<String> onDuplicatesProgress = _ -> { };
+    /** The enabled library folders, for the Folders view on Duplicates (as on the Grid). */
+    private Supplier<List<Path>> libraryRoots = List::of;
+    /** 1.4.1: which files on Duplicates are copies of which, loaded with the page. */
+    private CopyGroups copies = CopyGroups.NONE;
+    /** The copy of each file the user chose with "Keep this copy" (group -> media id), while Prismo runs. */
+    private final Map<String, Long> keepOverrides = new HashMap<>();
+    /** The copy of each file that stays, on the items shown (group -> media id). */
+    private Map<String, Long> keepers = Map.of();
+    private final Button selectExtras = new Button("Select extra copies", Icon.CHECK.node(PAGE_ICON_SIZE));
     /** The width of the tree's expand arrows (measured from a row that has one), for the guide lines. */
     private double arrowWidth = 20;
     /** The layout on screen (page, album open or not), so it is only rebuilt when that changes. */
@@ -283,6 +304,9 @@ public final class CollectionsPage extends BorderPane {
             });
         }
         gridHolder.getChildren().add(grid);
+        selectExtras.setTooltip(new Tooltip("Selects every copy but one of each file: the one added to the library first "
+                + "stays (right-click a copy \u203a Keep this copy to keep that one instead). Then use Move to Trash."));
+        selectExtras.setOnAction(_ -> grid.select(idsOf(copies.extras(grid.shownItems(), keepers))));
 
         pages.getItems().setAll(Page.values());
         pages.getStyleClass().add("collections-pages");
@@ -545,29 +569,45 @@ public final class CollectionsPage extends BorderPane {
     }
 
     /**
-     * 1.4.0: reads the files that share a size with another (only those can have a copy) in the background, saying
-     * how many are left under the title, then shows the page again. Files read before are not read again.
+     * 1.4.0: reads the files that share a size with another (only those can have a copy) in the background, then shows
+     * the page again. Files read before are not read again. 1.4.1: says how far it is in the note at the bottom of the
+     * window (files and bytes, so one long video never looks stuck), shows the copies found so far after each batch,
+     * and keeps running when the user goes to another page; closing Prismo stops it ({@link #close}).
      */
     private void checkDuplicates() {
         if (duplicatesLeft >= 0) {
             return; // already running
         }
         duplicatesLeft = 0;
-        hint.setText("Looking for copies…");
-        Thread.ofVirtual().name("prismo-duplicates").start(() -> {
+        hint.setText(duplicatesHint());
+        AtomicReference<DuplicateFinder.Progress> latest = new AtomicReference<>();
+        duplicatesThread = Thread.ofVirtual().name("prismo-duplicates").start(() -> {
             try {
-                duplicates.refresh(left -> Platform.runLater(() -> {
-                    if (page() == Page.DUPLICATES && left > 0) {
-                        hint.setText("Comparing files that have the same size: " + left + " to go…");
+                duplicates.refresh(progress -> {
+                    // Only the newest is shown: one UI update waits at a time, however fast files are read.
+                    if (latest.getAndSet(progress) == null) {
+                        Platform.runLater(() -> {
+                            DuplicateFinder.Progress now = latest.getAndSet(null);
+                            if (now != null && duplicatesLeft >= 0 && !now.finished()) {
+                                onDuplicatesProgress.accept(StatusNote.duplicates(now.done(), now.total(),
+                                        now.bytesDone(), now.bytesTotal()));
+                            }
+                        });
                     }
-                }), () -> page() != Page.DUPLICATES);
+                }, () -> closing, () -> Platform.runLater(() -> {
+                    if (page() == Page.DUPLICATES) {
+                        refresh(); // the copies found so far
+                    }
+                }));
             } catch (SQLException | RuntimeException e) {
-                log.warn("Could not look for duplicates", e);
+                if (!closing) {
+                    log.warn("Could not look for duplicates", e);
+                }
             } finally {
                 Platform.runLater(() -> {
                     duplicatesLeft = -1;
+                    onDuplicatesProgress.accept(null);
                     if (page() == Page.DUPLICATES) {
-                        hint.setText(DUPLICATES_HINT);
                         refresh();
                     }
                 });
@@ -575,10 +615,125 @@ public final class CollectionsPage extends BorderPane {
         });
     }
 
+    /** Where the Duplicates check says how far it is (1.4.1): a text, or null when it is done. */
+    public void setOnDuplicatesProgress(Consumer<String> onProgress) {
+        onDuplicatesProgress = onProgress;
+    }
+
+    /** The enabled library folders, read when Duplicates is shown in the Folders view. */
+    public void setLibraryRoots(Supplier<List<Path>> roots) {
+        libraryRoots = roots;
+    }
+
+    /** Stops a running Duplicates check and waits a little for it (closing Prismo: before the database closes). */
+    public void close() throws InterruptedException {
+        closing = true;
+        Thread running = duplicatesThread;
+        if (running != null && !running.join(java.time.Duration.ofSeconds(5))) {
+            log.warn("The Duplicates check did not stop within 5 s");
+        }
+    }
+
+    /** What Duplicates says under its title: what it found, or that it is still looking. */
+    private String duplicatesHint() {
+        if (duplicatesLeft >= 0) {
+            return "Looking for copies\u2026 Copies found so far are shown; the note at the bottom says how far it is.";
+        }
+        CopyGroups.Summary found = copies.summary(grid.shownItems(), keepers);
+        if (found.extras() == 0) {
+            return "Files with exactly the same content. Prismo never removes a copy on its own.";
+        }
+        return "%,d extra %s of %,d %s, %s. Prismo never removes a copy on its own.".formatted(found.extras(),
+                found.extras() == 1 ? "copy" : "copies", found.files(), found.files() == 1 ? "file" : "files",
+                CopyGroups.sizeText(found.bytes()));
+    }
+
+    private static List<Long> idsOf(List<TimelineItem> some) {
+        List<Long> ids = new ArrayList<>(some.size());
+        for (TimelineItem item : some) {
+            ids.add(item.ref().id());
+        }
+        return ids;
+    }
+
+    /**
+     * Duplicates' right-click "Keep this copy" (1.4.1, like dupeGuru's reference file): this copy is the one that stays,
+     * and its other copies on screen are selected (ready for Move to Trash).
+     */
+    private List<MenuItem> keepThisCopy(TimelineItem item) {
+        String group = copies.groupOf(item.ref().id());
+        if (group == null) {
+            return List.of();
+        }
+        return List.of(Menus.item("Keep this copy, select the others", Icon.CHECK, null, () -> {
+            keepOverrides.put(group, item.ref().id());
+            keepers = copies.keepers(grid.shownItems(), keepOverrides);
+            grid.changeSelection(idsOf(copies.othersShown(item.ref().id(), grid.shownItems())),
+                    List.of(item.ref().id()));
+            grid.setSectionPicker(section -> copies.extras(section, keepers)); // redraws the header circles
+            hint.setText(duplicatesHint());
+        }));
+    }
+
+    /**
+     * Before Move to Trash / Delete permanently on Duplicates (1.4.1): if every copy of some file is chosen, the
+     * library would keep none of it. Asks: keep one of each (the default), go on with all, or cancel.
+     */
+    private List<TimelineItem> guardLastCopies(ItemAction action, List<TimelineItem> chosen) {
+        if (action != ItemAction.TRASH && action != ItemAction.DELETE_PERMANENTLY) {
+            return chosen;
+        }
+        Set<String> lost = copies.leftWithoutCopy(chosen);
+        if (lost.isEmpty()) {
+            return chosen;
+        }
+        boolean one = lost.size() == 1;
+        ButtonType keepOne = new ButtonType("Keep one of each", ButtonBar.ButtonData.OK_DONE);
+        ButtonType all = new ButtonType(action == ItemAction.TRASH ? "Move all to Trash" : "Delete all",
+                ButtonBar.ButtonData.OTHER);
+        Alert alert = new Alert(Alert.AlertType.WARNING, (one ? "Every copy of 1 file is selected" : "Every copy of "
+                + "%,d files is selected".formatted(lost.size())) + ", so the library would have none of "
+                + (one ? "it" : "them") + " left.\n\nKeep one of each leaves the copy that would stay (the one added "
+                + "first, or the one you chose with Keep this copy) and goes on with the rest.", keepOne, all,
+                ButtonType.CANCEL);
+        if (getScene() != null) {
+            alert.initOwner(getScene().getWindow());
+            Appearance.matchOwner(alert);
+        }
+        alert.setGraphic(null);
+        alert.setTitle("No copy left");
+        alert.setHeaderText(one ? "1 file would have no copy left" : "%,d files would have no copy left".formatted(
+                lost.size()));
+        ButtonType answer = alert.showAndWait().orElse(ButtonType.CANCEL);
+        if (answer == all) {
+            return chosen;
+        }
+        if (answer != keepOne) {
+            return null;
+        }
+        // Leave each lost file's keeper (or, if it isn't chosen, the first of its copies chosen).
+        Map<String, Long> spared = new HashMap<>();
+        for (TimelineItem item : chosen) {
+            String group = copies.groupOf(item.ref().id());
+            if (group != null && lost.contains(group)) {
+                Long keeper = keepers.get(group);
+                boolean keeperChosen = keeper != null && chosen.stream().anyMatch(c -> c.ref().id() == keeper);
+                spared.putIfAbsent(group, keeperChosen ? keeper : item.ref().id());
+            }
+        }
+        List<TimelineItem> rest = new ArrayList<>();
+        for (TimelineItem item : chosen) {
+            if (!spared.containsValue(item.ref().id())) {
+                rest.add(item);
+            }
+        }
+        return rest;
+    }
+
     /** Something in the library changed (index run, file changes, an item action): reload what's shown. */
     public void refresh() {
         Page page = page();
-        sortLocked.set(page == Page.RECENTLY_ADDED || page == Page.DUPLICATES);
+        sortLocked.set(page == Page.RECENTLY_ADDED);
         showLayout(page);
         if (!isVisible()) {
             stale = true; // done when the tab is shown
@@ -613,7 +768,12 @@ public final class CollectionsPage extends BorderPane {
 
     /** What was loaded. {@code tree} only for Folders, {@code albums} only for the list of albums. */
     private record Loaded(List<FolderTree.Node> tree, String folder, List<Album> albums, MediaScope scope,
-            ViewOptions options, List<TimelineItem> items) {
+            ViewOptions options, List<TimelineItem> items, CopyGroups copies) {
+
+        Loaded(List<FolderTree.Node> tree, String folder, List<Album> albums, MediaScope scope, ViewOptions options,
+                List<TimelineItem> items) {
+            this(tree, folder, albums, scope, options, items, CopyGroups.NONE);
+        }
     }
 
     private static Loaded load(Connection c, Request request) throws SQLException {
@@ -650,7 +810,8 @@ public final class CollectionsPage extends BorderPane {
             case FAVORITES, RECENTLY_ADDED, DUPLICATES, HIDDEN, TRASH -> {
                 MediaScope scope = scopeOf(request.page());
                 ViewOptions options = scope.applyTo(request.options());
-                yield new Loaded(null, null, null, scope, options, TimelineQuery.load(c, scope, options, zone));
+                yield new Loaded(null, null, null, scope, options, TimelineQuery.load(c, scope, options, zone),
+                        request.page() == Page.DUPLICATES ? CopyGroups.load(c) : CopyGroups.NONE);
             }
         };
     }
@@ -698,13 +859,22 @@ public final class CollectionsPage extends BorderPane {
             title.setText(titled(request.page().toString(), loaded.items().size()));
         }
         placeholder.setText(emptyText(request, loaded));
-        // The View and Arrange go with the Folders page only; every other page shows as it always did.
+        // The View and Arrange go with the Folders page and (1.4.1) Duplicates; every other page shows as it always did.
         boolean folders = request.page() == Page.FOLDERS;
-        GridView layout = folders ? view : GridView.TIMELINE;
+        boolean duplicatesPage = request.page() == Page.DUPLICATES;
+        GridView layout = folders || duplicatesPage ? view : GridView.TIMELINE;
         FolderArrange arranged = arrange;
         String top = folder;
-        grid.setSectioner(layout != GridView.FOLDERS || top == null ? null
-                : items -> FolderSections.build(items, List.of(Path.of(top)), false, arranged));
+        CopyGroups found = loaded.copies();
+        if (duplicatesPage && layout == GridView.FOLDERS) {
+            List<Path> roots = libraryRoots.get();
+            grid.setSectioner(items -> FolderSections.build(items, roots, true, arranged));
+        } else if (duplicatesPage && layout == GridView.TIMELINE && loaded.options().headers() == Headers.NONE) {
+            grid.setSectioner(found::sections); // Size, Resolution: a header per file, its copies under it
+        } else {
+            grid.setSectioner(layout != GridView.FOLDERS || top == null ? null
+                    : items -> FolderSections.build(items, List.of(Path.of(top)), false, arranged));
+        }
         Headers headers = layout.headers(loaded.options());
         boolean dateOrdered = layout.dateOrdered(loaded.options());
         // The File Explorer switch changes which items are in, not the order: stay on the same photo.
@@ -716,6 +886,21 @@ public final class CollectionsPage extends BorderPane {
             grid.showFromTop(loaded.items(), headers, dateOrdered);
         }
         shownKey = key;
+        showCopies(duplicatesPage ? found : CopyGroups.NONE);
+    }
+
+    /** Duplicates' selection helpers (1.4.1) on the grid, or (other pages) none. */
+    private void showCopies(CopyGroups found) {
+        copies = found;
+        boolean on = found != CopyGroups.NONE;
+        keepers = on ? copies.keepers(grid.shownItems(), keepOverrides) : Map.of();
+        grid.setSectionPicker(on ? section -> copies.extras(section, keepers) : null);
+        grid.setExtraMenu(on ? this::keepThisCopy : null);
+        grid.setSelectionGuard(on ? this::guardLastCopies : null);
+        if (on) {
+            selectExtras.setDisable(copies.extras(grid.shownItems(), keepers).isEmpty());
+            hint.setText(duplicatesHint());
+        }
     }
 
     /** The View and Arrange (shared with the Grid), used on the Folders page. */
@@ -723,7 +908,7 @@ public final class CollectionsPage extends BorderPane {
         if (newView != view || !newArrange.equals(arrange)) {
             view = newView;
             arrange = newArrange;
-            if (page() == Page.FOLDERS) {
+            if (page() == Page.FOLDERS || page() == Page.DUPLICATES) {
                 refresh();
             }
         }
@@ -753,7 +938,7 @@ public final class CollectionsPage extends BorderPane {
             case CATEGORIES -> "Nothing in " + request.album().name() + filtered;
             case FAVORITES -> "No favorites" + filtered;
             case RECENTLY_ADDED -> "Nothing added yet" + filtered;
-            case DUPLICATES -> duplicatesLeft >= 0 ? "Looking for copies…" : "No duplicates found" + filtered;
+            case DUPLICATES -> duplicatesLeft >= 0 ? "Looking for copies\u2026" : "No duplicates found" + filtered;
             case HIDDEN -> "Nothing hidden" + filtered;
             case TRASH -> "Trash is empty" + filtered;
         };
@@ -812,10 +997,11 @@ public final class CollectionsPage extends BorderPane {
             }
             default -> {
                 header.getChildren().addAll(title, hint);
-                setCenter(headed(gridHolder, header));
-                if (page == Page.DUPLICATES && duplicatesLeft < 0) {
-                    hint.setText(DUPLICATES_HINT);
+                if (page == Page.DUPLICATES) {
+                    header.getChildren().addAll(spacer, selectExtras);
+                    hint.setText(duplicatesHint());
                 }
+                setCenter(headed(gridHolder, header));
             }
         }
     }

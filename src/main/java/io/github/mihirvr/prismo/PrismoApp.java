@@ -529,6 +529,8 @@ public final class PrismoApp extends Application {
         collections = new CollectionsPage(database, thumbnailLoader, timelineLoads);
         collections.grid().thumbnailSizeProperty().bindBidirectional(timeline.thumbnailSizeProperty());
         collections.grid().setFileItems(fileItems);
+        collections.setLibraryRoots(() -> gridRoots);
+        collections.setOnDuplicatesProgress(status::duplicatesProgress);
         collections.includeSubfoldersProperty().set(savedIncludeSubfolders);
         collections.includeSubfoldersProperty().addListener((_, _, on) ->
                 settings.put(INCLUDE_SUBFOLDERS_SETTING, Boolean.toString(on)));
@@ -689,7 +691,7 @@ public final class PrismoApp extends Application {
             loadTimeline();
         });
         collections.sortLockedProperty().addListener((_, _, _) -> updateSortLock());
-        collections.pageProperty().addListener((_, _, _) -> updateSortLock()); // Recently Added -> Duplicates: both locked
+        collections.pageProperty().addListener((_, _, _) -> updateSortLock()); // only Recently Added is locked
         Slider size = new Slider(TimelineView.MIN_THUMBNAIL_SIZE, TimelineView.MAX_THUMBNAIL_SIZE,
                 timeline.thumbnailSizeProperty().get());
         size.valueProperty().bindBidirectional(timeline.thumbnailSizeProperty());
@@ -943,10 +945,11 @@ public final class PrismoApp extends Application {
         updateSortLock();
     }
 
-    /** The View menu goes with the Grid and Collections › Folders; elsewhere it is hidden. */
+    /** The View menu goes with the Grid, Collections › Folders and (1.4.1) Duplicates; elsewhere it is hidden. */
     private void updateViewShown() {
-        viewBar.setViewShown(timeline.isVisible()
-                || collections.isVisible() && collections.page() == CollectionsPage.Page.FOLDERS);
+        viewBar.setViewShown(timeline.isVisible() || collections.isVisible()
+                && (collections.page() == CollectionsPage.Page.FOLDERS
+                        || collections.page() == CollectionsPage.Page.DUPLICATES));
     }
 
     /**
@@ -965,14 +968,12 @@ public final class PrismoApp extends Application {
     }
 
     /**
-     * Recently Added (newest added first) and, 1.4.0, Duplicates (largest first) have a fixed order: the Sort
-     * controls show it, locked, while that page is on screen.
+     * Recently Added (newest added first) has a fixed order: the Sort controls show it, locked, while that page is on
+     * screen. (1.4.0 locked Duplicates to largest first too; 1.4.1 gives it every Sort.)
      */
     private void updateSortLock() {
         boolean locked = collections.isVisible() && collections.sortLockedProperty().get();
-        MediaScope scope = collections.page() == CollectionsPage.Page.DUPLICATES ? MediaScope.DUPLICATES
-                : MediaScope.RECENTLY_ADDED;
-        viewBar.setSortLocked(locked ? scope.applyTo(viewOptions) : null);
+        viewBar.setSortLocked(locked ? MediaScope.RECENTLY_ADDED.applyTo(viewOptions) : null);
     }
 
     /**
@@ -1436,6 +1437,9 @@ public final class PrismoApp extends Application {
         }
         if (!warmUpThread.awaitTermination(5, TimeUnit.SECONDS)) {
             log.warn("Thumbnail warm-up did not stop within 5 s");
+        }
+        if (collections != null) {
+            collections.close(); // a Duplicates check may be reading files (1.4.1)
         }
         timelineLoads.shutdownNow();
         if (!timelineLoads.awaitTermination(5, TimeUnit.SECONDS)) {

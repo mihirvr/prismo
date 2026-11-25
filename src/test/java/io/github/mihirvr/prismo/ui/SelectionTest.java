@@ -126,4 +126,16 @@ class SelectionTest {
         selection.toggle(3);
         assertEquals(List.of(1L, 3L, 5L), ids(selection.items(shown)));
     }
+
+    @Test
+    void bulkChangesForSectionsAndDragBoxes() {
+        Selection selection = new Selection();
+        selection.addAll(java.util.List.of(1L, 2L, 3L));
+        assertTrue(selection.containsAll(java.util.List.of(1L, 3L)));
+        assertFalse(selection.containsAll(java.util.List.of()), "nothing to check: not 'all selected'");
+        selection.removeAll(java.util.List.of(2L));
+        assertEquals(java.util.Set.of(1L, 3L), selection.ids());
+        selection.setAll(java.util.List.of(5L));
+        assertEquals(java.util.Set.of(5L), selection.ids());
+    }
 }

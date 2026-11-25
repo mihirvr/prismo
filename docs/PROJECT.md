@@ -287,12 +287,30 @@ their exact size with another file are read, once (`media_hash`, V10, with the s
 a changed file is read again). The check runs when the page is opened and says how many files are left. Prismo never
 removes a copy: the user picks one and uses Trash. Visually similar pictures (a resized or edited copy) are not found.
 
+**1.4.1: Duplicates like the Grid, and clearing them out.** The page has the Grid's View (Timeline / Folders / All
+files), Sort and Filters (no fixed Size order any more); copies of a file sit side by side wherever the Sort leaves them
+level (the content's hash breaks ties). Sorted by Size (or Resolution) in the Timeline view, each file is its own section
+("name · size each"). "Select extra copies" (page header) selects every copy but one of each file: the copy that stays
+is the one added to the library first, among the copies shown; right-click › "Keep this copy, select the others" picks
+another (kept while Prismo runs). Before Move to Trash / Delete permanently, if every copy of a file not in Trash is
+chosen, a dialog offers Keep one of each (default), all anyway, or Cancel; a copy that is hidden or in a turned-off folder
+counts as a copy left. The hint under the title says how many extra copies of how many files and their size. The check
+reports files and bytes (every 16 MB inside a big file) in the note at the bottom of the window, shows the copies found
+after each batch, keeps running on other pages and stops when Prismo closes.
+
 ---
 
 ## Selection Mode
 
 Desktop equivalent of long-press. Supports: delete, copy, move, favorite, hide, rename, open containing folder.
 
+
+**1.4.1:** every header (dates in any grouping, folders, letters, Duplicates' files) has a check circle, shown under the
+mouse and while selecting: it selects or unselects its section. On Duplicates it goes extra copies → every copy → none
+(the circle is filled, then filled with a white ring). Drag-select: pressing on empty space (between or after the tiles,
+a header, under the last row) and dragging draws a box that selects every tile it touches, live; Ctrl adds to the
+selection; the grid scrolls near the top and bottom edges. On Duplicates the box takes only the extra copies under it
+(Shift: every tile; only kept copies under it: those). A press on a tile still opens it or drags the file out.
 ---
 
 ## File Operations

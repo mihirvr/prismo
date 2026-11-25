@@ -68,16 +68,27 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.4.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.4.0 are described below). Windows first; the Linux package is an early preview.
+**Version 1.4.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.4.1 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.4.1:** clearing out duplicates and selecting many at once. The Duplicates page works like the Grid: the same
+View (Timeline, Folders, All files), Sort and Filters, with copies of a file side by side; sorted by Size, each file gets
+its own header ("IMG_1234.jpg · 4.2 MB each") with its copies under it. "Select extra copies" selects every copy but one
+of each file (the one added to the library first stays), ready for Move to Trash; right-click a copy › "Keep this copy,
+select the others" to keep that one instead. If every copy of a file is selected, Prismo asks first and offers "Keep one
+of each". While it looks for copies, a note at the bottom says how far it is (files and size), and it keeps going if you
+move to another page. Every header (dates, folders, letters, files) has a check circle that selects its whole section;
+on Duplicates the first click selects only the extra copies, the second every copy, the third none. Drag from empty
+space (between or after the tiles, on a header) to select with a box, as in File Explorer; Ctrl+drag adds to the
+selection, and on Duplicates the box takes only the extra copies unless you hold Shift.
 
 **1.4.0:** where a photo or video was taken, duplicates, motion photos, and smoother video. Info has a Location
 section: the place written in the file (city, state, country), or else the nearest town to its GPS, looked up offline
 from a place list that comes with Prismo, with the GPS and an "Open in map" link (it opens the browser only when
 clicked). Videos show their location and the phone that made them too. Collections has a Duplicates page: files with
-exactly the same content, largest first, so copies sit side by side; Prismo only finds them, and never removes one
-itself. A Pixel or Samsung motion photo gets a play button in the viewer that plays its clip over the photo. In videos:
+exactly the same content, side by side (1.4.1 added the View, Sort and selecting the extra copies); Prismo never removes
+a copy on its own. A Pixel or Samsung motion photo gets a play button in the viewer that plays its clip over the photo. In videos:
 the mouse wheel over the volume changes it in small steps, quick skips show their total (+5 s, +10 s, +15 s), the
 filmstrip can be hidden (S, or the button in the top bar) to give a small window more room, the control bar is tighter
 so the seek bar is longer, and when a computer can't decode a heavy video fast enough the picture now skips ahead to
@@ -167,7 +178,7 @@ What works in 1.0.1:
 - **Collections tab:** Folders (a folder tree, with or without subfolders), Albums (one per folder), Favorites, Recently Added, Hidden and Trash. Ctrl+D / Ctrl+H / Delete favorite, hide or move something to Trash; "Delete permanently" (from Trash, after asking) moves the file to the Recycle Bin (deletes it for good where there is none; the question says which).
 - **Hidden files:** files marked Hidden in Windows File Explorer show only on Collections › Hidden (a Settings switch shows them everywhere instead). The right-click menu can set or clear that Windows mark, and in Settings Prismo's own Hide can be set to set the mark too ("Both ways").
 - **HEIC and RAW:** HEIC / HEIF photos (iPhones, many Android phones) through the bundled FFmpeg, and RAW files (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF and more) through the JPEG preview the camera stores inside: thumbnails, the viewer, the date taken and the camera settings.
-- **Selecting many:** Ctrl-click, Shift-click, Shift + arrow keys or Ctrl+A; a bar at the bottom then favorites, hides, trashes, copies or moves them all at once.
+- **Selecting many:** Ctrl-click, Shift-click, Shift + arrow keys, Ctrl+A, a header's check circle (its whole section) or a box dragged from empty space; a bar at the bottom then favorites, hides, trashes, copies or moves them all at once.
 - **File operations:** Rename (F2) and Move to folder… (with a question when a name is already taken: keep both or skip); Prismo follows the file, favorites and all.
 - **Offline and network folders:** when a library folder can't be reached (an unplugged drive, a network share that's off), a banner says so and its tiles are greyed out; nothing is lost and everything comes back with the drive. Network folders are checked every 10 minutes instead of watched live.
 - **Settings** (the Settings button in the top bar, or Ctrl+,): the look (Light, Dark, AMOLED black, or Follow system, which changes with Windows), hidden items, ignored folders (node_modules, .git and the like are skipped), Timeline date headers (smart, day, week, month or year), the subtitle background, thumbnail CPU use and cache size (with Clear thumbnails), the keyboard shortcuts, and About. The title bar follows the look on Windows. Every setting, the window's size and place, the thumbnail size, Filters + Sort, "Include subfolders", the video volume / mute / speed and the sound and subtitle languages picked last are kept after a restart.
@@ -222,6 +233,8 @@ next subtitles and Z / X for the delay.)
 | Shift + click | Select everything up to here |
 | Shift + arrow keys | Select while moving |
 | Ctrl+A | Select all |
+| Click a header's check circle | Select or unselect its section (Duplicates: extra copies, then every copy, then none) |
+| Drag from empty space | Select with a box (Ctrl: add to the selection; Duplicates: Shift takes kept copies too) |
 | Ctrl+D / Ctrl+H / Delete / Ctrl+C | Do it to every selected item |
 | Esc | Clear the selection |
 

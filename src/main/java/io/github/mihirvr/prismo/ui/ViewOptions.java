@@ -122,9 +122,15 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
      * {@code sort_date} has an index, so the other sorts read the table either way.
      */
     public String sqlOrderBy() {
+        return sqlOrderBy(null);
+    }
+
+    /** Like {@link #sqlOrderBy()}, with {@code tieBreak} (an SQL expression) before the id when not null (1.4.1). */
+    public String sqlOrderBy(String tieBreak) {
         String direction = descending ? " DESC" : " ASC";
         String prefix = sort == MediaSort.DATE_TAKEN ? "+" : "";
-        return prefix + sort.expression() + direction + ", id" + direction;
+        return prefix + sort.expression() + direction + (tieBreak == null ? "" : ", " + tieBreak)
+                + ", id" + direction;
     }
 
     public ViewOptions withFilter(MediaFilter newFilter) {

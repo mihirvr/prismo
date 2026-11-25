@@ -82,7 +82,7 @@ public final class TimelineQuery {
         if (options.sqlCondition() != null) {
             sql.append(" AND ").append(options.sqlCondition());
         }
-        return sql.append(" ORDER BY ").append(options.sqlOrderBy()).toString();
+        return sql.append(" ORDER BY ").append(scope.sqlOrderBy(options)).toString();
     }
 
     /**

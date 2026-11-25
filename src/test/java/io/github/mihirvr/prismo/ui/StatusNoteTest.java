@@ -45,4 +45,26 @@ class StatusNoteTest {
                 StatusNote.State.thumbnails(120, 266, 2, false));
         assertTrue(StatusNote.State.thumbnails(1, 40_000, 0, true).endsWith("photos may open slowly until this finishes"));
     }
+
+    @Test
+    void theDuplicatesCheckHasItsOwnLine() {
+        StatusNote.State state = new StatusNote.State();
+        assertTrue(state.progress(StatusNote.State.Work.DUPLICATES, "Looking for copies… 1 of 4 files"));
+        assertFalse(state.progress("Making thumbnails… 3 of 9"), "work already runs: no new delay");
+        state.delayPassed();
+        assertEquals("Making thumbnails… 3 of 9\nLooking for copies… 1 of 4 files", state.text());
+        state.progress(null);
+        assertEquals("Looking for copies… 1 of 4 files", state.text(), "thumbnails done: the check stays");
+        state.progress(StatusNote.State.Work.DUPLICATES, null);
+        assertFalse(state.working());
+        assertEquals("", state.text());
+    }
+
+    @Test
+    void duplicatesTextCountsFilesAndSizeInOneUnit() {
+        assertEquals("Looking for copies… 120 of 800 files  ·  1.2 of 4.5 GB",
+                StatusNote.State.duplicates(120, 800, (long) (1.2 * (1L << 30)), (long) (4.5 * (1L << 30))));
+        assertEquals("Looking for copies… 0 of 3 files  ·  0.0 of 2.0 MB",
+                StatusNote.State.duplicates(0, 3, 0, 2L << 20));
+    }
 }

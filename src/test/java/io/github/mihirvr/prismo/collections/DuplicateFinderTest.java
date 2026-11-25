@@ -5,10 +5,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.ui.MediaScope;
+import io.github.mihirvr.prismo.ui.MediaSort;
+import io.github.mihirvr.prismo.ui.TimelineItem;
+import io.github.mihirvr.prismo.ui.TimelineQuery;
+import io.github.mihirvr.prismo.ui.ViewOptions;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -74,12 +79,12 @@ class DuplicateFinderTest {
             add(database, 3, tmp.resolve("b.jpg"), "SAME BYTES".getBytes(), null); // same size, other content
             add(database, 4, tmp.resolve("c.jpg"), "a size of its own".getBytes(), null);
 
-            int read = new DuplicateFinder(database).refresh(_ -> { }, () -> false);
+            int read = new DuplicateFinder(database).refresh();
 
             assertEquals(3, read, "only the three files that share a size are read");
             assertEquals(List.of(1L, 2L), shown(database));
             assertEquals(3, hashed(database));
-            assertEquals(0, new DuplicateFinder(database).refresh(_ -> { }, () -> false), "nothing read twice");
+            assertEquals(0, new DuplicateFinder(database).refresh(), "nothing read twice");
             assertTrue(Files.exists(tmp.resolve("copy of a.jpg")), "nothing is removed: the finder only reads");
         }
     }
@@ -90,7 +95,7 @@ class DuplicateFinderTest {
             add(database, 1, tmp.resolve("a.jpg"), "same bytes".getBytes(), null);
             add(database, 2, tmp.resolve("b.jpg"), "same bytes".getBytes(), 5L); // in Trash
             add(database, 3, tmp.resolve("c.jpg"), "same bytes".getBytes(), null);
-            new DuplicateFinder(database).refresh(_ -> { }, () -> false);
+            new DuplicateFinder(database).refresh();
             assertEquals(List.of(1L, 3L), shown(database), "the Trash copy isn't shown; the other two still match");
 
             // c.jpg changes (same size): its old hash goes and it is read again, so it no longer matches.
@@ -103,10 +108,48 @@ class DuplicateFinderTest {
                 }
                 return null;
             }).get();
-            int read = new DuplicateFinder(database).refresh(_ -> { }, () -> false);
+            int read = new DuplicateFinder(database).refresh();
             assertEquals(1, read);
             assertEquals(List.of(), shown(database), "a.jpg's only copy is in Trash now");
         }
+    }
+
+    @Test
+    void copiesSitSideBySideInAnySortAndFormGroups() throws Exception {
+        try (Database database = Database.open(tmp.resolve("d.db"))) {
+            // Two files, two copies each, all the same size: ids 1 and 3 are one file, 2 and 4 the other.
+            add(database, 1, tmp.resolve("a1.jpg"), "aaaa".getBytes(), null);
+            add(database, 2, tmp.resolve("b1.jpg"), "bbbb".getBytes(), null);
+            add(database, 3, tmp.resolve("a2.jpg"), "aaaa".getBytes(), null);
+            add(database, 4, tmp.resolve("b2.jpg"), "bbbb".getBytes(), null);
+            List<DuplicateFinder.Progress> told = new ArrayList<>();
+            new DuplicateFinder(database).refresh(told::add, () -> false, () -> { });
+            assertEquals(new DuplicateFinder.Progress(0, 4, 0, 16), told.getFirst(), "the total is told first");
+            assertTrue(told.getLast().finished(), "and the end");
+            assertEquals(16, told.getLast().bytesDone());
+
+            ViewOptions bySize = ViewOptions.DEFAULT.withSort(MediaSort.SIZE);
+            List<TimelineItem> items = database.read(c -> TimelineQuery.load(c, MediaScope.DUPLICATES, bySize,
+                    ZoneOffset.UTC));
+            List<Long> ids = items.stream().map(item -> item.ref().id()).toList();
+            assertEquals(4, ids.size());
+            CopyGroups groups = database.read(CopyGroups::load);
+            for (int i = 0; i < 4; i += 2) {
+                assertEquals(groups.groupOf(ids.get(i)), groups.groupOf(ids.get(i + 1)),
+                        "level on size: the copies of a file sit together " + ids);
+            }
+            assertTrue(!groups.groupOf(1).equals(groups.groupOf(2)));
+        }
+    }
+
+    @Test
+    void readingStopsPartWayWhenCancelled() throws Exception {
+        Path file = tmp.resolve("big.bin");
+        Files.write(file, new byte[40 * 1024 * 1024]); // 40 MB: told at 16 and 32 MB
+        List<Long> told = new ArrayList<>();
+        assertTrue(DuplicateFinder.sha256(file, () -> false, told::add) != null);
+        assertEquals(List.of(16L * 1024 * 1024, 32L * 1024 * 1024), told);
+        assertEquals(null, DuplicateFinder.sha256(file, () -> true, _ -> { }), "closing Prismo stops it");
     }
 
     @Test
