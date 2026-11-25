@@ -1,6 +1,5 @@
 package io.github.mihirvr.prismo.collections;
 
-import io.github.mihirvr.prismo.ui.FolderSections;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,7 +18,7 @@ import java.util.Set;
 /**
  * Which files are copies of which (1.4.1, Collections › Duplicates): every file not in Trash whose content (SHA-256 in
  * {@code media_hash}) another such file shares, in "groups" of copies. The page uses it to select every copy but one
- * of each file, to show a header per file on the Size sort, and to warn before the last copy of a file goes.
+ * of each file, to keep and label each file's copies together (1.4.2), and to warn before the last copy of a file goes.
  *
  * <p><b>Which copy stays</b> (the "keeper"): the one added to the library first ({@code date_added}, then the lowest
  * id), among the copies on screen; the user can pick another with "Keep this copy" (an override, kept while Prismo
@@ -166,25 +165,36 @@ public final class CopyGroups {
     }
 
     /**
-     * The Size sort's sections: one per file, its copies together, in the order the first copy of each is shown
-     * (largest first on the default direction). Labelled with that copy's name and size: "IMG_1234.jpg · 4.2 MB each".
-     * Items without a group (a copy found since the last load) get one section each, at their place.
+     * A file's header on Duplicates (1.4.2): the first copy's name and the size of one copy, "IMG_1234.jpg · 4.2 MB
+     * each" (the header's count says how many copies). Without a group (found since the last load), only the name.
      */
-    public List<FolderSections.Section> sections(List<TimelineItem> shown) {
-        Map<String, List<TimelineItem>> byGroup = new LinkedHashMap<>();
-        for (TimelineItem item : shown) {
+    public String label(List<TimelineItem> copiesOfOne) {
+        TimelineItem first = copiesOfOne.getFirst();
+        Copy copy = byId.get(first.ref().id());
+        String name = String.valueOf(first.ref().path().getFileName());
+        return copy == null ? name : name + "  \u00b7  " + sizeText(copy.size()) + " each";
+    }
+
+    /**
+     * Only the items whose file has another copy among {@code items} (1.4.2): a file whose other copy is hidden, or
+     * filtered out, would stand alone on Duplicates with nothing to compare it with.
+     */
+    public List<TimelineItem> withCopiesShown(List<TimelineItem> items) {
+        Map<String, Integer> shownPerGroup = new HashMap<>();
+        for (TimelineItem item : items) {
             String group = groupOf(item.ref().id());
-            byGroup.computeIfAbsent(group != null ? group : "id:" + item.ref().id(), _ -> new ArrayList<>()).add(item);
+            if (group != null) {
+                shownPerGroup.merge(group, 1, Integer::sum);
+            }
         }
-        List<FolderSections.Section> sections = new ArrayList<>(byGroup.size());
-        for (List<TimelineItem> copies : byGroup.values()) {
-            TimelineItem first = copies.getFirst();
-            Copy copy = byId.get(first.ref().id());
-            String name = String.valueOf(first.ref().path().getFileName());
-            String label = copy == null ? name : name + "  ·  " + sizeText(copy.size()) + " each";
-            sections.add(new FolderSections.Section(label, List.copyOf(copies)));
+        List<TimelineItem> kept = new ArrayList<>(items.size());
+        for (TimelineItem item : items) {
+            String group = groupOf(item.ref().id());
+            if (group != null && shownPerGroup.get(group) > 1) {
+                kept.add(item);
+            }
         }
-        return sections;
+        return kept;
     }
 
     /** "340 KB", "4.2 MB", "1.3 GB". */

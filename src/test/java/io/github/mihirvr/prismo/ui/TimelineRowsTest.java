@@ -129,6 +129,7 @@ class TimelineRowsTest {
     private static List<String> describe(List<TimelineRow> rows) {
         return rows.stream().map(row -> switch (row) {
             case TimelineRow.Header(String label, int count) -> "H " + label + " " + count;
+            case TimelineRow.SubHeader(String label, int count) -> "S " + label + " " + count;
             case TimelineRow.Thumbs(List<TimelineItem> items) -> "T " + items.size();
         }).toList();
     }

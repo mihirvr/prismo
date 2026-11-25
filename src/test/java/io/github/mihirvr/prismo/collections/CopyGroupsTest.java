@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import io.github.mihirvr.prismo.thumbs.MediaRef;
-import io.github.mihirvr.prismo.ui.FolderSections;
 import io.github.mihirvr.prismo.ui.TimelineItem;
 import java.nio.file.Path;
 import java.util.List;
@@ -79,13 +78,16 @@ class CopyGroupsTest {
     }
 
     @Test
-    void sizeSortSectionsAreOnePerFileInShownOrder() {
-        List<FolderSections.Section> sections = GROUPS.sections(items(4, 1, 5, 2, 7, 3));
-        assertEquals(3, sections.size());
-        assertEquals(List.of(4L, 5L), ids(sections.get(0).items()));
-        assertEquals("p4.jpg  ·  5.0 MB each", sections.get(0).label());
-        assertEquals(List.of(1L, 2L, 3L), ids(sections.get(1).items()));
-        assertEquals("p7.jpg", sections.get(2).label(), "no group yet: its own section, named only");
+    void aFileIsLabelledByItsFirstCopy() {
+        assertEquals("p4.jpg  ·  5.0 MB each", GROUPS.label(items(4, 5)));
+        assertEquals("p7.jpg", GROUPS.label(items(7)), "no group yet: the name only");
+    }
+
+    @Test
+    void aFileWithoutAnotherCopyOnThePageIsLeftOut() {
+        assertEquals(List.of(1L, 2L, 4L, 5L), ids(GROUPS.withCopiesShown(items(1, 2, 4, 5))));
+        assertEquals(List.of(1L, 3L), ids(GROUPS.withCopiesShown(items(1, 3, 4, 7))),
+                "4's other copies are hidden or filtered out; 7 has no group");
     }
 
     @Test

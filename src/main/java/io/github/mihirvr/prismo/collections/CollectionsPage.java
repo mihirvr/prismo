@@ -3,6 +3,7 @@ package io.github.mihirvr.prismo.collections;
 import io.github.mihirvr.prismo.db.Database;
 import io.github.mihirvr.prismo.ui.Album;
 import io.github.mihirvr.prismo.ui.Appearance;
+import io.github.mihirvr.prismo.ui.CopyLayout;
 import io.github.mihirvr.prismo.ui.AlbumGrid;
 import io.github.mihirvr.prismo.ui.FolderArrange;
 import io.github.mihirvr.prismo.ui.FolderSections;
@@ -56,6 +57,7 @@ import javafx.scene.control.ButtonBar;
 import javafx.scene.control.ButtonType;
 import javafx.scene.control.ContextMenu;
 import javafx.scene.control.CheckBox;
+import javafx.scene.control.ComboBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -241,6 +243,9 @@ public final class CollectionsPage extends BorderPane {
     /** The copy of each file that stays, on the items shown (group -> media id). */
     private Map<String, Long> keepers = Map.of();
     private final Button selectExtras = new Button("Select extra copies", Icon.CHECK.node(PAGE_ICON_SIZE));
+    /** 1.4.2: how Duplicates shows dates and files on a date sort (Timeline view); kept across restarts (PrismoApp). */
+    private final ComboBox<CopyLayout> copyLayoutBox = new ComboBox<>();
+    private final Label copyLayoutLabel = new Label("Show");
     /** The width of the tree's expand arrows (measured from a row that has one), for the guide lines. */
     private double arrowWidth = 20;
     /** The layout on screen (page, album open or not), so it is only rebuilt when that changes. */
@@ -307,6 +312,17 @@ public final class CollectionsPage extends BorderPane {
         selectExtras.setTooltip(new Tooltip("Selects every copy but one of each file: the one added to the library first "
                 + "stays (right-click a copy \u203a Keep this copy to keep that one instead). Then use Move to Trash."));
         selectExtras.setOnAction(_ -> grid.select(idsOf(copies.extras(grid.shownItems(), keepers))));
+        copyLayoutBox.getItems().setAll(CopyLayout.values());
+        copyLayoutBox.setValue(CopyLayout.DEFAULT);
+        copyLayoutBox.getStyleClass().add("copy-layout");
+        copyLayoutBox.setTooltip(new Tooltip("On a date sort in the Timeline view: date headers with each file under "
+                + "them, dates only, or files only. A file's copies always stay together."));
+        copyLayoutLabel.getStyleClass().add("copy-layout-label");
+        copyLayoutBox.valueProperty().addListener((_, _, _) -> {
+            if (page() == Page.DUPLICATES) {
+                refresh();
+            }
+        });
 
         pages.getItems().setAll(Page.values());
         pages.getStyleClass().add("collections-pages");
@@ -620,6 +636,11 @@ public final class CollectionsPage extends BorderPane {
         onDuplicatesProgress = onProgress;
     }
 
+    /** How Duplicates shows dates and files (1.4.2); PrismoApp keeps it across restarts. */
+    public javafx.beans.property.ObjectProperty<CopyLayout> copyLayoutProperty() {
+        return copyLayoutBox.valueProperty();
+    }
+
     /** The enabled library folders, read when Duplicates is shown in the Folders view. */
     public void setLibraryRoots(Supplier<List<Path>> roots) {
         libraryRoots = roots;
@@ -810,8 +831,13 @@ public final class CollectionsPage extends BorderPane {
             case FAVORITES, RECENTLY_ADDED, DUPLICATES, HIDDEN, TRASH -> {
                 MediaScope scope = scopeOf(request.page());
                 ViewOptions options = scope.applyTo(request.options());
-                yield new Loaded(null, null, null, scope, options, TimelineQuery.load(c, scope, options, zone),
-                        request.page() == Page.DUPLICATES ? CopyGroups.load(c) : CopyGroups.NONE);
+                List<TimelineItem> items = TimelineQuery.load(c, scope, options, zone);
+                if (request.page() != Page.DUPLICATES) {
+                    yield new Loaded(null, null, null, scope, options, items);
+                }
+                CopyGroups found = CopyGroups.load(c);
+                // 1.4.2: a file shows only with another copy on the page (not one hidden or filtered out)
+                yield new Loaded(null, null, null, scope, options, found.withCopiesShown(items), found);
             }
         };
     }
@@ -866,12 +892,21 @@ public final class CollectionsPage extends BorderPane {
         FolderArrange arranged = arrange;
         String top = folder;
         CopyGroups found = loaded.copies();
+        boolean dateSort = loaded.options().headers() == Headers.DATES;
+        copyLayoutBox.setDisable(!duplicatesPage || layout != GridView.TIMELINE || !dateSort);
         if (duplicatesPage && layout == GridView.FOLDERS) {
+            grid.setCopyGroups(null, null, null);
             List<Path> roots = libraryRoots.get();
             grid.setSectioner(items -> FolderSections.build(items, roots, true, arranged));
-        } else if (duplicatesPage && layout == GridView.TIMELINE && loaded.options().headers() == Headers.NONE) {
-            grid.setSectioner(found::sections); // Size, Resolution: a header per file, its copies under it
+        } else if (duplicatesPage) {
+            // 1.4.2: a file's copies always together. Timeline view: dates and / or files (the Show choice) on a date
+            // sort, a header per file on the others; All files: together, no headers.
+            grid.setSectioner(null);
+            CopyLayout shown = layout == GridView.ALL_FILES ? null
+                    : dateSort ? copyLayoutBox.getValue() : CopyLayout.FILES;
+            grid.setCopyGroups(item -> found.groupOf(item.ref().id()), found::label, shown);
         } else {
+            grid.setCopyGroups(null, null, null);
             grid.setSectioner(layout != GridView.FOLDERS || top == null ? null
                     : items -> FolderSections.build(items, List.of(Path.of(top)), false, arranged));
         }
@@ -998,7 +1033,7 @@ public final class CollectionsPage extends BorderPane {
             default -> {
                 header.getChildren().addAll(title, hint);
                 if (page == Page.DUPLICATES) {
-                    header.getChildren().addAll(spacer, selectExtras);
+                    header.getChildren().addAll(spacer, copyLayoutLabel, copyLayoutBox, selectExtras);
                     hint.setText(duplicatesHint());
                 }
                 setCenter(headed(gridHolder, header));

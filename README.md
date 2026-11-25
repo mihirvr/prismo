@@ -68,9 +68,15 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.4.1** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.4.1 are described below). Windows first; the Linux package is an early preview.
+**Version 1.4.2** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.4.2 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**1.4.2:** Duplicates keeps a file's copies together. In 1.4.1 the date view could split them (a copy saved from
+WhatsApp keeps its own date), so unrelated files ended up side by side. Now a file's copies always stay in one place,
+under the date of its first copy, and "Show" picks the layout on a date sort: Dates and files (a date header with a
+small header for each file under it), Dates, or Files. Other sorts show one header per file. A date's check circle
+covers all its files, a file's circle only that file. A file whose only other copy is hidden is no longer shown alone.
 
 **1.4.1:** clearing out duplicates and selecting many at once. The Duplicates page works like the Grid: the same
 View (Timeline, Folders, All files), Sort and Filters, with copies of a file side by side; sorted by Size, each file gets

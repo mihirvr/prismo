@@ -109,6 +109,8 @@ public final class TimelineView extends StackPane {
     private static final PseudoClass CHECKED = PseudoClass.getPseudoClass("checked");
     /** Duplicates: every copy of the section is selected, the kept ones too (the circle's third look). */
     private static final PseudoClass ALL = PseudoClass.getPseudoClass("all");
+    /** A file's header under a date header (1.4.2, Duplicates): smaller, set in. */
+    private static final PseudoClass SUB = PseudoClass.getPseudoClass("sub");
     private static final double HEADER_CHECK_ICON_SIZE = 14;
 
     /**
@@ -130,6 +132,13 @@ public final class TimelineView extends StackPane {
     private List<TimelineItem> items = List.of();
     /** The items as loaded (the Sort bar's order), before any Folders view sections. */
     private List<TimelineItem> loaded = List.of();
+    /** 1.4.2, Duplicates: an item's file (copy group), or null when the grid isn't grouped by file. */
+    private Function<TimelineItem, String> fileKey;
+    private Function<List<TimelineItem>, String> fileLabel;
+    /** How the files are laid out; null = no headers at all (the All files view). */
+    private CopyLayout copyLayout;
+    /** The items as files (each with all its copies), or null. */
+    private List<FolderSections.Section> files;
     /** The Folders view's sections, or null for date headers / a plain grid. */
     private List<FolderSections.Section> sections;
     private Function<List<TimelineItem>, List<FolderSections.Section>> sectioner;
@@ -365,7 +374,7 @@ public final class TimelineView extends StackPane {
             return;
         }
         // Its date header on top when it starts the group; putting a row at the top is exact (see rebuild).
-        list.scrollTo(row > 0 && rows.get(row - 1) instanceof TimelineRow.Header ? row - 1 : row);
+        list.scrollTo(row > 0 && TimelineRow.isHeading(rows.get(row - 1)) ? row - 1 : row);
         focusedId = id;
         for (RowCell cell : cells) {
             cell.updateMarks();
@@ -448,6 +457,25 @@ public final class TimelineView extends StackPane {
         updateSelection();
     }
 
+    /**
+     * 1.4.2, Duplicates: keeps each file's copies together. {@code key} gives an item's file (null turns this off),
+     * {@code label} a file's header; {@code layout} how files and dates are shown (null = no headers). Applied now and
+     * to every later load; stays on the same photo.
+     */
+    public void setCopyGroups(Function<TimelineItem, String> key, Function<List<TimelineItem>, String> label,
+            CopyLayout layout) {
+        if (key == null && fileKey == null) {
+            return; // off, and was off: nothing to rebuild
+        }
+        fileKey = key;
+        fileLabel = label;
+        copyLayout = layout;
+        take(loaded);
+        rebuild(false);
+        selection.retainShown(items);
+        updateSelection();
+    }
+
     /** True while the grid is split into folders (the Folders view). */
     public boolean isInFolders() {
         return sections != null;
@@ -456,7 +484,12 @@ public final class TimelineView extends StackPane {
     /** Keeps the loaded items and works out what is shown: in sections (Folders view) or as loaded. */
     private void take(List<TimelineItem> newItems) {
         loaded = List.copyOf(newItems);
-        if (sectioner == null) {
+        files = null;
+        if (sectioner == null && fileKey != null) {
+            sections = null;
+            files = List.copyOf(TimelineRows.files(loaded, fileKey, fileLabel));
+            items = List.copyOf(FolderSections.flatten(files)); // a file's copies together, never split
+        } else if (sectioner == null) {
             sections = null;
             items = loaded; // rows hold views into this list, so it must never change
         } else {
@@ -554,12 +587,21 @@ public final class TimelineView extends StackPane {
         guard = newGuard == null ? (_, chosen) -> chosen : newGuard;
     }
 
-    /** The items of the section whose header is row {@code headerRow}: the thumbnail rows after it, to the next header. */
+    /**
+     * The items of the section whose header is row {@code headerRow}: the thumbnail rows after it, to the next header
+     * of its level or higher (a date header's section takes in its files' sub-headers, 1.4.2).
+     */
     private List<TimelineItem> sectionItems(int headerRow) {
         List<TimelineRow> rows = list.getItems();
+        boolean top = rows.get(headerRow) instanceof TimelineRow.Header;
         List<TimelineItem> section = new ArrayList<>();
-        for (int r = headerRow + 1; r < rows.size() && rows.get(r) instanceof TimelineRow.Thumbs(var rowItems); r++) {
-            section.addAll(rowItems);
+        for (int r = headerRow + 1; r < rows.size(); r++) {
+            TimelineRow row = rows.get(r);
+            if (row instanceof TimelineRow.Thumbs(var rowItems)) {
+                section.addAll(rowItems);
+            } else if (row instanceof TimelineRow.Header || !top) {
+                break;
+            }
         }
         return section;
     }
@@ -1360,6 +1402,11 @@ public final class TimelineView extends StackPane {
     }
 
     private List<TimelineRow> buildRows() {
+        if (files != null) {
+            return copyLayout == null ? TimelineRows.build(items, layout.columns(), 0, false)
+                    : TimelineRows.byCopies(files, layout.columns(), LocalDate.now(clock).toEpochDay(), grouping,
+                            copyLayout);
+        }
         if (sections != null) {
             return TimelineRows.build(sections, layout.columns());
         }
@@ -1387,7 +1434,11 @@ public final class TimelineView extends StackPane {
             case TimelineRow.Header _ when index + 1 < rows.size()
                     && rows.get(index + 1) instanceof TimelineRow.Thumbs(var next) ->
                     new Anchor(next.getFirst().ref().id(), true);
+            case TimelineRow.SubHeader _ when index + 1 < rows.size()
+                    && rows.get(index + 1) instanceof TimelineRow.Thumbs(var next) ->
+                    new Anchor(next.getFirst().ref().id(), true);
             case TimelineRow.Header _ -> null;
+            case TimelineRow.SubHeader _ -> null;
             case TimelineRow.Thumbs(var row) -> new Anchor(row.getFirst().ref().id(), false);
         };
     }
@@ -1417,7 +1468,7 @@ public final class TimelineView extends StackPane {
             headerCheck.setMaxSize(USE_PREF_SIZE, USE_PREF_SIZE);
             Tooltip.install(headerCheck, headerTip);
             headerCheck.setOnMouseClicked(event -> {
-                if (event.getButton() == MouseButton.PRIMARY && getItem() instanceof TimelineRow.Header) {
+                if (event.getButton() == MouseButton.PRIMARY && TimelineRow.isHeading(getItem())) {
                     toggleSection(getIndex());
                 }
                 event.consume();
@@ -1448,6 +1499,14 @@ public final class TimelineView extends StackPane {
                     showTiles(0);
                     headerLabel.setText(label);
                     headerCount.setText("%,d".formatted(count));
+                    header.pseudoClassStateChanged(SUB, false);
+                    setGraphic(header);
+                }
+                case TimelineRow.SubHeader(String label, int count) -> {
+                    showTiles(0);
+                    headerLabel.setText(label);
+                    headerCount.setText("%,d".formatted(count));
+                    header.pseudoClassStateChanged(SUB, true);
                     setGraphic(header);
                 }
                 case TimelineRow.Thumbs(List<TimelineItem> rowItems) -> {
@@ -1467,7 +1526,7 @@ public final class TimelineView extends StackPane {
 
         /** The focus ring, the selected look and the offline mark of each tile; a header's check circle. */
         void updateMarks() {
-            if (!isEmpty() && getItem() instanceof TimelineRow.Header && getIndex() >= 0
+            if (!isEmpty() && TimelineRow.isHeading(getItem()) && getIndex() >= 0
                     && getIndex() < list.getItems().size()) {
                 List<Long> section = idsOf(sectionItems(getIndex()));
                 List<Long> picked = sectionPick(getIndex());

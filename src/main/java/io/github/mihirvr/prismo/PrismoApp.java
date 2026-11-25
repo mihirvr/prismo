@@ -44,6 +44,7 @@ import io.github.mihirvr.prismo.ui.BackdropMotion;
 import io.github.mihirvr.prismo.ui.EnterKey;
 import io.github.mihirvr.prismo.ui.Frost;
 import io.github.mihirvr.prismo.ui.MotionRules;
+import io.github.mihirvr.prismo.ui.CopyLayout;
 import io.github.mihirvr.prismo.ui.StatusNote;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
 import io.github.mihirvr.prismo.ui.TagKind;
@@ -178,6 +179,8 @@ public final class PrismoApp extends Application {
     private static final String INCLUDE_SUBFOLDERS_SETTING = "collections.include_subfolders";
     /** Collections: the page list and the folder tree open or folded (2026-11-10). */
     private static final String PAGES_OPEN_SETTING = "collections.pages_open";
+    /** 1.4.2: how Duplicates shows dates and files. */
+    private static final String COPY_LAYOUT_SETTING = "duplicates.layout";
     private static final String TREE_OPEN_SETTING = "collections.tree_open";
     /** The app icon in these sizes; the system picks the one closest to what it needs (title bar, taskbar). */
     private static final int[] ICON_SIZES = {16, 20, 24, 32, 40, 48, 64, 128, 256};
@@ -231,6 +234,7 @@ public final class PrismoApp extends Application {
     private boolean savedFilmstrip;
     private boolean savedIncludeSubfolders = true;
     private boolean savedPagesOpen = true;
+    private CopyLayout savedCopyLayout = CopyLayout.DEFAULT;
     private boolean savedTreeOpen = true;
     /** Settings › Hidden items. UI thread. */
     private final ObjectProperty<HiddenMode> hiddenMode = new SimpleObjectProperty<>(HiddenMode.DEFAULT);
@@ -359,6 +363,7 @@ public final class PrismoApp extends Application {
         folderArrange = FolderArrange.fromSetting(settings.get(ARRANGE_SETTING).orElse(null));
         savedIncludeSubfolders = settings.get(INCLUDE_SUBFOLDERS_SETTING).map(Boolean::parseBoolean).orElse(true);
         savedPagesOpen = settings.get(PAGES_OPEN_SETTING).map(Boolean::parseBoolean).orElse(true);
+        savedCopyLayout = CopyLayout.fromSetting(settings.get(COPY_LAYOUT_SETTING).orElse(null));
         savedTreeOpen = settings.get(TREE_OPEN_SETTING).map(Boolean::parseBoolean).orElse(true);
         savedVolume = number(VOLUME_SETTING, 0, 1, 1);
         savedSpeed = number(SPEED_SETTING, 0.5, 2, 1);
@@ -535,6 +540,12 @@ public final class PrismoApp extends Application {
         collections.includeSubfoldersProperty().addListener((_, _, on) ->
                 settings.put(INCLUDE_SUBFOLDERS_SETTING, Boolean.toString(on)));
         collections.pagesOpenProperty().set(savedPagesOpen);
+        collections.copyLayoutProperty().set(savedCopyLayout);
+        collections.copyLayoutProperty().addListener((_, _, layout) -> {
+            if (layout != null) {
+                settings.put(COPY_LAYOUT_SETTING, layout.settingValue());
+            }
+        });
         collections.treeOpenProperty().set(savedTreeOpen);
         collections.pagesOpenProperty().addListener((_, _, open) ->
                 settings.put(PAGES_OPEN_SETTING, Boolean.toString(open)));

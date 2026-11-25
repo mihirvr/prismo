@@ -298,6 +298,16 @@ counts as a copy left. The hint under the title says how many extra copies of ho
 reports files and bytes (every 16 MB inside a big file) in the note at the bottom of the window, shows the copies found
 after each batch, keeps running on other pages and stops when Prismo closes.
 
+**1.4.2: a file's copies never split.** 1.4.1's date view put each copy under its own date, so copies of one file
+(a WhatsApp copy keeps its own date) landed in different sections and unrelated files sat side by side. Now the grid
+groups the items into files (TimelineRows.files, in the order each file's first copy comes in the Sort) and never splits
+one: on a date sort in the Timeline view, "Show" (saved as `duplicates.layout`) picks Dates and files (date headers,
+each file a smaller sub-header under the date of its first copy; the default), Dates (date headers, each file's copies
+one after another) or Files (a header per file); other sorts show a header per file, the All files view keeps files
+together without headers, the Folders view still splits by folder. A date's circle covers its files; a file's circle
+that file. A file shows only if another copy of it is on the page (CopyGroups.withCopiesShown), so a file whose other
+copy is hidden or filtered out doesn't stand alone.
+
 ---
 
 ## Selection Mode

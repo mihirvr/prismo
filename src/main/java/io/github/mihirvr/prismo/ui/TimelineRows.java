@@ -1,7 +1,10 @@
 package io.github.mihirvr.prismo.ui;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 
 /** Turns the Timeline's items into list rows. Pure functions: no JavaFX, so they're unit-tested directly. */
 final class TimelineRows {
@@ -106,6 +109,83 @@ final class TimelineRows {
             }
         }
         return rows;
+    }
+
+    /**
+     * 1.4.2, Duplicates: the items as files, each with all its copies, in the order each file's first copy comes in
+     * {@code items} (the Sort's order). Items without a key (no copy group) are a file each.
+     *
+     * @param key   an item's file (its copy group), or null
+     * @param label a file's header text, from its copies
+     */
+    static List<FolderSections.Section> files(List<TimelineItem> items, Function<TimelineItem, String> key,
+            Function<List<TimelineItem>, String> label) {
+        Map<String, List<TimelineItem>> byFile = new LinkedHashMap<>();
+        for (TimelineItem item : items) {
+            String file = key.apply(item);
+            byFile.computeIfAbsent(file != null ? file : "id:" + item.ref().id(), _ -> new ArrayList<>()).add(item);
+        }
+        List<FolderSections.Section> files = new ArrayList<>(byFile.size());
+        for (List<TimelineItem> copies : byFile.values()) {
+            files.add(new FolderSections.Section(label.apply(copies), List.copyOf(copies)));
+        }
+        return files;
+    }
+
+    /**
+     * 1.4.2, Duplicates on a date sort: date headers (as {@code grouping} splits them) with whole files under them, a
+     * file under the date of its first copy; {@link CopyLayout#DATES_AND_FILES} adds a {@link TimelineRow.SubHeader}
+     * per file, {@link CopyLayout#DATES} puts each date's files one after another, {@link CopyLayout#FILES} has only
+     * the files' headers. Files come in date order already (from {@link #files}), so each date is one run.
+     */
+    static List<TimelineRow> byCopies(List<FolderSections.Section> files, int columns, long today, Grouping grouping,
+            CopyLayout layout) {
+        if (columns < 1) {
+            throw new IllegalArgumentException("columns must be at least 1: " + columns);
+        }
+        if (layout == CopyLayout.FILES) {
+            return build(files, columns);
+        }
+        List<TimelineRow> rows = new ArrayList<>();
+        int start = 0;
+        while (start < files.size()) {
+            long group = groupOfFile(files.get(start), today, grouping);
+            int end = start + 1;
+            while (end < files.size() && groupOfFile(files.get(end), today, grouping) == group) {
+                end++;
+            }
+            List<FolderSections.Section> day = files.subList(start, end);
+            int count = 0;
+            for (FolderSections.Section file : day) {
+                count += file.items().size();
+            }
+            rows.add(new TimelineRow.Header(DateGroups.labelOf(group, grouping), count));
+            if (layout == CopyLayout.DATES_AND_FILES) {
+                for (FolderSections.Section file : day) {
+                    rows.add(new TimelineRow.SubHeader(file.label(), file.items().size()));
+                    addRows(rows, file.items(), columns);
+                }
+            } else {
+                List<TimelineItem> all = new ArrayList<>(count);
+                for (FolderSections.Section file : day) {
+                    all.addAll(file.items());
+                }
+                addRows(rows, List.copyOf(all), columns);
+            }
+            start = end;
+        }
+        return rows;
+    }
+
+    private static long groupOfFile(FolderSections.Section file, long today, Grouping grouping) {
+        return DateGroups.groupOf(DateGroups.dayOf(file.items().getFirst().sortDate()), today, grouping);
+    }
+
+    /** Rows of {@code columns} (views into {@code items}, which must not change afterwards). */
+    private static void addRows(List<TimelineRow> rows, List<TimelineItem> items, int columns) {
+        for (int from = 0; from < items.size(); from += columns) {
+            rows.add(new TimelineRow.Thumbs(items.subList(from, Math.min(from + columns, items.size()))));
+        }
     }
 
     /**

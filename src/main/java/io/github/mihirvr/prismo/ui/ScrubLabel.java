@@ -110,12 +110,12 @@ final class ScrubLabel {
     static int rowAt(List<TimelineRow> rows, double rowHeight, double headerHeight, double fraction) {
         double total = 0;
         for (TimelineRow row : rows) {
-            total += row instanceof TimelineRow.Header ? headerHeight : rowHeight;
+            total += TimelineRow.isHeading(row) ? headerHeight : rowHeight;
         }
         double target = Math.clamp(fraction, 0, 1) * total;
         double sum = 0;
         for (int i = 0; i < rows.size(); i++) {
-            sum += rows.get(i) instanceof TimelineRow.Header ? headerHeight : rowHeight;
+            sum += TimelineRow.isHeading(rows.get(i)) ? headerHeight : rowHeight;
             if (sum >= target) {
                 return i;
             }
