@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 export const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.4.1/Prismo-1.4.1.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.4.1/prismo_1.4.1_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.4.2/Prismo-1.4.2.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.4.2/prismo_1.4.2_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -225,7 +225,7 @@ const CARDS = [
         <div className="row2"><b>IMG_2413.JPG · 4.2 MB each</b><span>3 copies</span></div>
         <div className="row2"><span>Select extra copies</span><span>keeps one of each</span></div>
         <div className="row2"><span>Keep this copy</span><span>right-click</span></div>
-        <div className="row2"><span>Sort by</span><span>date · size · name</span></div>
+        <div className="row2"><span>Show</span><span>by date, by file, or both</span></div>
         <p style={{ color: 'var(--muted)' }}>Prismo never removes a copy on its own</p>
       </>
     ),
@@ -664,7 +664,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.webp" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.4.1. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.4.2. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />
