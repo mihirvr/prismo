@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 export const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.4.0/Prismo-1.4.0.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.4.0/prismo_1.4.0_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.4.1/Prismo-1.4.1.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.4.1/prismo_1.4.1_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -213,6 +213,46 @@ const CARDS = [
         <div className="row2"><span>Hidden</span><span>Ctrl+H</span></div>
         <div className="row2"><span>Trash</span><span>Delete</span></div>
         <div className="row2"><span>Recently added</span><span>newest first</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'Duplicates',
+    name: 'Find and clear out duplicates',
+    text: 'Finds exact copies, even under another name or in another folder. Select every extra copy in one click, keep the one you want, and send the rest to Trash.',
+    body: (
+      <>
+        <div className="row2"><b>IMG_2413.JPG · 4.2 MB each</b><span>3 copies</span></div>
+        <div className="row2"><span>Select extra copies</span><span>keeps one of each</span></div>
+        <div className="row2"><span>Keep this copy</span><span>right-click</span></div>
+        <div className="row2"><span>Sort by</span><span>date · size · name</span></div>
+        <p style={{ color: 'var(--muted)' }}>Prismo never removes a copy on its own</p>
+      </>
+    ),
+  },
+  {
+    head: 'Select many',
+    name: 'Select many at once',
+    text: 'Drag a box from empty space, as in File Explorer, or tick a whole day with one click. Then trash, move, copy or favorite them all.',
+    body: (
+      <>
+        <div className="row2"><span>Drag a box</span><span>from empty space</span></div>
+        <div className="row2"><span>A whole day or folder</span><span>its check circle</span></div>
+        <div className="row2"><span>A range</span><span>Shift + click</span></div>
+        <div className="row2"><span>Everything</span><span>Ctrl+A</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'Location',
+    name: 'Where it was taken',
+    text: 'Info shows the town or city a photo or video was taken in, worked out offline from its GPS, with a link to open it on a map.',
+    body: (
+      <>
+        <div className="row2"><b>Location</b><span>Panaji, Goa, India</span></div>
+        <div className="row2"><span>GPS</span><span>15.4909, 73.8278</span></div>
+        <div className="row2"><span>Open in map</span><span>only when you click</span></div>
+        <div className="row2"><span>Motion photos</span><span>play their clip</span></div>
       </>
     ),
   },
@@ -516,6 +556,12 @@ const FAQ = [
     ['Like Picasa:', 'every photo on your PC in one place, by date, fast, on your own computer, with favorites, albums and tags you add yourself.'],
     ['Unlike Picasa:', 'it doesn’t edit photos and has no web albums. It is free, open source and still maintained.'],
   ]],
+  ['Can it find duplicate photos?', [
+    'Yes, exact copies.',
+    ['How:', 'it compares what is inside the files, so a copy is found even under another name or in another folder.'],
+    ['Clearing them out:', 'Select extra copies picks every copy but one of each, then Move to Trash removes them in one go. You choose which copy stays, and Prismo never removes one on its own.'],
+    ['Not found:', 'a resized or edited version of a photo, since its content is different.'],
+  ]],
   ['Does it recognise faces?', [
     'No, on purpose.',
     ['You tag people yourself:', 'right-click a photo, a selection or a folder, choose People…, and tick who is in them.'],
@@ -618,7 +664,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.webp" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.4.0. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.4.1. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />
