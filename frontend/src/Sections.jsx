@@ -560,6 +560,8 @@ const FAQ = [
     'Yes, exact copies.',
     ['How:', 'it compares what is inside the files, so a copy is found even under another name or in another folder.'],
     ['Clearing them out:', 'Select extra copies picks every copy but one of each, then Move to Trash removes them in one go. You choose which copy stays, and Prismo never removes one on its own.'],
+    ['A day at a time:', 'click a date’s circle once to select its extra copies, twice for every copy. Or drag a box over them.'],
+    ['Safe by default:', 'if every copy of a file is selected, Prismo asks first and offers to keep one of each. A note at the bottom shows how far the search for copies is.'],
     ['Not found:', 'a resized or edited version of a photo, since its content is different.'],
   ]],
   ['Does it recognise faces?', [

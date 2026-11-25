@@ -42,6 +42,8 @@ public final class Shortcuts {
                     new Shortcut("Shift + click", "Select everything up to here"),
                     new Shortcut("Shift + arrow keys", "Select while moving"),
                     new Shortcut("Ctrl+A", "Select all"),
+                    new Shortcut("Click a header's circle", "Select its section (Duplicates: extras, then all)"),
+                    new Shortcut("Drag from empty space", "Select with a box (Ctrl adds to it)"),
                     new Shortcut("Ctrl+D / Ctrl+H / Delete / Ctrl+C", "Do it to every selected item"),
                     new Shortcut("Esc", "Clear the selection"))),
             new Section("Viewer", List.of(
