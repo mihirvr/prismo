@@ -26,7 +26,3 @@ Please open an issue first and say what you would like to change, so we can agre
 
 Prismo is licensed under the [Sustainable Use License 1.0](LICENSE). If you send code, it comes under the same licence
 as Prismo, and you agree that Prismo's author may also release it under other terms later.
-
-## Behaviour
-
-Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).

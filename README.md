@@ -387,7 +387,6 @@ prismo/
 ├── run-locally.bat           # Windows: build and start Prismo, with your normal data or a separate test folder
 ├── .gitignore
 ├── .github/                  # CI (workflows/package.yml), issue forms (bug report, idea) and the pull request template
-├── CODE_OF_CONDUCT.md        # Contributor Covenant 2.1
 ├── CONTRIBUTING.md           # How to report a bug, suggest an idea or send code
 ├── LICENSE                   # Sustainable Use License 1.0 (2.0.0 on; up to 1.4.2: MIT)
 ├── SECURITY.md               # How to report a security problem privately
