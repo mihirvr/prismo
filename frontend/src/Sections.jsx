@@ -7,8 +7,8 @@ const REPO = 'https://github.com/mihirvr/prismo'
 // The installers' download links. While a link is null its button is greyed out ("soon").
 // At the release, put the Releases page's file links here.
 export const DOWNLOADS = {
-  windows: 'https://github.com/mihirvr/prismo/releases/download/v1.4.2/Prismo-1.4.2.exe',
-  linux: 'https://github.com/mihirvr/prismo/releases/download/v1.4.2/prismo_1.4.2_amd64.deb',
+  windows: 'https://github.com/mihirvr/prismo/releases/download/v2.0.0/Prismo-2.0.0.exe',
+  linux: 'https://github.com/mihirvr/prismo/releases/download/v2.0.0/prismo_2.0.0_amd64.deb',
 }
 
 function Head({ title, intro, center, id }) {
@@ -118,8 +118,8 @@ function Story() {
           <Head id="why-h" title="Picasa did this. Then it was gone." />
           <div className="body">
             <p className="rise">Years ago, Google Picasa gave Windows a gallery that felt like a phone: every photo on your PC, by date, one scroll away. Google retired it in 2016.</p>
-            <p className="muted rise" style={{ '--i': 1 }}>Since then, no well-known open-source app on Windows shows your photos that way. File Explorer makes you open folder after folder, go back, and try the next one.</p>
-            <p className="rise" style={{ '--i': 2 }}><strong>Prismo sets out to fill that gap:</strong> a phone-style gallery for your PC that is open source, offline and fast.</p>
+            <p className="muted rise" style={{ '--i': 1 }}>Since then, File Explorer makes you open folder after folder, go back, and try the next one.</p>
+            <p className="rise" style={{ '--i': 2 }}><strong>Prismo sets out to fill that gap:</strong> a phone-style gallery for your PC that is free, offline and fast.</p>
           </div>
         </div>
         <figure className="story-fig rise" style={{ '--i': 2 }}>
@@ -179,13 +179,25 @@ const CARDS = [
   {
     head: 'Video',
     name: 'Videos play right inside',
-    text: 'MP4, MOV, MKV, WebM and AVI, with subtitles, sound tracks, a preview on the seek bar, and resume.',
+    text: 'MP4, MOV, MKV, WebM, AVI, camcorder MTS, WMV and more, with subtitles, sound tracks, a preview on the seek bar, and resume.',
     body: (
       <>
         <div className="meter"><i /></div>
         <div className="row2"><span>0:14 / 0:38</span><span>Speed 1×</span></div>
         <div className="row2"><span>Sound</span><span>English (2 tracks)</span></div>
         <div className="row2"><span>Subtitles</span><span>clip.srt</span></div>
+      </>
+    ),
+  },
+  {
+    head: 'Audio',
+    name: 'Music and voice notes too',
+    text: 'MP3, FLAC, M4A, WAV and more, under their own filter so they never crowd your photos. See the album art, or watch the sound move.',
+    body: (
+      <>
+        <div className="row2"><span>Show</span><span>Album art, Waveform, Bars, Circle</span></div>
+        <div className="row2"><span>Filters</span><span>Audio, or with photos and videos</span></div>
+        <div className="row2"><span>No album art</span><span>a music note</span></div>
       </>
     ),
   },
@@ -269,9 +281,9 @@ const CARDS = [
     ),
   },
   {
-    head: 'HEIC and RAW',
+    head: 'HEIC, AVIF and RAW',
     name: 'iPhone and camera RAW photos',
-    text: 'HEIC and RAW files (CR2, NEF, ARW, DNG…) get thumbnails and open in the viewer. Nothing extra to install.',
+    text: 'HEIC, AVIF and RAW files (CR2, NEF, ARW, DNG…) get thumbnails and open in the viewer. Nothing extra to install.',
     body: (
       <>
         <div className="row2"><span>IMG_0412.HEIC</span><span>iPhone</span></div>
@@ -367,7 +379,7 @@ const PRINCIPLES = [
   { k: 'cache', name: 'Cache first, so it is fast', text: 'Thumbnails are made once and kept. Only what is on screen is decoded, so big libraries scroll smoothly.', row: ['Thumbnail cache', 'kept', true] },
   { k: 'places', name: 'Drives and NAS', text: 'Internal disks, USB drives and network shares in one library. A missing one shows as offline, not deleted.', row: ['Library folders', '3 places', true] },
   { k: 'private', name: 'Private by default', text: 'Everything runs on your PC. Nothing is uploaded and nothing is counted.', row: ['Send anything online', 'never', false] },
-  { k: 'open', name: 'Open source', text: 'MIT licence. Read the code, build it yourself, change it, report a problem.', row: ['Source code', 'MIT', true] },
+  { k: 'open', name: 'Source available', text: 'Read the code, build it yourself, change it, share it for free. Free at home and at work; not for sale.', row: ['Source code', 'public', true] },
 ]
 
 function Principles() {
@@ -554,7 +566,7 @@ const FAQ = [
   ['Is it a Picasa replacement?', [
     'For browsing, yes.',
     ['Like Picasa:', 'every photo on your PC in one place, by date, fast, on your own computer, with favorites, albums and tags you add yourself.'],
-    ['Unlike Picasa:', 'it doesn’t edit photos and has no web albums. It is free, open source and still maintained.'],
+    ['Unlike Picasa:', 'it doesn’t edit photos and has no web albums. It is free, its code is public, and it is still maintained.'],
   ]],
   ['Can it find duplicate photos?', [
     'Yes, exact copies.',
@@ -585,9 +597,15 @@ const FAQ = [
     ['Your data:', 'the library data stays in %LOCALAPPDATA%\\Prismo until you delete that folder. Your photos and videos are never touched.'],
   ]],
   ['Which files does it open?', [
-    ['Photos:', 'JPEG, PNG, WebP, GIF and HEIC.'],
+    ['Photos:', 'JPEG, PNG, WebP, GIF, HEIC and AVIF.'],
     ['RAW:', 'CR2, CR3, NEF, ARW, DNG and more, through the preview stored inside them.'],
-    ['Videos:', 'MP4, MOV, MKV, WebM and AVI.'],
+    ['Videos:', 'MP4, MOV, MKV, WebM, AVI, 3GP, MTS / M2TS, TS, WMV, FLV, MPG and OGV.'],
+    ['Audio:', 'MP3, M4A, FLAC, WAV, AIFF, OGG, Opus, WMA, AAC and more.'],
+  ]],
+  ['Does it play music?', [
+    'Yes, and voice notes and audiobooks too.',
+    ['Kept apart:', 'audio has its own filter, so a music folder never buries your photos. Pick Audio, or “Photos, videos and audio” to see everything together.'],
+    ['While it plays:', 'the album art with the title and artist, or a waveform, bars or a ring of bars that move with the sound. A song without album art shows a music note.'],
   ]],
   ['Does it run on Linux or Mac?', [
     ['Linux:', 'yes, as an early preview, so expect some rough edges. It comes as a .deb package for Ubuntu, Debian and their relatives.'],
@@ -666,7 +684,7 @@ function Download() {
       <div className="glass cta">
         <img className="mark rise" src="/brand/prismo-mark.webp" alt="The Prismo logo" width="128" height="128" />
         <h2 id="dl-h" className="title rise" style={{ '--i': 1 }}>Get Prismo for your PC.</h2>
-        <p className="intro rise" style={{ '--i': 2 }}>Free and open source, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 1.4.2. Everything it needs is inside the installer.</p>
+        <p className="intro rise" style={{ '--i': 2 }}>Free to use, for Windows 10 / 11 and Linux (Ubuntu, Debian). Version 2.0.0. Everything it needs is inside the installer.</p>
         <div className="row rise" style={{ '--i': 3 }}>
           <DownloadButton href={DOWNLOADS.windows} icon={<WindowsMark />} label="Download for Windows" />
           <DownloadButton href={DOWNLOADS.linux} icon={<LinuxMark />} label="Download for Linux" />

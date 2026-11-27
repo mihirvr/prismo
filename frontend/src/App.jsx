@@ -161,7 +161,7 @@ export default function App() {
               <a className="btn" href="#download">Download for PC</a>
               <a className="btn ghost" href={REPO}><GitHub />View on GitHub</a>
             </div>
-            <p className="note rise" style={{ '--i': 3 }}>Free and open source (MIT). No account, no tracking.</p>
+            <p className="note rise" style={{ '--i': 3 }}>Free to use. No account, no tracking.</p>
           </div>
           <div className="rise" style={{ '--i': 2 }}><PhotoFan /></div>
         </section>
@@ -197,7 +197,7 @@ export default function App() {
             <a href="#faq">Questions</a>
             <a href={REPO}>GitHub</a>
           </nav>
-          <span className="right">MIT licence · 2026</span>
+          <span className="right">Sustainable Use License · 2026</span>
         </div>
       </footer>
     </>
