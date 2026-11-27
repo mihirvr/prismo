@@ -1,0 +1,30 @@
+name: Dependency submission
+
+# Sends the app's Java libraries (from Gradle) to GitHub's dependency graph after each push to main, so Dependabot
+# can warn when one of them has a known security hole. GitHub can't read a Gradle build by itself: without this it
+# sees only the website's npm packages and the workflow actions. Nothing is built or published here.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write # submitting to the dependency graph needs it
+
+jobs:
+  dependency-submission:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Same JDK as the toolchain in build.gradle.kts (and as package.yml).
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      # Same gradle/actions release as package.yml; basic = the open-source cache, as there.
+      - uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-provider: basic
