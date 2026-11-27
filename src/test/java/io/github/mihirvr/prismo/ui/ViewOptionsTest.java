@@ -49,7 +49,7 @@ class ViewOptionsTest {
         assertEquals("+sort_date DESC, id DESC", ViewOptions.DEFAULT.sqlOrderBy());
         assertEquals("+sort_date ASC, id ASC", ViewOptions.DEFAULT.withDescending(false).sqlOrderBy());
         assertEquals("file_name COLLATE NOCASE ASC, id ASC", ViewOptions.DEFAULT.withSort(MediaSort.NAME).sqlOrderBy());
-        assertNull(ViewOptions.DEFAULT.sqlCondition());
+        assertEquals("media_type <> 'audio'", ViewOptions.DEFAULT.sqlCondition()); // 2.0.0: only the audio rule
     }
 
     @Test
@@ -80,14 +80,18 @@ class ViewOptionsTest {
         assertEquals(Set.of("jpg", "png"), chosen.types(), "jpeg counts as JPG; unknown types are dropped");
         assertEquals("ALL,DATE_TAKEN,desc,jpg+png", chosen.toSetting());
         assertEquals(chosen, ViewOptions.fromSetting(chosen.toSetting()));
-        assertEquals("extension IN ('jpg', 'jpeg', 'png')", chosen.sqlCondition());
-        assertEquals("media_type = 'photo' AND extension IN ('jpg', 'jpeg', 'png')",
+        assertEquals("media_type <> 'audio' AND extension IN ('jpg', 'jpeg', 'jpe', 'jfif', 'png')",
+                chosen.sqlCondition());
+        assertEquals("media_type <> 'audio' AND media_type = 'photo' AND extension IN ('jpg', 'jpeg', 'jpe', 'jfif', 'png')",
                 chosen.withFilter(MediaFilter.PHOTOS).sqlCondition());
         assertEquals("JPG, PNG", chosen.filterLabel());
         assertEquals("Photos, JPG, PNG", chosen.withFilter(MediaFilter.PHOTOS).filterLabel());
         assertTrue(chosen.isFiltered());
         assertFalse(ViewOptions.DEFAULT.isFiltered());
-        assertEquals("All media", ViewOptions.DEFAULT.filterLabel());
+        assertEquals("Photos and videos", ViewOptions.DEFAULT.filterLabel());
+        assertEquals("media_type <> 'audio'", ViewOptions.DEFAULT.sqlCondition(), "2.0.0: no audio in the main view");
+        assertEquals(null, ViewOptions.DEFAULT.withFilter(MediaFilter.EVERYTHING).sqlCondition());
+        assertEquals("media_type = 'audio'", ViewOptions.DEFAULT.withFilter(MediaFilter.AUDIO).sqlCondition());
 
         assertEquals(ViewOptions.DEFAULT.withSort(MediaSort.NAME).withTypes(Set.of("heic")),
                 ViewOptions.fromSetting("HEIC,NAME,asc"), "the old HEIC filter, saved by 1.0.x");

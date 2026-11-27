@@ -67,6 +67,8 @@ class FolderListingTest {
         while (pair.find()) {
             registered.add(pair.group(1));
         }
-        assertEquals(new TreeSet<>(MediaType.knownExtensions()), registered);
+        Set<String> expected = new TreeSet<>(MediaType.knownExtensions());
+        expected.remove("ts"); // 2.0.0: also TypeScript code; Prismo isn't offered for it in "Open with"
+        assertEquals(expected, registered);
     }
 }

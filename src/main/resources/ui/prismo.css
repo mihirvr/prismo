@@ -277,6 +277,17 @@
     -fx-opacity: 1;
 }
 
+/* 2.0.0: "Photos", "Videos", "Audio" above their file types in the Types menu. */
+.context-menu > .menu-item.type-heading > .label {
+    -fx-font-size: 11px;
+    -fx-font-weight: bold;
+    -fx-text-fill: -prismo-text-muted;
+}
+
+.context-menu > .menu-item.type-heading {
+    -fx-padding: 8 12 2 12;
+}
+
 .context-menu > .menu > .right-container > .arrow,
 .context-menu > .radio-menu-item:checked > .left-container > .radio,
 .context-menu > .check-menu-item:checked > .left-container > .check {
@@ -628,6 +639,15 @@
 
 .thumb-tile.thumb-failed {
     -fx-background-color: -prismo-tile-failed;
+}
+
+/* 2.0.0: a song without album art: one music note in the accent colour, on a soft accent tile. */
+.thumb-tile.thumb-audio {
+    -fx-background-color: linear-gradient(to bottom right, -prismo-accent-tint, -prismo-tile);
+}
+
+.thumb-audio .thumb-placeholder .icon-path.icon-filled {
+    -fx-fill: -prismo-accent-text;
 }
 
 /* Keyboard focus on the Timeline: a ring over the focused thumbnail. */
@@ -1338,6 +1358,39 @@
     -fx-padding: 7 16 7 16;
     -fx-font-size: 14px;
     -fx-font-weight: bold;
+}
+
+/* 2.0.0: an audio file in the viewer (AudioStage). The viewer is always dark, in every look. A song without album
+   art gets one music note in the website's colours on a glass square; the cover itself fills the square. */
+.viewer .audio-art {
+    -fx-background-color: linear-gradient(to bottom right, rgba(124, 58, 237, 0.28), rgba(236, 72, 153, 0.16)),
+                          rgba(255, 255, 255, 0.05);
+    -fx-background-radius: 24;
+    -fx-border-color: rgba(255, 255, 255, 0.12);
+    -fx-border-radius: 24;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.55), 40, 0.15, 0, 12);
+}
+
+.viewer .audio-art:round {
+    -fx-background-radius: 9999;
+    -fx-border-radius: 9999;
+}
+
+.viewer .audio-note .icon-path.icon-filled {
+    -fx-fill: linear-gradient(to bottom right, #a78bfa, #ec4899 55%, #f97316);
+}
+
+.viewer .audio-title {
+    -fx-text-fill: #ffffff;
+    -fx-font-size: 20px;
+    -fx-font-weight: bold;
+    -fx-text-overrun: ellipsis;
+}
+
+.viewer .audio-artist {
+    -fx-text-fill: rgba(255, 255, 255, 0.66);
+    -fx-font-size: 14px;
+    -fx-text-overrun: ellipsis;
 }
 
 .viewer .viewer-favorite-on .icon-path.icon-filled {

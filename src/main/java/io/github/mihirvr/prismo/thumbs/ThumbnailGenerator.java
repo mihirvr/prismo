@@ -80,14 +80,23 @@ public final class ThumbnailGenerator {
         this.ffmpeg = ffmpeg;
     }
 
-    /** True if some installed ImageIO reader handles this extension (JDK readers + TwelveMonkeys plugins). */
+    /**
+     * True if some installed ImageIO reader handles this extension (JDK readers + TwelveMonkeys plugins). JPE and JFIF
+     * (2.0.0) are JPEG under other names, which ImageIO doesn't list; the readers go by the file's content anyway.
+     */
     public static boolean canDecode(String extension) {
-        return ImageIO.getImageReadersBySuffix(extension).hasNext();
+        String suffix = JPEG.contains(extension.toLowerCase(java.util.Locale.ROOT)) ? "jpg" : extension;
+        return ImageIO.getImageReadersBySuffix(suffix).hasNext();
     }
 
     /** True if a thumbnail can be made for this extension: an image ImageIO decodes, HEIC / RAW, or a video. */
     public static boolean canMake(String extension) {
-        return isVideo(extension) || canDecode(extension) || OtherStills.handles(extension);
+        return isVideo(extension) || isAudio(extension) || canDecode(extension) || OtherStills.handles(extension);
+    }
+
+    /** 2.0.0: an audio file's thumbnail is its album art ({@link AudioCovers}). */
+    private static boolean isAudio(String extension) {
+        return MediaType.fromExtension(extension).orElse(null) == MediaType.AUDIO;
     }
 
     private static boolean isVideo(String extension) {
@@ -98,6 +107,11 @@ public final class ThumbnailGenerator {
         String extension = MediaType.extensionOf(source.getFileName().toString());
         if (isVideo(extension)) {
             videos.generate(source, target);
+            return;
+        }
+        if (isAudio(extension)) {
+            // Its album art; none: AudioCovers.NoCoverException (the tile shows a music note).
+            writeJpeg(scaleAndOrient(AudioCovers.picture(source, size * 2, ffmpeg::path), 1), target);
             return;
         }
         if (!canDecode(extension) && OtherStills.handles(extension)) {

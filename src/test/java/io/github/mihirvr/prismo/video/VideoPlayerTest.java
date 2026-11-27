@@ -308,6 +308,45 @@ class VideoPlayerTest {
 
     // --- Helpers ---
 
+    /**
+     * 2.0.0: a song with a cover. The cover is a picture stream, but the file has no moving picture: it plays as
+     * sound, says it has a cover, and hands over its tags and its sound's details.
+     */
+    @Test
+    void aSongWithACoverIsSoundWithACoverAndItsTags() throws Exception {
+        Path cover = dir.resolve("cover.png");
+        javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(64, 64, java.awt.image.BufferedImage.TYPE_INT_RGB),
+                "png", cover.toFile());
+        Path song = dir.resolve("song.mp3");
+        java.util.List<String> command = new ArrayList<>(List.of(VideoNatives.ffmpegExecutable().toString(),
+                "-nostdin", "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-i", cover.toString(),
+                "-map", "0:a", "-map", "1", "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-ac", "2",
+                "-c:v", "png", "-disposition:v", "attached_pic", "-id3v2_version", "3",
+                "-metadata", "title=Morning Song", "-metadata", "artist=Test Band", "-metadata", "album=Made Up",
+                song.toString()));
+        io.github.mihirvr.prismo.platform.ExternalProgram.run(command, 60);
+        Events events = new Events();
+        try (VideoPlayer player = quiet(VideoPlayer.open(song, 1920, 1080, events))) {
+            VideoPlayer.Info info = events.opened.get(10, TimeUnit.SECONDS);
+
+            assertFalse(info.hasPicture(), "a cover isn't a moving picture");
+            assertTrue(info.hasCover());
+            assertTrue(info.hasSound());
+            assertEquals(0, info.width());
+            assertEquals("", info.videoCodec());
+            assertEquals("mp3", info.audioCodec());
+            assertEquals("Morning Song", info.tags().get("title"));
+            assertEquals("Test Band", info.tags().get("artist"));
+            assertEquals("Made Up", info.tags().get("album"));
+            assertEquals(44_100, info.sampleRate());
+            assertEquals(2, info.channels());
+            assertTrue(Math.abs(info.bitRate() - 128_000) < 8_000, "bit rate " + info.bitRate());
+            assertTrue(Math.abs(info.durationMicros() - 2_000_000) < 100_000, "length " + info.durationMicros());
+            assertEquals(null, player.takePicture(), "no picture thread");
+        }
+    }
+
     private static final class Events implements VideoPlayer.Listener {
         final CompletableFuture<VideoPlayer.Info> opened = new CompletableFuture<>();
         final CountDownLatch ended = new CountDownLatch(1);

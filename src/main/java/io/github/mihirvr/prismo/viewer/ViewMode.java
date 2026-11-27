@@ -11,7 +11,7 @@ enum ViewMode {
     STILL,
     /** GIF, through JavaFX's own {@code Image}, which plays the animation. */
     ANIMATED,
-    /** Played in the app with FFmpeg: every video type Prismo indexes (MP4, M4V, MOV, MKV, WebM, AVI). */
+    /** Played in the app with FFmpeg: every video type Prismo indexes, and (2.0.0) every audio type. */
     VIDEO,
     /** Not shown in the app: thumbnail or name + "Open with default app". */
     EXTERNAL;
@@ -21,7 +21,8 @@ enum ViewMode {
         if (ext.equals("gif")) {
             return ANIMATED;
         }
-        if (MediaType.fromExtension(ext).orElse(null) == MediaType.VIDEO) {
+        MediaType type = MediaType.fromExtension(ext).orElse(null);
+        if (type == MediaType.VIDEO || type == MediaType.AUDIO) {
             return VIDEO;
         }
         // HEIC and RAW are STILL too since P7: StillDecoder reads them through OtherStills.

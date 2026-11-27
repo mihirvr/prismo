@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.viewer;
 
+import io.github.mihirvr.prismo.ui.AudioView;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.Menus;
 import io.github.mihirvr.prismo.ui.SubtitleBackground;
@@ -186,6 +187,9 @@ final class VideoPane extends StackPane {
     /** The devices that can play sound ({@link SoundOutputs#list}), read again whenever a video opens (1.3.0). */
     private List<String> outputs = List.of();
     private final MenuButton speedButton = new MenuButton();
+    /** 2.0.0: an audio file's picture (album art, or the sound drawn), and the menu that picks which. */
+    private final AudioStage audioStage = new AudioStage();
+    private final MenuButton audioViewButton = new MenuButton();
     private final ToggleButton loopButton = new ToggleButton();
     private final Button mute = new Button();
     private final Slider volume = new Slider(0, 1, 1);
@@ -394,17 +398,22 @@ final class VideoPane extends StackPane {
         speedButton.setText(speedText(1));
         loopButton.setGraphic(Icon.LOOP.node(ICON_SIZE));
         loopButton.setTooltip(new Tooltip("Loop (Shift+L)"));
+        audioViewButton.setGraphic(Icon.MUSIC.node(ICON_SIZE));
+        audioViewButton.setTooltip(new Tooltip("Show: album art or a picture of the sound"));
+        audioStage.viewProperty().addListener((_, _, _) -> updateMenus());
+        audioStage.setVisible(false);
+        show(audioViewButton, false);
         for (Control control : new Control[] {previousMedia, playPause, nextMedia, back, forward, mute, subtitlesButton,
-                soundButton, loopButton}) {
+                soundButton, loopButton, audioViewButton}) {
             control.getStyleClass().add("icon-button");
         }
         for (Control control : new Control[] {previousMedia, playPause, nextMedia, back, forward, seek, mute, volume,
-                subtitlesButton, soundButton, speedButton, loopButton}) {
+                subtitlesButton, soundButton, speedButton, loopButton, audioViewButton}) {
             control.setFocusTraversable(false); // the viewer handles every key itself
         }
         updateMenus();
 
-        controls = new HBox(4, previousMedia, playPause, nextMedia, back, forward, seek, time, subtitlesButton, soundButton, speedButton,
+        controls = new HBox(4, previousMedia, playPause, nextMedia, back, forward, seek, time, audioViewButton, subtitlesButton, soundButton, speedButton,
                 loopButton, mute, volume);
         controls.getStyleClass().add("viewer-video-controls");
         controls.setAlignment(Pos.CENTER_LEFT);
@@ -455,7 +464,7 @@ final class VideoPane extends StackPane {
                 }
             }
         });
-        getChildren().addAll(picture, subtitle, note, controls);
+        getChildren().addAll(picture, audioStage, subtitle, note, controls);
     }
 
     /**
@@ -564,6 +573,15 @@ final class VideoPane extends StackPane {
                     if (generation == mine) {
                         info = opened;
                         seek.setMax(Math.max(0.001, opened.durationMicros() / 1e6));
+                        if (!opened.hasPicture()) {
+                            // 2.0.0: sound only (a song, maybe with a cover): the audio stage instead of a picture.
+                            audioStage.show(video.ref().path(), player, opened);
+                            audioStage.setVisible(true);
+                            show(audioViewButton, true);
+                            show(subtitlesButton, false); // nothing to subtitle
+                            pictureShown = true;
+                            onFirstPicture.run(); // the viewer drops its poster
+                        }
                         startPreviews(video.ref().path(), opened);
                         rotation = opened.rotation();
                         picture.setRotate(rotation + viewRotation);
@@ -1138,6 +1156,7 @@ final class VideoPane extends StackPane {
         soundButton.getItems().setAll(soundButtonItems());
         showSoundButton();
         speedButton.getItems().setAll(speedItems());
+        audioViewButton.getItems().setAll(audioViewItems());
     }
 
     private List<MenuItem> subtitleItems() {
@@ -1299,6 +1318,25 @@ final class VideoPane extends StackPane {
         return items;
     }
 
+    /** 2.0.0: Album art, Waveform, Bars, Circle (the choice is kept for every audio file). */
+    private List<MenuItem> audioViewItems() {
+        List<MenuItem> items = new ArrayList<>();
+        ToggleGroup group = new ToggleGroup();
+        for (AudioView choice : AudioView.values()) {
+            RadioMenuItem item = new RadioMenuItem(choice.label());
+            item.setToggleGroup(group);
+            item.setSelected(choice == audioStage.viewProperty().get());
+            item.setOnAction(_ -> audioStage.viewProperty().set(choice));
+            items.add(item);
+        }
+        return items;
+    }
+
+    /** 2.0.0: what an audio file shows while it plays. */
+    ObjectProperty<AudioView> audioViewProperty() {
+        return audioStage.viewProperty();
+    }
+
     private List<MenuItem> speedItems() {
         List<MenuItem> items = new ArrayList<>();
         ToggleGroup group = new ToggleGroup();
@@ -1327,6 +1365,10 @@ final class VideoPane extends StackPane {
         Menu playback = Menus.submenu("Playback", Icon.PLAY, playbackItems());
         Menu audio = Menus.submenu("Audio", Icon.VOLUME, audioItems());
         Menu subtitles = Menus.submenu("Subtitles", Icon.SUBTITLES, subtitleItems());
+        if (info != null && !info.hasPicture()) {
+            // 2.0.0: an audio file: what to show instead of subtitles
+            return List.of(playback, audio, Menus.submenu("Show", Icon.MUSIC, audioViewItems()));
+        }
         return List.of(playback, audio, subtitles);
     }
 
@@ -1438,6 +1480,10 @@ final class VideoPane extends StackPane {
             onInfo.accept(null);
         }
         picture.setImage(null);
+        audioStage.stop();
+        audioStage.setVisible(false);
+        show(audioViewButton, false);
+        show(subtitlesButton, true);
         image = null;
         pictureShown = false;
         rotation = 0;
@@ -1512,7 +1558,8 @@ final class VideoPane extends StackPane {
 
     /** True while one of the controls' menus is open (the viewer then keeps the controls on screen). */
     boolean menuShowing() {
-        return subtitlesButton.isShowing() || soundButton.isShowing() || speedButton.isShowing();
+        return subtitlesButton.isShowing() || soundButton.isShowing() || speedButton.isShowing()
+                || audioViewButton.isShowing();
     }
     VideoPlayer player() {
         return player;

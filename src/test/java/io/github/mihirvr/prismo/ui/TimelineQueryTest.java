@@ -72,6 +72,40 @@ class TimelineQueryTest {
     // --- Filters and Sort ---
 
     /**
+     * 2.0.0: audio is left out of the main view and of every other filter; it shows under Audio, under "Photos, videos
+     * and audio", or when an audio type is ticked.
+     */
+    @Test
+    void audioShowsOnlyWhenAskedFor() throws Exception {
+        try (Database database = Database.open(tmp.resolve("audio.db"))) {
+            database.write(c -> {
+                try (Statement s = c.createStatement()) {
+                    s.executeUpdate("""
+                            INSERT INTO media (id, path, folder, file_name, extension, media_type, size_bytes,
+                                               date_modified, date_added, date_taken, width, height, duration_seconds,
+                                               favorite)
+                            VALUES (1, '/a/IMG_1.jpg', '/a', 'IMG_1.jpg', 'jpg', 'photo', 300, 1000, 5, 100, 40, 30, NULL, 1),
+                                   (2, '/a/clip.mp4', '/a', 'clip.mp4', 'mp4', 'video', 900, 2000, 3, 200, 19, 10, 5.0, 0),
+                                   (3, '/Screenshots/song.mp3', '/Screenshots', 'song.mp3', 'mp3', 'audio', 70, 3000, 1,
+                                    NULL, NULL, NULL, 215.0, 1),
+                                   (4, '/a/memo.m4a', '/a', 'memo.m4a', 'm4a', 'audio', 10, 50, 2, NULL, NULL, NULL, 3.0, 0)
+                            """);
+                }
+                return null;
+            }).get();
+
+            assertEquals(List.of(2L, 1L), ids(database, ViewOptions.DEFAULT));
+            assertEquals(List.of(1L), ids(database, ViewOptions.DEFAULT.withFilter(MediaFilter.FAVORITES)));
+            assertEquals(List.of(), ids(database, ViewOptions.DEFAULT.withFilter(MediaFilter.SCREENSHOTS)));
+            assertEquals(List.of(3L, 4L), ids(database, ViewOptions.DEFAULT.withFilter(MediaFilter.AUDIO)));
+            assertEquals(List.of(3L, 2L, 1L, 4L), ids(database, ViewOptions.DEFAULT.withFilter(MediaFilter.EVERYTHING)));
+            assertEquals(List.of(3L), ids(database, ViewOptions.DEFAULT.withTypes(java.util.Set.of("mp3"))),
+                    "ticking MP3 shows MP3 files even in the main view");
+            assertEquals(List.of(2L, 1L), ids(database, ViewOptions.DEFAULT.withTypes(java.util.Set.of("jpg", "mp4"))));
+        }
+    }
+
+    /**
      * Eight visible files plus one trashed and one hidden. sort_date (taken, else modified):
      * 1:100 2:300 3:200 4:500 5:50 6:400 7:250 8:150.
      */
@@ -111,6 +145,8 @@ class TimelineQueryTest {
     void eachFilterShowsOnlyItsKindNewestFirst() throws Exception {
         Map<MediaFilter, List<Long>> expected = Map.ofEntries(
                 Map.entry(MediaFilter.ALL, List.of(4L, 6L, 2L, 7L, 3L, 8L, 1L, 5L)),
+                Map.entry(MediaFilter.EVERYTHING, List.of(4L, 6L, 2L, 7L, 3L, 8L, 1L, 5L)), // no audio here
+                Map.entry(MediaFilter.AUDIO, List.of()),
                 Map.entry(MediaFilter.PHOTOS, List.of(4L, 2L, 7L, 8L, 1L)),
                 Map.entry(MediaFilter.VIDEOS, List.of(3L)),
                 Map.entry(MediaFilter.GIFS, List.of(5L)),

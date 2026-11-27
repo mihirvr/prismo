@@ -66,6 +66,13 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
         return equals(DEFAULT);
     }
 
+    /** True when audio files are shown: the Audio filter, or an audio type ticked in the Types menu. */
+    public boolean showsAudio() {
+        return filter == MediaFilter.AUDIO || filter == MediaFilter.EVERYTHING || types.stream()
+                .anyMatch(type -> io.github.mihirvr.prismo.index.MediaType.fromExtension(type).orElse(null)
+                        == io.github.mihirvr.prismo.index.MediaType.AUDIO);
+    }
+
     /** True when a filter or a type narrows what is shown. */
     public boolean isFiltered() {
         return filter != MediaFilter.ALL || !types.isEmpty() || people.active() || categories.active();
@@ -98,9 +105,16 @@ public record ViewOptions(MediaFilter filter, MediaSort sort, boolean descending
         return sort.isDate() ? Headers.DATES : sort == MediaSort.NAME ? Headers.LETTERS : Headers.NONE;
     }
 
-    /** The filter's, the types', the people's and the categories' SQL condition, or null when all is shown. */
+    /**
+     * The filter's, the types', the people's and the categories' SQL condition, or null when all is shown. 2.0.0:
+     * audio files are left out unless the Audio filter is on or an audio type is ticked: a music folder would
+     * otherwise bury the photos.
+     */
     public String sqlCondition() {
         List<String> parts = new ArrayList<>();
+        if (!showsAudio()) {
+            parts.add("media_type <> 'audio'");
+        }
         for (String part : new String[] {filter.condition(), FileTypes.sqlCondition(types), people.sqlCondition(),
                 categories.sqlCondition()}) {
             if (part != null) {

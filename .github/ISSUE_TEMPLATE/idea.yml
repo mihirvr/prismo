@@ -1,0 +1,23 @@
+name: Idea
+description: Something you'd like Prismo to do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: What Prismo should do, in your own words.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would it help you?
+      description: What you're trying to do today, and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: other
+    attributes:
+      label: Anything else?
+      description: Another app that does it well, a sketch, a screenshot.

@@ -33,14 +33,14 @@ public final class PlaybackPositions {
     /**
      * Saves where video {@code mediaId} is ({@code seconds}). Also fills in its length if the index has none
      * ({@code durationSeconds} from the player: the indexer can't read MKV / WebM lengths), so its thumbnail can
-     * show the length and the progress bar. Videos only: the schema refuses a position on a photo.
+     * show the length and the progress bar. Videos and (2.0.0) audio only: the schema refuses a position on a photo.
      */
     public CompletableFuture<Void> save(long mediaId, double seconds, double durationSeconds) {
         return database.write(connection -> {
             try (PreparedStatement update = connection.prepareStatement("""
                     UPDATE media SET playback_position_seconds = ?,
                                      duration_seconds = coalesce(duration_seconds, ?)
-                    WHERE id = ? AND media_type = 'video'""")) {
+                    WHERE id = ? AND media_type IN ('video', 'audio')""")) {
                 update.setDouble(1, Math.max(0, seconds));
                 if (durationSeconds > 0) {
                     update.setDouble(2, durationSeconds);

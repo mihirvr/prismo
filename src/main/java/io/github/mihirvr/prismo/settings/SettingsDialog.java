@@ -586,7 +586,7 @@ public final class SettingsDialog {
         Label version = new Label("Version " + options.about().version());
         version.getStyleClass().add("settings-value");
         Label line = wrapping("settings-note", 0);
-        line.setText("Nothing leaves your computer. Open source, MIT License.");
+        line.setText("Nothing leaves your computer. Free to use, not for sale (Sustainable Use License).");
         Node website;
         if (options.about().website().isPresent()) {
             URI address = options.about().website().get();

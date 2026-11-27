@@ -39,7 +39,8 @@ import org.slf4j.LoggerFactory;
 public final class OtherStills {
 
     private static final Logger log = LoggerFactory.getLogger(OtherStills.class);
-    private static final Set<String> HEIF = Set.of("heic", "heif", "hif");
+    /** Decoded by ffmpeg: HEIF, and (2.0.0) AVIF, the same container with an AV1 picture inside. */
+    private static final Set<String> HEIF = Set.of("heic", "heif", "hif", "avif");
     private static final long TIMEOUT_SECONDS = 60;
     /** RAW files bigger than this aren't read for a preview (a whole file is read into memory). */
     static final long MAX_RAW_BYTES = 300L * 1024 * 1024;

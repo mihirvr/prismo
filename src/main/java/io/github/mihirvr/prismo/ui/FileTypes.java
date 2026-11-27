@@ -10,16 +10,20 @@ import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * The Types menu (1.1.0): file types as people know them. "JPG" covers {@code .jpg} and {@code .jpeg}, "HEIC"
- * {@code .heic} and {@code .heif}, "TIF" {@code .tif} and {@code .tiff}; every other type is its own extension.
+ * The Types menu (1.1.0): file types as people know them. "JPG" covers {@code .jpg}, {@code .jpeg}, {@code .jpe} and
+ * {@code .jfif}, "HEIC" {@code .heic}, {@code .heif} and {@code .hif}, "TIF" {@code .tif} and {@code .tiff}, "MTS"
+ * {@code .mts} and {@code .m2ts}, "MPG" {@code .mpg} and {@code .mpeg}; every other type is its own extension.
  * A type is stored by its first extension ({@code jpg}). Only extensions Prismo indexes get in, so the SQL built from
  * them never holds user text.
  */
 public final class FileTypes {
 
-    private static final Map<String, String> SAME_AS = Map.of("jpeg", "jpg", "heif", "heic", "tiff", "tif");
+    // 2.0.0: JPE and JFIF are JPG too, HIF is HEIC, M2TS is MTS, MPEG is MPG.
+    private static final Map<String, String> SAME_AS = Map.of("jpeg", "jpg", "jpe", "jpg", "jfif", "jpg",
+            "heif", "heic", "hif", "heic", "tiff", "tif", "m2ts", "mts", "mpeg", "mpg");
     private static final Map<String, List<String>> MEMBERS = Map.of(
-            "jpg", List.of("jpg", "jpeg"), "heic", List.of("heic", "heif"), "tif", List.of("tif", "tiff"));
+            "jpg", List.of("jpg", "jpeg", "jpe", "jfif"), "heic", List.of("heic", "heif", "hif"),
+            "tif", List.of("tif", "tiff"), "mts", List.of("mts", "m2ts"), "mpg", List.of("mpg", "mpeg"));
 
     private FileTypes() {
     }

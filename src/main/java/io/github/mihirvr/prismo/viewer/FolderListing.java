@@ -22,10 +22,9 @@ public final class FolderListing {
     private FolderListing() {
     }
 
-    /** True for a file Prismo can show (by its extension). */
+    /** True for a file Prismo can show (by its extension; a {@code .ts} by its content, see MediaType#ofFile). */
     public static boolean isMedia(Path file) {
-        Path name = file.getFileName();
-        return name != null && MediaType.fromExtension(MediaType.extensionOf(name.toString())).isPresent();
+        return MediaType.ofFile(file).isPresent();
     }
 
     /** The media files directly in {@code folder}, in natural name order (2 before 10), as items. */

@@ -6,6 +6,7 @@ import io.github.mihirvr.prismo.thumbs.MediaRef;
 import io.github.mihirvr.prismo.ui.FileItems;
 import io.github.mihirvr.prismo.ui.DragOut;
 import io.github.mihirvr.prismo.ui.Filmstrip;
+import io.github.mihirvr.prismo.index.MediaType;
 import io.github.mihirvr.prismo.ui.Icon;
 import io.github.mihirvr.prismo.ui.ItemAction;
 import io.github.mihirvr.prismo.ui.Menus;
@@ -526,7 +527,9 @@ public final class MediaViewer extends StackPane {
                 video.play(item, reason -> {
                     if (isCurrent(ref)) {
                         video.setVisible(false);
-                        showMessage("This video can't be played in Prismo: " + reason + ".", true);
+                        String what = MediaType.fromExtension(ref.extension()).orElse(null) == MediaType.AUDIO
+                                ? "audio file" : "video";
+                        showMessage("This " + what + " can't be played in Prismo: " + reason + ".", true);
                     }
                 }, () -> {
                     if (isCurrent(ref)) {
@@ -1716,6 +1719,11 @@ public final class MediaViewer extends StackPane {
     /** Playback speed, 0.5..2. */
     public DoubleProperty videoSpeedProperty() {
         return video.speedProperty();
+    }
+
+    /** 2.0.0: what an audio file shows while it plays (album art or a picture of the sound). */
+    public ObjectProperty<io.github.mihirvr.prismo.ui.AudioView> audioViewProperty() {
+        return video.audioViewProperty();
     }
 
     /** The box behind video subtitles (Settings › Video; the app saves it). */

@@ -28,6 +28,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,14 +51,84 @@ public final class MetadataReader {
     /** MP4 files with an unset creation time report 1904-01-01; anything before 1971 is treated as unknown. */
     private static final Instant EARLIEST_PLAUSIBLE = Instant.parse("1971-01-01T00:00:00Z");
 
+    /** 2.0.0: pictures ffmpeg reads (not the metadata library), so they may need ffmpeg for their size too. */
+    private static final Set<String> FFMPEG_STILLS = Set.of("heic", "heif", "hif", "avif");
+
     private final ZoneId zone;
+    private final FfmpegFacts ffmpegFacts; // null: no ffmpeg (tests)
 
     public MetadataReader(ZoneId zone) {
+        this(zone, null);
+    }
+
+    /** With {@code ffmpegFacts}, {@link #withFfmpegFacts} fills in what the metadata library couldn't read. */
+    public MetadataReader(ZoneId zone, FfmpegFacts ffmpegFacts) {
         this.zone = zone;
+        this.ffmpegFacts = ffmpegFacts;
+    }
+
+    /**
+     * 2.0.0: the records the metadata library left without a length or size (MPEG-TS / MTS, WMV, FLV, MPG, OGV, AVI,
+     * MKV, AVIF, ...), completed from ffmpeg's reading of their headers ({@link FfmpegFacts}). What the library did
+     * read stays. Records that need nothing, and all of them without ffmpeg, come back as they were.
+     */
+    public List<MediaRecord> withFfmpegFacts(List<MediaRecord> records) {
+        if (ffmpegFacts == null) {
+            return records;
+        }
+        List<Integer> needing = new ArrayList<>();
+        List<Path> files = new ArrayList<>();
+        for (int i = 0; i < records.size(); i++) {
+            if (needsFfmpeg(records.get(i))) {
+                needing.add(i);
+                files.add(Path.of(records.get(i).path()));
+            }
+        }
+        if (files.isEmpty()) {
+            return records;
+        }
+        List<FfmpegFacts.Facts> facts = ffmpegFacts.read(files);
+        List<MediaRecord> completed = new ArrayList<>(records);
+        for (int n = 0; n < needing.size(); n++) {
+            int i = needing.get(n);
+            completed.set(i, completed(records.get(i), facts.get(n)));
+        }
+        return completed;
+    }
+
+    static boolean needsFfmpeg(MediaRecord record) {
+        return switch (record.type()) {
+            case VIDEO -> record.durationSeconds() == null || record.width() == null;
+            case AUDIO -> record.durationSeconds() == null;
+            case PHOTO -> record.width() == null && FFMPEG_STILLS.contains(record.extension());
+            default -> false;
+        };
+    }
+
+    private MediaRecord completed(MediaRecord record, FfmpegFacts.Facts facts) {
+        boolean video = record.type() == MediaType.VIDEO;
+        Long dateTaken = record.dateTaken();
+        if (dateTaken == null && video && facts.created() != null && !facts.created().isBefore(EARLIEST_PLAUSIBLE)) {
+            dateTaken = LocalDateTime.ofInstant(facts.created(), zone).toInstant(ZoneOffset.UTC).toEpochMilli();
+        }
+        boolean noSize = record.width() == null || record.height() == null;
+        Integer width = noSize ? positiveOrNull(facts.width()) : record.width();
+        Integer height = noSize ? positiveOrNull(facts.height()) : record.height();
+        boolean audio = record.type() == MediaType.AUDIO;
+        Double duration = record.durationSeconds() != null || !(video || audio) ? record.durationSeconds()
+                : facts.seconds();
+        if (audio) {
+            width = null; // a cover picture's size isn't the file's (FfmpegFacts leaves covers out anyway)
+            height = null;
+        }
+        return new MediaRecord(record.path(), record.folder(), record.fileName(), record.extension(), record.type(),
+                record.sizeBytes(), record.dateModified(), dateTaken, width, height, record.cameraMake(),
+                record.cameraModel(), duration, record.osHidden());
     }
 
     public MediaRecord read(Path file, MediaType type, long sizeBytes, long dateModified) {
-        return read(file, type, sizeBytes, dateModified, readMetadata(file));
+        // 2.0.0: the metadata library reads nothing Prismo keeps from audio; its length comes from ffmpeg.
+        return read(file, type, sizeBytes, dateModified, type == MediaType.AUDIO ? null : readMetadata(file));
     }
 
     /** The record for {@code file} from metadata already read ({@code null}: none could be read). */

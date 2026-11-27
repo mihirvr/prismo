@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions people ask first
+    url: https://prismo.mihirr.in/#faq
+    about: Installing, Linux, duplicates, music, file types and more.
+  - name: Report a security problem privately
+    url: https://github.com/mihirvr/prismo/security/advisories/new
+    about: Please don't post security problems in public issues.

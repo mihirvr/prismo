@@ -27,6 +27,8 @@ Anything marked **(verify in #N)** is our current reading and has not been teste
 | Video metadata | `metadata-extractor` | — | — | `TAG_DURATION_SECONDS` on MP4/QuickTime directories |
 | Video playback | JavaCV `FFmpegFrameGrabber` + FFmpeg (LGPL v3 build) + `javax.sound` | javacv 1.5.14, ffmpeg 8.1.2-1.5.14 | **no** (automatic) | Our own small player, see "Video". Replaced `javafx.media` (pre-packaging work, 2026-10-20) |
 | Video thumbnails | The `ffmpeg` program from the same FFmpeg bundle, run as a separate process | — | — | See "Video" |
+| Audio (2.0.0) | The same player (sound only) and `ffmpeg` program: album art (`-map 0:v:0` to a BMP), and lengths / sizes the metadata library can't read (`ffmpeg -i`, several files a run) | — | — | Nothing new bundled; the visualizers are our own FFT on the decoded sound |
+| Image decode (AVIF, 2.0.0) | The bundled `ffmpeg` program, as for HEIC | — | — | AV1 decoders are in the FFmpeg bundle |
 | File watching | `java.nio.file.WatchService` behind our own interface | — | yes | See "File watching" |
 | Logging | SLF4J 2.0.x + Logback | slf4j 2.0.20 (stable), logback 1.6.5 | yes | Don't use the SLF4J 2.1 alpha |
 | Tests | JUnit Jupiter (JUnit 6) | 6.1.3 | yes | TestFX for UI tests, maybe later |

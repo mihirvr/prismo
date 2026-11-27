@@ -1,6 +1,6 @@
 # Third-party notices
 
-Prismo is MIT-licensed. The installer also contains the software below, each under its own licence. Full texts are in the licenses folder next to this file.
+Prismo is licensed under the Sustainable Use License 1.0 (see LICENSE). The installer also contains the software below, each under its own licence. Full texts are in the licenses folder next to this file.
 
 Collected on 2026-10-24 from each project's own licence file at the matching version tag (or the official project site). Anything that could not be checked against a primary source is marked NOT VERIFIED.
 

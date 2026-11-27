@@ -18,7 +18,7 @@ Download them from the [Releases page](https://github.com/mihirvr/prismo/release
 1. Double-click `Prismo-<version>.exe`.
 2. Windows may show a blue **"Windows protected your PC"** screen. That's because the installer isn't signed with a
    paid code-signing certificate, not because something is wrong with it. Click **More info**, then **Run anyway**.
-3. Accept the licence (MIT), keep or change the install folder, and tick **desktop shortcut** if you want one.
+3. Accept the licence, keep or change the install folder, and tick **desktop shortcut** if you want one.
    No administrator password is needed: Prismo installs for your Windows user only.
 4. Start Prismo from the Start menu (or the desktop shortcut). The first time you open a video, Prismo unpacks
    its video files once, which takes a second or two.

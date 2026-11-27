@@ -35,6 +35,9 @@ public enum Icon {
     FULL_SCREEN("M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15"),
     EXIT_FULL_SCREEN("M9 4V9H4M15 4V9H20M20 15H15V20M4 15H9V20"),
     PLAY("M8 5.5V18.5L18.5 12Z", true),
+    /** 2.0.0: one music note (an eighth note): an audio file, or a song without album art. */
+    MUSIC("M8.5 14A3 3 0 1 1 8.5 20A3 3 0 1 1 8.5 14ZM10 17V4H12V17ZM12 4C13 6.6 17.5 7.4 17.5 11.6"
+            + "C16.4 9.6 14.2 9.1 12 8.9Z", true),
     PAUSE("M7 5.5H10V18.5H7ZM14 5.5H17V18.5H14Z", true),
     VOLUME(Shapes.SPEAKER + "M15.5 9.2A4 4 0 0 1 15.5 14.8M18.2 6.6A7.7 7.7 0 0 1 18.2 17.4"),
     MUTED(Shapes.SPEAKER + "M16 9.5L21 14.5M21 9.5L16 14.5"),

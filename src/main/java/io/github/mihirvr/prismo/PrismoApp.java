@@ -12,6 +12,7 @@ import io.github.mihirvr.prismo.db.LibraryRootStore;
 import io.github.mihirvr.prismo.db.PlaybackPositions;
 import io.github.mihirvr.prismo.db.SettingsStore;
 import io.github.mihirvr.prismo.db.TrackChoices;
+import io.github.mihirvr.prismo.index.FfmpegFacts;
 import io.github.mihirvr.prismo.index.FileOperations;
 import io.github.mihirvr.prismo.index.IgnoreRules;
 import io.github.mihirvr.prismo.index.IndexProgress;
@@ -61,6 +62,7 @@ import io.github.mihirvr.prismo.ui.FolderArrange;
 import io.github.mihirvr.prismo.ui.FolderSections;
 import io.github.mihirvr.prismo.ui.WindowPlacement;
 import io.github.mihirvr.prismo.video.TrackChoice;
+import io.github.mihirvr.prismo.video.VideoNatives;
 import io.github.mihirvr.prismo.viewer.MediaViewer;
 import io.github.mihirvr.prismo.viewer.PlaybackMemory;
 import io.github.mihirvr.prismo.viewer.TrackMemory;
@@ -169,6 +171,8 @@ public final class PrismoApp extends Application {
     private static final String FILMSTRIP_SETTING = "viewer.filmstrip";
     /** Settings › Video: the box behind subtitles (P8). */
     private static final String SUBTITLE_BACKGROUND_SETTING = "video.subtitle_background";
+    /** 2.0.0: what an audio file shows while it plays (AudioView). */
+    private static final String AUDIO_VIEW_SETTING = "audio.view";
     /** The sound and subtitle languages picked last ("English"; subtitles also "off"), for videos with no pick (P8). */
     private static final String AUDIO_LANGUAGE_SETTING = "video.audio_language";
     private static final String SUBTITLE_LANGUAGE_SETTING = "video.subtitle_language";
@@ -333,7 +337,10 @@ public final class PrismoApp extends Application {
         database = Database.open(paths.databaseFile());
         settings = new SettingsStore(database);
         libraryRoots = new LibraryRootStore(database);
-        indexer = new Indexer(database, new MetadataReader(ZoneId.systemDefault()), () -> ignoreRulesNow);
+        // 2.0.0: ffmpeg reads the length and size of files the metadata library can't (TS, WMV, FLV, MPG, ...).
+        indexer = new Indexer(database,
+                new MetadataReader(ZoneId.systemDefault(), new FfmpegFacts(VideoNatives::ffmpegExecutable)),
+                () -> ignoreRulesNow);
         cacheDir = paths.cacheDir();
         thumbnailCache = new ThumbnailCache(paths.cacheDir(), GRID_THUMBNAIL_SIZE);
         thumbnails = new ThumbnailService(thumbnailCache, new ThumbnailGenerator(GRID_THUMBNAIL_SIZE));
@@ -529,6 +536,14 @@ public final class PrismoApp extends Application {
         viewer.subtitleBackgroundProperty().bindBidirectional(subtitleBackground);
         subtitleBackground.addListener((_, _, chosen) ->
                 settings.put(SUBTITLE_BACKGROUND_SETTING, chosen.settingValue()));
+        try {
+            viewer.audioViewProperty().set(
+                    io.github.mihirvr.prismo.ui.AudioView.fromSetting(settings.get(AUDIO_VIEW_SETTING).orElse(null)));
+        } catch (SQLException e) {
+            log.warn("Could not read the audio view setting", e);
+        }
+        viewer.audioViewProperty().addListener((_, _, chosen) ->
+                settings.put(AUDIO_VIEW_SETTING, chosen.settingValue()));
 
         // The Collections tab: its pages load on the Timeline's load thread, so loads never overlap.
         collections = new CollectionsPage(database, thumbnailLoader, timelineLoads);

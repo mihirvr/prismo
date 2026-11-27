@@ -277,7 +277,7 @@ public final class Indexer {
 
         private void indexFile(Path file, BasicFileAttributes attrs, MediaStore.Row row, boolean inHiddenFolder,
                 ExecutorService readers) throws InterruptedException {
-            MediaType type = MediaType.fromExtension(MediaType.extensionOf(file.getFileName().toString())).orElse(null);
+            MediaType type = MediaType.ofFile(file).orElse(null); // 2.0.0: a .ts is checked by its content
             if (type == null || !handled.add(file.toString())) {
                 return;
             }
@@ -357,12 +357,14 @@ public final class Indexer {
                 }
                 report();
             }
+            // 2.0.0: lengths and sizes the metadata library couldn't read, from ffmpeg (batched; most chunks need none).
+            List<MediaRecord> complete = metadataReader.withFfmpegFacts(records);
 
             awaitPendingWrite(); // at most one write in flight
             long now = System.currentTimeMillis();
             pendingWrite = database.write(connection -> {
-                MediaStore.upsert(connection, records, now);
-                return records.size();
+                MediaStore.upsert(connection, complete, now);
+                return complete.size();
             });
             queued += records.size();
             if (flushes == 1) {

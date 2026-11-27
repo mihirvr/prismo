@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in Prismo doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. A security problem? Please don't post it here: see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        1. Opened Collections › Duplicates
+        2. Clicked "Select extra copies"
+        3. Expected ... but ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Prismo version
+      description: Settings › About shows it.
+      placeholder: "2.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux (Ubuntu, Debian or similar)
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: files
+    attributes:
+      label: The files involved
+      description: The kind of file (for example "MKV from a phone", "HEIC from an iPhone", "FLAC song") and where it is (internal disk, USB drive, network folder). Please don't attach private photos.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log (optional)
+      description: |
+        The newest file in %LOCALAPPDATA%\Prismo\logs (Windows) or ~/.local/state/prismo/logs (Linux). It can contain file paths: remove anything you'd rather not share.
+      render: text

@@ -146,7 +146,7 @@ final class MediaStore {
                     camera_model = excluded.camera_model,
                     duration_seconds = excluded.duration_seconds,
                     os_hidden = excluded.os_hidden,
-                    playback_position_seconds = CASE WHEN excluded.media_type = 'video'
+                    playback_position_seconds = CASE WHEN excluded.media_type IN ('video', 'audio')
                                                      THEN media.playback_position_seconds END,
                     broken = 0""")) {
             for (MediaRecord record : records) {

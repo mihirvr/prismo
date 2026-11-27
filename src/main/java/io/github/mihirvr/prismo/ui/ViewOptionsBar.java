@@ -1,5 +1,6 @@
 package io.github.mihirvr.prismo.ui;
 
+import io.github.mihirvr.prismo.index.MediaType;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -120,7 +121,9 @@ public final class ViewOptionsBar extends HBox {
         typesButton.getStyleClass().add("view-types");
         fillTypesMenu();
         options.addListener((_, old, value) -> {
-            if (!old.types().equals(value.types())) {
+            if (old.filter() != value.filter()) {
+                fillTypesMenu(); // 2.0.0: the menu lists the types of the kinds this filter shows
+            } else if (!old.types().equals(value.types())) {
                 showChosenTypes();
             }
         });
@@ -162,35 +165,76 @@ public final class ViewOptionsBar extends HBox {
         }
     }
 
-    /** "All", then one tick box per type. The menu stays open while boxes are ticked. */
+    /**
+     * "All", then one tick box per type. The menu stays open while boxes are ticked. 2.0.0: only the types of the kinds
+     * the filter shows (no audio types under "Photos and videos", only audio types under "Audio"), grouped under a
+     * heading per kind (Photos, Videos, Audio) when more than one kind is listed. A ticked type is always listed, so
+     * it can be unticked.
+     */
     private void fillTypesMenu() {
         Set<String> chosen = options.get().types();
+        Set<MediaType> kinds = options.get().filter().kinds();
         typeBoxes.clear();
         MenuItem all = new MenuItem("All types");
         all.setOnAction(_ -> options.set(options.get().withTypes(Set.of())));
         List<MenuItem> items = new ArrayList<>(List.of(all, new SeparatorMenuItem()));
+        java.util.Map<String, List<String>> byGroup = new java.util.LinkedHashMap<>();
+        for (String group : List.of("Photos", "Videos", "Audio")) {
+            byGroup.put(group, new ArrayList<>());
+        }
         Set<String> listed = new TreeSet<>(availableTypes);
         listed.addAll(chosen);
         for (String type : listed) {
-            CheckBox box = new CheckBox(FileTypes.label(type));
-            box.setSelected(chosen.contains(type));
-            typeBoxes.put(type, box);
-            box.selectedProperty().addListener((_, _, on) -> {
-                if (quiet) {
-                    return;
-                }
-                Set<String> now = new TreeSet<>(options.get().types());
-                if (on) {
-                    now.add(type);
-                } else {
-                    now.remove(type);
-                }
-                options.set(options.get().withTypes(now));
-            });
-            items.add(tickItem(box));
+            MediaType kind = MediaType.fromExtension(type).orElse(MediaType.PHOTO);
+            if (kinds.contains(kind) || chosen.contains(type)) {
+                byGroup.get(groupOf(kind)).add(type);
+            }
+        }
+        boolean headings = byGroup.values().stream().filter(group -> !group.isEmpty()).count() > 1;
+        for (var group : byGroup.entrySet()) {
+            if (group.getValue().isEmpty()) {
+                continue;
+            }
+            if (headings) {
+                MenuItem heading = new MenuItem(group.getKey());
+                heading.setDisable(true);
+                heading.getStyleClass().add("type-heading");
+                items.add(heading);
+            }
+            for (String type : group.getValue()) {
+                items.add(typeItem(type, chosen));
+            }
         }
         typesButton.getItems().setAll(items);
         showChosenTypes();
+    }
+
+    /** "Photos" (photos, GIF, RAW), "Videos" or "Audio": the heading a type is listed under. */
+    static String groupOf(MediaType kind) {
+        return switch (kind) {
+            case VIDEO -> "Videos";
+            case AUDIO -> "Audio";
+            default -> "Photos";
+        };
+    }
+
+    private MenuItem typeItem(String type, Set<String> chosen) {
+        CheckBox box = new CheckBox(FileTypes.label(type));
+        box.setSelected(chosen.contains(type));
+        typeBoxes.put(type, box);
+        box.selectedProperty().addListener((_, _, on) -> {
+            if (quiet) {
+                return;
+            }
+            Set<String> now = new TreeSet<>(options.get().types());
+            if (on) {
+                now.add(type);
+            } else {
+                now.remove(type);
+            }
+            options.set(options.get().withTypes(now));
+        });
+        return tickItem(box);
     }
 
     /**

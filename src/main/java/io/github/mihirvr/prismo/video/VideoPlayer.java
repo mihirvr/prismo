@@ -100,11 +100,22 @@ public final class VideoPlayer implements AutoCloseable {
      * What the file holds, known once it's open. {@code rotation} = clockwise quarter turn to show it at;
      * {@code audioStream} = the sound track playing (a {@link Track#stream()}), -1 if none. {@code videoCodec} and
      * {@code audioCodec} are FFmpeg's short names of the picture's and that sound track's formats ("h264", "aac"),
-     * or "" if there is none.
+     * or "" if there is none. 2.0.0: {@code tags} = a song's tags ({@link #SONG_TAGS}), {@code sampleRate},
+     * {@code channels} and {@code bitRate} (bits a second) of the sound track playing (0 if unknown), {@code hasCover} =
+     * the file holds a cover picture (a song's album art). A file whose only picture is a cover has no picture.
      */
     public record Info(long durationMicros, int width, int height, int rotation, boolean hasPicture,
             boolean hasSound, double frameRate, List<Track> audioTracks, List<Track> subtitleTracks,
-            int audioStream, String videoCodec, String audioCodec, String location, String device) {
+            int audioStream, String videoCodec, String audioCodec, String location, String device,
+            Map<String, String> tags, int sampleRate, int channels, long bitRate, boolean hasCover) {
+
+        /** Without the 2.0.0 sound details (tests of video files). */
+        public Info(long durationMicros, int width, int height, int rotation, boolean hasPicture, boolean hasSound,
+                double frameRate, List<Track> audioTracks, List<Track> subtitleTracks, int audioStream,
+                String videoCodec, String audioCodec, String location, String device) {
+            this(durationMicros, width, height, rotation, hasPicture, hasSound, frameRate, audioTracks, subtitleTracks,
+                    audioStream, videoCodec, audioCodec, location, device, Map.of(), 0, 0, 0, false);
+        }
     }
 
     /**
@@ -224,6 +235,8 @@ public final class VideoPlayer implements AutoCloseable {
     private volatile long fileStart;
     /** The sound track being played (FFmpeg stream number), -1 = none. */
     private volatile int audioStream = -1;
+    /** 2.0.0: the decoded sound by time in the file, for the audio views (waveform, bars). */
+    private final SoundTap soundTap = new SoundTap();
     /** Bumped each time a sound thread is started: an older one sees it and stops. Guarded by "this". */
     private long soundGeneration;
     /** True while sound is actually playing through a device (false if the file has none or no device opened). */
@@ -359,6 +372,11 @@ public final class VideoPlayer implements AutoCloseable {
         return audioStream;
     }
 
+    /** 2.0.0: the sound as decoded, for drawing it ({@link SoundTap#copy} at {@link #position()}). */
+    public SoundTap soundTap() {
+        return soundTap;
+    }
+
     /** One picture's time, from the file's frame rate. */
     public long frameMicros() {
         double rate = frameRate;
@@ -446,9 +464,8 @@ public final class VideoPlayer implements AutoCloseable {
     }
 
     private Info describe(FFmpegFrameGrabber grabber) {
-        boolean picture = grabber.hasVideo();
-        int rotation = picture ? VideoGeometry.clockwiseQuarterTurn(grabber.getDisplayRotation()) : 0;
         List<Track> audio = new ArrayList<>();
+        boolean cover = false;
         List<Track> subtitles = new ArrayList<>();
         Map<Integer, String> codecs = new HashMap<>();
         String videoCodec = "";
@@ -460,10 +477,11 @@ public final class VideoPlayer implements AutoCloseable {
             String codec = codecName(parameters.codec_id());
             codecs.put(i, codec);
             // The first picture stream that isn't a cover image (an MP3's or MKV's attached picture).
-            if (type == avutil.AVMEDIA_TYPE_VIDEO && videoCodec.isEmpty()
-                    && (stream.disposition() & avformat.AV_DISPOSITION_ATTACHED_PIC) == 0) {
+            boolean attached = (stream.disposition() & avformat.AV_DISPOSITION_ATTACHED_PIC) != 0;
+            if (type == avutil.AVMEDIA_TYPE_VIDEO && videoCodec.isEmpty() && !attached) {
                 videoCodec = codec;
             }
+            cover |= type == avutil.AVMEDIA_TYPE_VIDEO && attached;
             if (type == avutil.AVMEDIA_TYPE_AUDIO || type == avutil.AVMEDIA_TYPE_SUBTITLE) {
                 boolean isDefault = (stream.disposition() & avformat.AV_DISPOSITION_DEFAULT) != 0;
                 boolean text = type == avutil.AVMEDIA_TYPE_SUBTITLE && TEXT_SUBTITLES.contains(parameters.codec_id());
@@ -477,10 +495,42 @@ public final class VideoPlayer implements AutoCloseable {
                 .map(Track::stream).orElse(-1);
         int wanted = listener.chooseAudio(List.copyOf(audio), fileDefault);
         int chosen = audio.stream().anyMatch(track -> track.stream() == wanted) ? wanted : fileDefault;
-        return new Info(Math.max(0, grabber.getLengthInTime()), grabber.getImageWidth(), grabber.getImageHeight(),
-                rotation, picture, grabber.hasAudio(), grabber.getFrameRate(), List.copyOf(audio),
-                List.copyOf(subtitles), chosen, picture ? videoCodec : "", codecs.getOrDefault(chosen, ""),
-                location(context), device(context));
+        // 2.0.0: a song's cover is a picture stream too (grabber.hasVideo() says yes), but it isn't a moving picture:
+        // the file is sound with a cover, played without a picture thread.
+        boolean picture = grabber.hasVideo() && !videoCodec.isEmpty();
+        int rotation = picture ? VideoGeometry.clockwiseQuarterTurn(grabber.getDisplayRotation()) : 0;
+        AVStream sound = chosen >= 0 ? context.streams(chosen) : null;
+        int sampleRate = sound == null ? 0 : sound.codecpar().sample_rate();
+        int channels = sound == null ? 0 : sound.codecpar().ch_layout().nb_channels();
+        long bitRate = sound == null || sound.codecpar().bit_rate() <= 0 ? context.bit_rate()
+                : sound.codecpar().bit_rate();
+        return new Info(Math.max(0, grabber.getLengthInTime()), picture ? grabber.getImageWidth() : 0,
+                picture ? grabber.getImageHeight() : 0, rotation, picture, grabber.hasAudio(),
+                picture ? grabber.getFrameRate() : 0, List.copyOf(audio), List.copyOf(subtitles), chosen,
+                picture ? videoCodec : "", codecs.getOrDefault(chosen, ""), location(context), device(context),
+                songTags(context, sound), sampleRate, channels, Math.max(0, bitRate), cover);
+    }
+
+    /** 2.0.0: the tags a song shows in Info, in this order. */
+    public static final List<String> SONG_TAGS = List.of("title", "artist", "album", "album_artist", "composer", "genre",
+            "date", "track", "disc");
+
+    /**
+     * A song's tags ({@link #SONG_TAGS} that it has), from the file (MP3, M4A, FLAC) or else from its sound track (Ogg
+     * and Opus keep them there). FFmpeg matches the names in any case.
+     */
+    private static Map<String, String> songTags(AVFormatContext context, AVStream sound) {
+        Map<String, String> tags = new java.util.LinkedHashMap<>();
+        for (String key : SONG_TAGS) {
+            String value = tagValue(context, key);
+            if (value.isEmpty() && sound != null) {
+                value = tag(sound, key).strip();
+            }
+            if (!value.isEmpty()) {
+                tags.put(key, value);
+            }
+        }
+        return java.util.Collections.unmodifiableMap(tags); // in SONG_TAGS order
     }
 
     /** FFmpeg's short name of a format ("h264", "aac", "subrip"), or "" if it has none. */
@@ -738,6 +788,7 @@ public final class VideoPlayer implements AutoCloseable {
                         ShortBuffer samples = (ShortBuffer) frame.samples[0];
                         int count = samples.limit();
                         long micros = frame.timestamp - start;
+                        soundTap.add(samples, count, micros, rate); // 2.0.0: for the audio views, before volume
                         endMicros = micros + (count / 2) * 1_000_000L / rate;
                         if (tempo == null) {
                             // A seek lands on the start of the block that holds the target (AAC: 1,024 samples,

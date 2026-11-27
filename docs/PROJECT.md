@@ -95,7 +95,8 @@ Built: a top bar with the Timeline | Collections tabs, the search box, "Library 
 
 ## Timeline (Home)
 
-Default landing page. All media types (photos, videos, GIFs, RAW) mixed, chronological.
+Default landing page. Photos and videos (photos, videos, GIFs, RAW) mixed, chronological. Audio files (2.0.0) are
+not in it: they show under Filters › Audio or "Photos, videos and audio", so a music folder never buries the photos.
 
 - **Grouping**: Smart (Today / Yesterday / Month — default) or explicit Day / Week / Month / Year
 - **Sort**: shared sort component (see below)
@@ -154,11 +155,15 @@ matches both.
 Available on every page. Changes the current view only, never the underlying library.
 
 ```
-All · Photos · Videos · GIF · RAW
-JPEG · PNG · HEIC · WEBP
-Landscape · Portrait · Screenshots
-Favorites · Hidden
+Photos and videos (the main view) · Photos, videos and audio
+Photos · Videos · Audio · GIF · RAW
+Landscape · Portrait · Screenshots · Favorites
+Types: the file types of what is shown (JPG, PNG, HEIC, MP4, MP3, FLAC ...), under Photos / Videos / Audio headings
 ```
+
+2.0.0: audio is left out of every filter except Audio and "Photos, videos and audio", unless an audio type is ticked
+in Types (`ViewOptions.sqlCondition` adds `media_type <> 'audio'`). The Types menu lists only the types of the kinds
+the filter shows (`MediaFilter.kinds`); a ticked type always stays listed so it can be unticked.
 
 ---
 
@@ -183,7 +188,13 @@ Instant search across: filename, folder name, extension, camera, date, resolutio
 
 - Zoom, pan, rotate (view only — the file is not changed), next/previous, fullscreen, slideshow, video playback
 - Keyboard shortcuts, mouse gestures
-- **Video formats**: every video type Prismo indexes plays in the app (MP4, M4V, MOV, MKV, WebM, AVI), through a small FFmpeg-based player (changed before #10 from JavaFX Media, which couldn't play AAC sound on the development machine). Phone videos are shown upright. A file that can't be played shows why, with its thumbnail, and an "Open with default player" button.
+- **Audio** (2.0.0): an audio file plays in the same player, without a picture. What shows (the Show menu, kept as
+  `audio.view`): Album art (the cover, or one music note; the title and "artist · album" under it), Waveform, Bars (56
+  bands from 40 Hz to 16 kHz, FFT of the sound at the playing position) or Circle (the same bars around a ring, the cover
+  in the middle). The sound is taken before the volume, by its time in the file (`SoundTap`), so the picture matches
+  what is heard and doesn't change with the volume.
+- **Video formats**: every video type Prismo indexes plays in the app (MP4, M4V, MOV, MKV, WebM, AVI; 2.0.0: 3GP, MTS,
+  M2TS, TS, WMV, FLV, MPG, OGV), through a small FFmpeg-based player (changed before #10 from JavaFX Media, which couldn't play AAC sound on the development machine). Phone videos are shown upright. A file that can't be played shows why, with its thumbnail, and an "Open with default player" button.
 
 **Metadata panel** (optional side panel): resolution, file size, camera, lens, ISO, aperture, GPS (if present), date taken, date modified, file path.
 

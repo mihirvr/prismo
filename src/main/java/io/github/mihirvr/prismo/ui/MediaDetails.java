@@ -112,6 +112,10 @@ public record MediaDetails(Path path, String extension, String mediaType, long s
         return "video".equals(mediaType);
     }
 
+    public boolean isAudio() {
+        return "audio".equals(mediaType);
+    }
+
     public boolean isRaw() {
         return "raw".equals(mediaType);
     }
@@ -144,13 +148,14 @@ public record MediaDetails(Path path, String extension, String mediaType, long s
         return lines;
     }
 
-    /** "JPG photo", "MP4 video", "GIF animation", "NEF raw photo". */
+    /** "JPG photo", "MP4 video", "GIF animation", "NEF raw photo", "MP3 audio". */
     String kind() {
         String upper = extension.toUpperCase(Locale.ROOT);
         return switch (mediaType) {
             case "video" -> upper + " video";
             case "gif" -> upper + " animation";
             case "raw" -> upper + " raw photo";
+            case "audio" -> upper + " audio";
             default -> upper + " photo";
         };
     }

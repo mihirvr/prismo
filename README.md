@@ -28,6 +28,7 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 - **Duplicates** — exact copies, each file's copies kept together (by date, by file, or both); select every extra copy in one click, choose which copy stays, and Trash the rest; Prismo never removes one itself
 - **Where it was taken** — the place in Info (from the file, or the nearest town to its GPS, offline), with Open in map
 - **Motion photos** — the clip inside a Pixel or Samsung photo plays over it
+- **Audio** — music, voice notes and audiobooks under their own filter (they never crowd the photos); album art or a music note on the tile; in the viewer the album art, a waveform, bars or a ring of bars, moving with the sound
 - **Filters** — Photos · Videos · GIFs · RAW · by format · by orientation
 - **Background indexing** — non-blocking, incremental, cache-first thumbnails
 - **Multiple locations** — unified library across drives, USB, NAS
@@ -56,8 +57,8 @@ Prismo is a local media browser inspired by modern mobile galleries — Samsung 
 | Database | SQLite + FTS5 (xerial sqlite-jdbc) |
 | Metadata | metadata-extractor (EXIF, HEIF, MP4/QuickTime) |
 | Place names | GeoNames' list of places with 1,000+ people (CC BY 4.0), shipped with the app and looked up offline |
-| Image decoding | ImageIO (JPEG/PNG/BMP/GIF), TwelveMonkeys (WEBP), the bundled FFmpeg (HEIC), embedded previews (RAW) |
-| Video | FFmpeg (LGPL build) through JavaCV: playback and thumbnails |
+| Image decoding | ImageIO (JPEG/PNG/BMP/GIF), TwelveMonkeys (WEBP), the bundled FFmpeg (HEIC, AVIF), embedded previews (RAW) |
+| Video and audio | FFmpeg (LGPL build) through JavaCV: playback, thumbnails, album art, and the length and size of files the metadata library can't read |
 | File monitoring | java.nio.file.WatchService (behind a pluggable abstraction) |
 | Logging | SLF4J + Logback |
 | Packaging | jlink + jpackage (bundled runtime, no Java installation required) |
@@ -68,9 +69,21 @@ Details, versions and reasons: [docs/TECH_STACK.md](docs/TECH_STACK.md).
 
 ## Status
 
-**Version 1.4.2** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 1.4.2 are described below). Windows first; the Linux package is an early preview.
+**Version 2.0.0** (1.0.0 was the first release: v0.1 Foundation, v0.5 Core Loop and the v1.0 MVP done; 1.0.1 fixed thumbnails and library folders; 1.1.0 to 2.0.0 are described below). Windows first; the Linux package is an early preview.
 
 The app runs (`./gradlew run`).
+
+**2.0.0:** audio, more file types, and a new licence. Prismo now finds music, voice notes and audiobooks too: MP3,
+M4A, FLAC, WAV, OGG, Opus, WMA, AAC, AIFF and more. They don't crowd the photos: the main view is "Photos and videos",
+and Filters has "Photos, videos and audio" and "Audio" (and Photos or Videos on their own). The Types menu lists only the
+file types of what is shown, under Photos, Videos and Audio headings. A song's tile is its album art, or a music note
+when it has none, with its length. In the viewer it plays like a video; the music-note button in the bar (or the
+right-click menu) picks what you see: the album art with the title and artist, a waveform, bars from bass to treble, or
+bars around a ring, all moving with what you hear; the choice is kept. Info shows the song's tags and the sound's
+format, sample rate, channels and bit rate. New photo and video types: AVIF, JFIF / JPE, Fujifilm HIF, 3GP, MTS / M2TS
+(camcorders), TS (TV recordings; a TypeScript code file with the same extension is left alone), WMV, FLV, MPG and OGV,
+with their length and picture size read when they are added. From 2.0.0 Prismo is under the Sustainable Use License:
+free to use at home and at work, not for sale (see License).
 
 **1.4.2:** Duplicates keeps a file's copies together. In 1.4.1 the date view could split them (a copy saved from
 WhatsApp keeps its own date), so unrelated files ended up side by side. Now a file's copies always stay in one place,
@@ -177,13 +190,14 @@ What works in 1.0.1:
 - **Library and Timeline:** add folders ("Library folders…": add, turn off, remove); Prismo indexes them, makes thumbnails in the background (real thumbnails for videos too, with a play badge and the length) and shows everything on a date-grouped Timeline. Files you add, rename, move or delete in your folders show up in Prismo by themselves within a second or two.
 - **Viewer:** click a photo (or move with the arrow keys and press Enter): zoom, pan, rotate, slideshow, full screen (the controls and the pointer hide after 2.5 s without mouse movement), previous / next buttons at the edges.
 - **Back and Forward, like a web browser:** the mouse's side buttons (or Alt+Left / Alt+Right) go back to the tab, Collections page, folder, album or search you were on before, and forward again. In the viewer, Back closes it, and Forward opens it again on the same photo or video.
-- **Videos** play in the app (MP4, M4V, MOV, MKV, WebM, AVI; phone videos upright): skip ±10 s and ±5 s, volume and mute, speed 0.5×–2× (the sound keeps its pitch), loop, frame steps while paused, a choice of sound track when there are several, and subtitles (an `.srt` file next to the video, any `.srt` you pick with "Choose subtitle file…", or text subtitles inside MKV / MP4) with a delay you can shift by 0.1 s. Subtitles sit centred near the bottom on a black box that fits the text; the box can be see-through (25 / 50 / 75 %), solid, or left out (then the text gets a dark outline), in Settings › Video or the Subtitles menu. Each video remembers the sound track, subtitles and delay you picked, and a video you haven't set up starts in the sound and subtitle language you picked last. A thin bar on a video's thumbnail shows how far you watched (full and in another colour once watched), and the video carries on where you left it.
-- **Info panel** (I, or the Info button in the viewer): the file's details, a photo's camera settings and GPS position, a video's formats and tracks.
+- **Videos** play in the app (MP4, M4V, MOV, MKV, WebM, AVI, 3GP, MTS / M2TS, TS, WMV, FLV, MPG, OGV; phone videos upright): skip ±10 s and ±5 s, volume and mute, speed 0.5×–2× (the sound keeps its pitch), loop, frame steps while paused, a choice of sound track when there are several, and subtitles (an `.srt` file next to the video, any `.srt` you pick with "Choose subtitle file…", or text subtitles inside MKV / MP4) with a delay you can shift by 0.1 s. Subtitles sit centred near the bottom on a black box that fits the text; the box can be see-through (25 / 50 / 75 %), solid, or left out (then the text gets a dark outline), in Settings › Video or the Subtitles menu. Each video remembers the sound track, subtitles and delay you picked, and a video you haven't set up starts in the sound and subtitle language you picked last. A thin bar on a video's thumbnail shows how far you watched (full and in another colour once watched), and the video carries on where you left it.
+- **Audio** (2.0.0): MP3, M4A, M4B, FLAC, WAV, AIFF, OGG, Opus, WMA, AAC, AC3, DTS, WavPack, AMR and more, under Filters › Audio (or "Photos, videos and audio"). Album art on the tile, or a music note. In the viewer: album art, waveform, bars or a ring of bars (the music-note button picks).
+- **Info panel** (I, or the Info button in the viewer): the file's details, a photo's camera settings and GPS position, a video's formats and tracks, a song's tags and sound.
 - **Right-click menus** on the grids and in the viewer, each item with its shortcut: favorite, hide, Trash, Show in folder, Open with default app, Copy (puts the file on the clipboard, to paste in File Explorer), Info.
 - **Search and Filters:** the search box (Ctrl+F) finds files by name, folder, camera, date or resolution. Filter (Photos, Videos, JPEG, Portrait, Screenshots…) and sort (date taken / modified / added, name, size, resolution) the Timeline and search results.
 - **Collections tab:** Folders (a folder tree, with or without subfolders), Albums (one per folder), Favorites, Recently Added, Duplicates, Hidden and Trash. Duplicates: files with exactly the same content, a file's copies always together; "Show" picks dates and files, dates, or files; "Select extra copies" selects all but one copy of each (right-click › "Keep this copy, select the others" to choose), a check circle on a date selects its extra copies on the first click and every copy on the second, and Prismo warns before the last copy of a file goes to Trash; a note at the bottom says how far the search for copies is. Ctrl+D / Ctrl+H / Delete favorite, hide or move something to Trash; "Delete permanently" (from Trash, after asking) moves the file to the Recycle Bin (deletes it for good where there is none; the question says which).
 - **Hidden files:** files marked Hidden in Windows File Explorer show only on Collections › Hidden (a Settings switch shows them everywhere instead). The right-click menu can set or clear that Windows mark, and in Settings Prismo's own Hide can be set to set the mark too ("Both ways").
-- **HEIC and RAW:** HEIC / HEIF photos (iPhones, many Android phones) through the bundled FFmpeg, and RAW files (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF and more) through the JPEG preview the camera stores inside: thumbnails, the viewer, the date taken and the camera settings.
+- **HEIC, AVIF and RAW:** HEIC / HEIF photos (iPhones, many Android phones) and AVIF through the bundled FFmpeg, and RAW files (CR2, CR3, NEF, ARW, DNG, ORF, RW2, RAF and more) through the JPEG preview the camera stores inside: thumbnails, the viewer, the date taken and the camera settings.
 - **Selecting many:** Ctrl-click, Shift-click, Shift + arrow keys, Ctrl+A, a header's check circle (its whole section) or a box dragged from empty space; a bar at the bottom then favorites, hides, trashes, copies or moves them all at once.
 - **File operations:** Rename (F2) and Move to folder… (with a question when a name is already taken: keep both or skip); Prismo follows the file, favorites and all.
 - **Offline and network folders:** when a library folder can't be reached (an unplugged drive, a network share that's off), a banner says so and its tiles are greyed out; nothing is lost and everything comes back with the drive. Network folders are checked every 10 minutes instead of watched live.
@@ -355,7 +369,7 @@ prismo/
 │   │   └── resources/
 │   │       ├── logback.xml         # Logging setup (rotating log file)
 │   │       ├── app.properties      # Version (filled in by the build) and website, for Settings › About
-│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index, V4__os_hidden = the Windows Hidden mark, V5__reread_raw = read RAW metadata again, V6__video_choices = the tracks picked in each video)
+│   │       ├── db/migration/       # Numbered schema scripts (V1__..., V2__..., V3__search = FTS5 index, V4__os_hidden = the Windows Hidden mark, V5__reread_raw = read RAW metadata again, V6__video_choices = the tracks picked in each video, ... V11__audio = the media table rebuilt to allow audio)
 │   │       └── ui/
 │   │           ├── prismo.css      # The app's stylesheet (the Light look; every colour is a named colour)
 │   │           ├── theme-dark.css  # The Dark look: redefines the named colours
@@ -372,7 +386,11 @@ prismo/
 ├── .gitattributes              # Line endings (keeps gradlew working on Linux)
 ├── run-locally.bat           # Windows: build and start Prismo, with your normal data or a separate test folder
 ├── .gitignore
-├── LICENSE
+├── .github/                  # CI (workflows/package.yml), issue forms (bug report, idea) and the pull request template
+├── CODE_OF_CONDUCT.md        # Contributor Covenant 2.1
+├── CONTRIBUTING.md           # How to report a bug, suggest an idea or send code
+├── LICENSE                   # Sustainable Use License 1.0 (2.0.0 on; up to 1.4.2: MIT)
+├── SECURITY.md               # How to report a security problem privately
 └── README.md
 ```
 
@@ -382,14 +400,18 @@ Build and run: `./gradlew run` · tests: `./gradlew test` · installer: `./gradl
 
 ## Contributing
 
-Prismo is in its earliest stages. Contributions are welcome once the project has a buildable skeleton.
-
-In the meantime, feel free to open an issue to discuss ideas, suggest features, or report problems with the design.
+Ideas and bug reports are welcome in [Issues](https://github.com/mihirvr/prismo/issues). If you send code, it comes under the same licence as Prismo, and you agree that Prismo's author may also release it under other terms later. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+Prismo is free to use, at home or at work, but it may not be sold. It is licensed under the [Sustainable Use License 1.0](LICENSE), a "fair-code" licence written by n8n:
+
+- You can use it and change it, for yourself or inside your business.
+- You can share it, changed or not, free of charge and not for commercial purposes.
+- You can't sell it or charge for a copy.
+
+Prismo's code is public to read ("source available"), but it is not "open source" in the official sense. Versions up to 1.4.2 came out under the MIT License, and copies of those keep it.
 
 Place names in the Info panel come from [GeoNames](https://www.geonames.org/) (`src/main/resources/places/places.tsv.gz`, made from `cities1000`, `admin1CodesASCII` and `countryInfo`), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

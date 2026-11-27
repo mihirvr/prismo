@@ -234,7 +234,11 @@ public final class TagsUi {
     }
 
     private static String what(TimelineItem item) {
-        return MediaType.fromExtension(item.ref().extension()).orElse(null) == MediaType.VIDEO ? "video" : "photo";
+        return switch (MediaType.fromExtension(item.ref().extension()).orElse(MediaType.PHOTO)) {
+            case VIDEO -> "video";
+            case AUDIO -> "audio file";
+            default -> "photo";
+        };
     }
 
     private void failed(Throwable error) {

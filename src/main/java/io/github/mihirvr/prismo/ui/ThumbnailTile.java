@@ -290,7 +290,10 @@ final class ThumbnailTile extends StackPane {
         clear();
         shown = ref;
         updateTooltip();
-        if (MediaType.fromExtension(ref.extension()).orElse(null) == MediaType.VIDEO) {
+        MediaType type = MediaType.fromExtension(ref.extension()).orElse(null);
+        if (type == MediaType.VIDEO || type == MediaType.AUDIO) {
+            // 2.0.0: audio gets the same length badge, with a music note instead of the play mark.
+            videoBadge.setGraphic((type == MediaType.AUDIO ? Icon.MUSIC : Icon.PLAY).node(BADGE_ICON_SIZE));
             videoBadge.setText("");
             videoBadge.setContentDisplay(ContentDisplay.GRAPHIC_ONLY);
             videoBadge.setVisible(true);
@@ -328,7 +331,7 @@ final class ThumbnailTile extends StackPane {
         placeholder.setText("");
         placeholder.setGraphic(null);
         placeholder.setVisible(false);
-        getStyleClass().remove("thumb-failed");
+        getStyleClass().removeAll("thumb-failed", "thumb-audio");
     }
 
     private void showImage(Image image) {
@@ -369,6 +372,11 @@ final class ThumbnailTile extends StackPane {
     private void showNoImage(ThumbnailService.Result result) {
         pending = null;
         view.setImage(null);
+        if (shown != null && MediaType.fromExtension(shown.extension()).orElse(null) == MediaType.AUDIO
+                && !(result instanceof ThumbnailService.Missing)) {
+            showMusicNote(); // 2.0.0: a song without album art (or one ffmpeg can't read the art of)
+            return;
+        }
         switch (result) {
             case ThumbnailService.Unsupported(String extension) -> showPlaceholder(unsupportedText(extension));
             case ThumbnailService.Missing _ -> {
@@ -384,6 +392,13 @@ final class ThumbnailTile extends StackPane {
                 // not passed here
             }
         }
+    }
+
+    /** 2.0.0: one large music note, the tile of a song without album art. */
+    private void showMusicNote() {
+        getStyleClass().add("thumb-audio");
+        placeholder.setGraphic(Icon.MUSIC.node(Math.max(PLACEHOLDER_ICON_SIZE, getPrefWidth() * 0.34)));
+        showPlaceholder("");
     }
 
     private void showPlaceholder(String text) {

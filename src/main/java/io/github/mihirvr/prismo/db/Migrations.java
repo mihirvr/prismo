@@ -38,7 +38,11 @@ final class Migrations {
             "V7__people.sql",
             "V8__reread_matroska.sql",
             "V9__categories.sql",
-            "V10__duplicates.sql");
+            "V10__duplicates.sql",
+            "V11__audio.sql");
+
+    /** A script that starts with this line rebuilds a table: foreign keys are off while it runs (see V11). */
+    static final String FOREIGN_KEYS_OFF = "-- foreign_keys: off";
 
     private final List<String> scripts;
 
@@ -83,10 +87,24 @@ final class Migrations {
 
     private static void apply(Connection connection, int version, String script) throws SQLException {
         String sql = readScript(script);
+        // 2.0.0: a table rebuild (SQLite's 12-step way) needs foreign keys off, which can only be switched outside a
+        // transaction; dropping the old table would otherwise delete the rows that point at it.
+        boolean rebuild = sql.startsWith(FOREIGN_KEYS_OFF);
         boolean autoCommit = connection.getAutoCommit();
+        if (rebuild) {
+            pragma(connection, "PRAGMA foreign_keys = OFF");
+        }
         connection.setAutoCommit(false);
         try (Statement statement = connection.createStatement()) {
             statement.executeUpdate(sql);
+            if (rebuild) {
+                try (ResultSet problems = statement.executeQuery("PRAGMA foreign_key_check")) {
+                    if (problems.next()) {
+                        throw new SQLException(script + " left a row in " + problems.getString(1)
+                                + " pointing at a missing row");
+                    }
+                }
+            }
             statement.executeUpdate("PRAGMA user_version = " + version);
             connection.commit();
             log.info("Applied migration {} (schema v{})", script, version);
@@ -95,6 +113,15 @@ final class Migrations {
             throw e;
         } finally {
             connection.setAutoCommit(autoCommit);
+            if (rebuild) {
+                pragma(connection, "PRAGMA foreign_keys = ON");
+            }
+        }
+    }
+
+    private static void pragma(Connection connection, String pragma) throws SQLException {
+        try (Statement statement = connection.createStatement()) {
+            statement.execute(pragma);
         }
     }
 

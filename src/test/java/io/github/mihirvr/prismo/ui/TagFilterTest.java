@@ -19,7 +19,7 @@ class TagFilterTest {
             assertNull(TagFilter.none(kind).sqlCondition());
             assertNull(TagFilter.none(kind).label());
         }
-        assertNull(ViewOptions.DEFAULT.sqlCondition());
+        assertEquals("media_type <> 'audio'", ViewOptions.DEFAULT.sqlCondition()); // 2.0.0: only the audio rule
         assertEquals(TagFilter.NO_PEOPLE, ViewOptions.DEFAULT.people());
         assertEquals(TagFilter.NO_CATEGORIES, ViewOptions.DEFAULT.categories());
     }

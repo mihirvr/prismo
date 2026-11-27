@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.mihirvr"
-version = "1.4.2"
+version = "2.0.0"
 
 java {
     toolchain {
@@ -130,14 +130,27 @@ val summary = "A phone-style photo and video gallery for your PC"
 // 1.1.0: Windows shows the description as the app's name in "Open with", so there it is just "Prismo".
 val packageDescription = if (isWindows) "Prismo" else summary
 
-// 1.1.0: the photo and video types Prismo opens from File Explorer ("Open with"); the same extensions as
+// 1.1.0: the photo and video (2.0.0: and audio) types Prismo opens from File Explorer ("Open with"); the same extensions as
 // index.MediaType. The installer registers each one; Windows keeps any default app the user already chose.
 val fileAssociations = mapOf(
     "jpg" to "image/jpeg", "jpeg" to "image/jpeg", "png" to "image/png", "webp" to "image/webp",
     "heic" to "image/heic", "heif" to "image/heif", "bmp" to "image/bmp", "tif" to "image/tiff",
     "tiff" to "image/tiff", "gif" to "image/gif",
+    "jpe" to "image/jpeg", "jfif" to "image/jpeg", "avif" to "image/avif", "hif" to "image/heif",
     "mp4" to "video/mp4", "m4v" to "video/x-m4v", "mov" to "video/quicktime", "mkv" to "video/x-matroska",
     "webm" to "video/webm", "avi" to "video/x-msvideo",
+    // 2.0.0. Not .ts: it is also TypeScript code, and Prismo shouldn't offer to open that (see MediaType#ofFile).
+    "3gp" to "video/3gpp", "mts" to "video/mp2t", "m2ts" to "video/mp2t", "wmv" to "video/x-ms-wmv",
+    "flv" to "video/x-flv", "mpg" to "video/mpeg", "mpeg" to "video/mpeg", "ogv" to "video/ogg",
+    // 2.0.0: audio.
+    "mp3" to "audio/mpeg", "mp2" to "audio/mpeg", "m4a" to "audio/mp4", "m4b" to "audio/mp4", "m4r" to "audio/mp4",
+    "aac" to "audio/aac", "flac" to "audio/flac", "wav" to "audio/wav", "aif" to "audio/aiff", "aiff" to "audio/aiff",
+    "aifc" to "audio/aiff", "ogg" to "audio/ogg", "oga" to "audio/ogg", "opus" to "audio/opus", "spx" to "audio/ogg",
+    "wma" to "audio/x-ms-wma", "wv" to "audio/x-wavpack", "mka" to "audio/x-matroska", "ac3" to "audio/ac3",
+    "dts" to "audio/vnd.dts", "tta" to "audio/x-tta", "au" to "audio/basic", "snd" to "audio/basic",
+    "caf" to "audio/x-caf", "weba" to "audio/webm", "3ga" to "audio/3gpp", "amr" to "audio/amr",
+    "awb" to "audio/amr-wb", "ape" to "audio/x-ape", "dsf" to "audio/x-dsf", "dff" to "audio/x-dff",
+    "mpc" to "audio/x-musepack", "tak" to "audio/x-tak",
     "cr2" to "image/x-canon-cr2", "cr3" to "image/x-canon-cr3", "nef" to "image/x-nikon-nef",
     "arw" to "image/x-sony-arw", "dng" to "image/x-adobe-dng", "orf" to "image/x-olympus-orf",
     "rw2" to "image/x-panasonic-rw2", "raf" to "image/x-fuji-raf", "rwl" to "image/x-leica-rwl",
@@ -155,7 +168,7 @@ val fileAssociationFiles = tasks.register("fileAssociationFiles") {
         out.deleteRecursively()
         out.mkdirs()
         fileAssociations.forEach { (extension, mime) ->
-            val kind = if (mime.startsWith("video/")) "video" else "photo"
+            val kind = if (mime.startsWith("video/")) "video" else if (mime.startsWith("audio/")) "audio" else "photo"
             out.resolve("$extension.properties").writeText(
                 "extension=$extension\nmime-type=$mime\ndescription=Prismo $kind\n")
         }
@@ -256,6 +269,7 @@ val appImage = tasks.register<Exec>("appImage") {
     inputs.dir(packagingDir.map { it.dir("runtime") })
     inputs.dir(packagingDir.map { it.dir("input") })
     inputs.dir(notices)
+    inputs.file(layout.projectDirectory.file("LICENSE"))
     outputs.dir(dest)
     doFirst {
         delete(dest)
@@ -277,8 +291,10 @@ val appImage = tasks.register<Exec>("appImage") {
             "--main-class", application.mainClass.get(),
             "--runtime-image", dir.dir("runtime").asFile.path,
             "--java-options", nativeAccess,
-            // THIRD_PARTY_NOTICES.md and the licence texts, next to the app's files.
+            // THIRD_PARTY_NOTICES.md and the licence texts, next to the app's files; Prismo's own LICENSE too (2.0.0:
+            // the Sustainable Use License asks that everyone who gets a copy also gets its terms).
             "--app-content", notices.asFile.path,
+            "--app-content", layout.projectDirectory.file("LICENSE").asFile.path,
             "--dest", dest.get().asFile.path,
         )
     })

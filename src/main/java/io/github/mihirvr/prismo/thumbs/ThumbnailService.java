@@ -265,6 +265,12 @@ public final class ThumbnailService implements AutoCloseable {
             return new Ready(file);
         } catch (IOException | RuntimeException e) {
             deleteQuietly(temp);
+            if (e instanceof AudioCovers.NoCoverException) {
+                // 2.0.0: a song without album art isn't a failure: the tile shows a music note. Marked, so it isn't
+                // asked again until the file changes.
+                writeFailMarker(marker, media.dateModified());
+                return new Unsupported(media.extension());
+            }
             if (e instanceof NoSuchFileException || !Files.exists(media.path())) {
                 log.debug("No thumbnail for {}: the file isn't there", media.path());
                 return new Missing(e.toString()); // no marker: tried again once the file is back

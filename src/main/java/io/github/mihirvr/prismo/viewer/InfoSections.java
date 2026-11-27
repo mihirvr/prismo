@@ -99,6 +99,10 @@ final class InfoSections {
         if (details.isVideo()) {
             add(sections, "Video", videoLines(details, video));
         }
+        if (details.isAudio()) {
+            add(sections, "Song", songLines(video));
+            add(sections, "Audio", audioLines(details, video));
+        }
         add(sections, "Path", List.of(new Line("", details.path().toString())));
         return sections;
     }
@@ -254,6 +258,60 @@ final class InfoSections {
             lines.add(new Line("Subtitle tracks", String.join("\n", subtitles)));
         }
         return lines;
+    }
+
+    /** 2.0.0: a song's tags, in {@link VideoPlayer#SONG_TAGS} order; none known until the player has opened it. */
+    static List<Line> songLines(VideoPlayer.Info audio) {
+        List<Line> lines = new ArrayList<>();
+        if (audio == null) {
+            return lines;
+        }
+        Map<String, String> names = Map.of("title", "Title", "artist", "Artist", "album", "Album",
+                "album_artist", "Album artist", "composer", "Composer", "genre", "Genre", "date", "Year", "track",
+                "Track", "disc", "Disc");
+        for (String key : VideoPlayer.SONG_TAGS) {
+            String value = audio.tags().get(key);
+            if (value != null) {
+                lines.add(new Line(names.get(key), value));
+            }
+        }
+        return lines;
+    }
+
+    /** 2.0.0: an audio file's length, format, sample rate, channels and bit rate. */
+    static List<Line> audioLines(MediaDetails details, VideoPlayer.Info audio) {
+        List<Line> lines = new ArrayList<>();
+        double seconds = audio != null && audio.durationMicros() > 0 ? audio.durationMicros() / 1e6 : details.duration();
+        if (seconds > 0) {
+            lines.add(new Line("Length", MediaDetails.length(seconds)));
+        }
+        if (audio == null) {
+            return lines;
+        }
+        if (!audio.audioCodec().isEmpty()) {
+            lines.add(new Line("Format", format(audio.audioCodec())));
+        }
+        if (audio.sampleRate() > 0) {
+            lines.add(new Line("Sample rate", number(audio.sampleRate() / 1000.0, 1) + " kHz"));
+        }
+        if (audio.channels() > 0) {
+            lines.add(new Line("Channels", channels(audio.channels())));
+        }
+        if (audio.bitRate() > 0) {
+            lines.add(new Line("Bit rate", Math.round(audio.bitRate() / 1000.0) + " kbps"));
+        }
+        return lines;
+    }
+
+    /** "Mono", "Stereo", "5.1 (6 channels)", "7.1 (8 channels)", else "N channels". */
+    static String channels(int count) {
+        return switch (count) {
+            case 1 -> "Mono";
+            case 2 -> "Stereo";
+            case 6 -> "5.1 (6 channels)";
+            case 8 -> "7.1 (8 channels)";
+            default -> count + " channels";
+        };
     }
 
     /** "H.264 (AVC)" for "h264"; any raw PCM is "PCM"; an unknown name in capitals. */
